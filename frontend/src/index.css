@@ -44,7 +44,7 @@ body {
   min-height: 100svh;
   display: flex;
   justify-content: center;
-  padding: clamp(14px, 2vw, 26px);
+  padding: 0;
 }
 
 body,

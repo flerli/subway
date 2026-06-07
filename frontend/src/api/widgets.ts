@@ -14,6 +14,71 @@ const WIDGETS_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const getApiUrl = (path: string) =>
   `${WIDGETS_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 
+const widgetGridPlacementOrder: WidgetPlacementZoneId[] = [
+  'a1',
+  'b1',
+  'a2',
+  'b2',
+  'a3',
+  'b3',
+]
+
+const normalizePlacementZoneId = (
+  zoneId: string,
+  order: number,
+): WidgetPlacementZoneId | null => {
+  if (
+    zoneId === 'service-board' ||
+    zoneId === 'a1' ||
+    zoneId === 'b1' ||
+    zoneId === 'a2' ||
+    zoneId === 'b2' ||
+    zoneId === 'a3' ||
+    zoneId === 'b3'
+  ) {
+    return zoneId
+  }
+
+  if (zoneId === 'hero') {
+    return 'service-board'
+  }
+
+  if (zoneId === 'triad') {
+    return widgetGridPlacementOrder[
+      Math.min(Math.max(Math.round(order) - 1, 0), widgetGridPlacementOrder.length - 1)
+    ]
+  }
+
+  if (zoneId === 'bottom-wide') {
+    return 'b2'
+  }
+
+  if (zoneId === 'bottom-side') {
+    return 'a3'
+  }
+
+  return null
+}
+
+const serializePlacementZoneForApi = ({
+  zoneId,
+}: WidgetPlacementAssignment): WidgetPlacementAssignment => {
+  if (zoneId === 'service-board') {
+    return { zoneId: 'hero' as WidgetPlacementZoneId, order: 1 }
+  }
+
+  const encodedOrder = widgetGridPlacementOrder.indexOf(zoneId)
+
+  if (encodedOrder >= 0) {
+    return {
+      zoneId: 'triad' as WidgetPlacementZoneId,
+      order: encodedOrder + 1,
+    }
+  }
+
+  return { zoneId, order: 1 }
+}
+
 const normalizeScope = (value: unknown): WidgetUserScope | undefined => {
   const candidate = value as {
     mode?: unknown
@@ -60,17 +125,17 @@ const normalizePlacementZones = (
         return null
       }
 
-      if (
-        candidate.zoneId !== 'hero' &&
-        candidate.zoneId !== 'triad' &&
-        candidate.zoneId !== 'bottom-wide' &&
-        candidate.zoneId !== 'bottom-side'
-      ) {
+      const normalizedZoneId = normalizePlacementZoneId(
+        candidate.zoneId,
+        candidate.order,
+      )
+
+      if (!normalizedZoneId) {
         return null
       }
 
       return {
-        zoneId: candidate.zoneId as WidgetPlacementZoneId,
+        zoneId: normalizedZoneId,
         order: candidate.order,
       }
     })
@@ -158,7 +223,10 @@ export const updateWidgetEntity = async (
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      placementZones: payload.placementZones.map(serializePlacementZoneForApi),
+    }),
   })
 
   if (!response.ok) {

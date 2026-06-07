@@ -41,30 +41,26 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
     widgetNumber: 5,
     boardKicker: 'Bulletin panel',
   },
-  calibration: {
-    widgetNumber: 6,
-    boardKicker: 'System',
-  },
 }
 
 export const buildWidgetRegistry = (
   widgetEntities: WidgetEntityRecord[],
 ): RegisteredWidget[] =>
-  widgetEntities.map((entity) => {
+  widgetEntities.flatMap((entity) => {
     const widgetModule = widgetModulesBySourceLocation.get(entity.sourceLocation)
 
     if (!widgetModule) {
-      throw new Error(
-        `Missing widget module for source location ${entity.sourceLocation}`,
-      )
+      return []
     }
 
-    return {
-      entity,
-      module: widgetModule,
-      presentation: widgetPresentation[entity.id] ?? {
-        widgetNumber: 99,
-        boardKicker: entity.title,
+    return [
+      {
+        entity,
+        module: widgetModule,
+        presentation: widgetPresentation[entity.id] ?? {
+          widgetNumber: 99,
+          boardKicker: entity.title,
+        },
       },
-    }
+    ]
   })

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import {
   createFamilyMember,
@@ -14,10 +14,13 @@ import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import { WidgetDebugOverlay } from './widgets/WidgetDebugOverlay'
 import {
+  defaultArrivalBoardSettings,
+  normalizeArrivalBoardSettings,
+} from './widgets/arrival-board'
+import {
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
 } from './widgets/WidgetMetadataAdminHost'
-import { WidgetSettingsHost } from './widgets/WidgetSettingsHost'
 import type {
   AgendaItem,
   Arrival,
@@ -26,7 +29,6 @@ import type {
   FilterId,
   FilterOption,
   ForecastDay,
-  MeasureItem,
   NewsItem,
   TodoItem,
   WeatherWidgetData,
@@ -42,29 +44,6 @@ import type {
 const ALL_FILTER_ID = 'all'
 const ALL_MEMBERS_AUDIENCE = '*'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
-
-const display = {
-  diagonalInches: 27,
-  diagonalCentimeters: 27 * 2.54,
-  aspectWidth: 16,
-  aspectHeight: 9,
-  resolutionWidth: 2160,
-  resolutionHeight: 3840,
-  squareCentimeters: 5,
-}
-
-const aspectDiagonal = Math.hypot(display.aspectWidth, display.aspectHeight)
-const portraitWidthCm =
-  (display.diagonalCentimeters * display.aspectHeight) / aspectDiagonal
-const portraitHeightCm =
-  (display.diagonalCentimeters * display.aspectWidth) / aspectDiagonal
-const diagonalPixels = Math.hypot(
-  display.resolutionWidth,
-  display.resolutionHeight,
-)
-const pixelsPerInch = diagonalPixels / display.diagonalInches
-const pixelsPerCentimeter = display.resolutionHeight / portraitHeightCm
-const squarePixels = Math.round(display.squareCentimeters * pixelsPerCentimeter)
 
 type ViewMode = 'board' | 'settings'
 type MemberId = string
@@ -204,25 +183,6 @@ const commuteNotes: Record<string, string> = {
     'Dana: clear dinner arrival window, no umbrella needed for the evening run.',
 }
 
-const measureItems: MeasureItem[] = [
-  {
-    label: 'Canvas',
-    value: `${display.resolutionWidth} x ${display.resolutionHeight} px`,
-  },
-  {
-    label: 'Panel',
-    value: `${portraitWidthCm.toFixed(1)} x ${portraitHeightCm.toFixed(1)} cm`,
-  },
-  {
-    label: 'Density',
-    value: `${pixelsPerInch.toFixed(1)} ppi`,
-  },
-  {
-    label: '5 x 5 cm',
-    value: `${squarePixels} px edge`,
-  },
-]
-
 const sanitizeMemberName = (value: string) =>
   value.trim().replace(/\s+/g, ' ').slice(0, 24)
 
@@ -241,10 +201,6 @@ const getInitial = (value: string) => {
 const badgeStyle = (color: string) => buildBadgeStyle(color)
 
 const householdBadgeStyle = badgeStyle('#7f8a98')
-
-const squareStyle = {
-  '--square-size': `${squarePixels}px`,
-} as CSSProperties
 
 const matchesFilter = (members: readonly AudienceId[], filter: FilterId) =>
   filter === ALL_FILTER_ID ||
@@ -581,10 +537,6 @@ function App() {
     }
   }, [activeFilter, registeredWidgets, todoRefreshToken, widgetSettingsMap])
 
-  const widgetLegend = [...registeredWidgets].sort(
-    (leftWidget, rightWidget) =>
-      leftWidget.presentation.widgetNumber - rightWidget.presentation.widgetNumber,
-  )
   const membersById = new Map(familyMembers.map((member) => [member.id, member]))
   const filterOptions: FilterOption[] = [
     {
@@ -628,6 +580,17 @@ function App() {
   const currentAgenda = visibleAgenda[0] ?? emptyAgendaItem
   const currentAlert = visibleNews[0] ?? newsItems[0]
   const nextTodo = visibleTodos.find((item) => !item.done) ?? visibleTodos[0] ?? emptyTodoItem
+  const arrivalBoardChromeSettings = normalizeArrivalBoardSettings(
+    widgetSettingsMap['arrival-board'],
+  )
+  const boardTitleDisplay =
+    arrivalBoardChromeSettings.boardTitle.trim().length > 0
+      ? arrivalBoardChromeSettings.boardTitle
+      : defaultArrivalBoardSettings.boardTitle
+  const boardSubheadingDisplay =
+    arrivalBoardChromeSettings.boardSubheading.trim().length > 0
+      ? arrivalBoardChromeSettings.boardSubheading
+      : defaultArrivalBoardSettings.boardSubheading
   const commuteNote =
     commuteNotes[activeFilter] ??
     `${activeProfile ? getMemberLabel(activeProfile) : 'This view'}: color and badge are ready. Personal items can be assigned next.`
@@ -800,6 +763,10 @@ function App() {
     widgetId: string,
     draft: WidgetMetadataDraft,
   ) => {
+    const enabledPlacements = draft.placementZones.filter(
+      (placement: WidgetMetadataDraft['placementZones'][number]) => placement.enabled,
+    )
+
     await updateWidgetEntity(widgetId, {
       title: draft.title,
       subwayLetter: draft.subwayLetter,
@@ -810,11 +777,13 @@ function App() {
         memberIds:
           draft.userScopeMode === 'all' ? [] : draft.userScopeMemberIds,
       },
-      placementZones: draft.placementZones
-        .filter((placement: WidgetMetadataDraft['placementZones'][number]) => placement.enabled)
-        .map((placement: WidgetMetadataDraft['placementZones'][number]) => ({
+      placementZones: enabledPlacements.map(
+        (
+          placement: WidgetMetadataDraft['placementZones'][number],
+          index: number,
+        ) => ({
           zoneId: placement.zoneId,
-          order: placement.order,
+          order: index + 1,
         })),
     })
 
@@ -829,18 +798,12 @@ function App() {
       <section className="screen">
         <header className="terminal-marquee">
           <div className="terminal-left">
-            <button
-              type="button"
-              className="agency-badge agency-badge--trigger"
-              onClick={handleHiddenDebugTrigger}
-              aria-label="Hidden diagnostics trigger"
-            >
-              HM
-            </button>
-            <div className="terminal-copy">
-              <p className="terminal-location">Family Avenue South</p>
+            <div className="terminal-copy" onClick={handleHiddenDebugTrigger}>
+              <p className="terminal-location">{boardSubheadingDisplay}</p>
               <h1 className="terminal-title">
-                {viewMode === 'board' ? 'Home info kiosk' : 'Family settings'}
+                {viewMode === 'board'
+                  ? boardTitleDisplay
+                  : 'Family settings'}
               </h1>
             </div>
           </div>
@@ -861,11 +824,6 @@ function App() {
               >
                 Settings
               </button>
-              <div className="terminal-exit" aria-label="Primary wayfinding">
-                <span>EXIT</span>
-                <strong>Kitchen</strong>
-                <span aria-hidden="true">→</span>
-              </div>
             </div>
             <div className="clock-stack">
               <p className="board-date">{boardDate}</p>
@@ -886,8 +844,6 @@ function App() {
             visibleTodos={visibleTodos}
             visibleNews={visibleNews}
             weatherData={weatherWidgetData}
-            measureItems={measureItems}
-            squareStyle={squareStyle}
             currentAgenda={currentAgenda}
             currentAlert={currentAlert}
             nextTodo={nextTodo}
@@ -917,7 +873,7 @@ function App() {
               <p className="settings-copy">
                 Add family members, choose a color for each person, and use the
                 first letter of the forename as the circle badge across the kiosk.
-                Widget headers keep numeric markers so the roles stay distinct.
+                Widget headers use their configured badge letter and color.
               </p>
 
               {familyMembersError ? (
@@ -1029,43 +985,8 @@ function App() {
                       Add family member
                     </button>
                   </form>
-
-                  <article className="settings-card">
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">Widget markers</p>
-                      <h3>Numbers stay on widgets</h3>
-                    </div>
-
-                    <div className="widget-number-list">
-                      {widgetLegend.map((widget) => (
-                        <div
-                          className="widget-number-row"
-                          key={widget.presentation.widgetNumber}
-                        >
-                          <span
-                            className="route-bullet"
-                            style={buildBadgeStyle(widget.entity.subwayColor)}
-                          >
-                            {widget.presentation.widgetNumber}
-                          </span>
-                          <p>{widget.entity.title}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="settings-note">
-                      Family members own the letters in the circles. Widgets use
-                      numbers so people and modules stay visually separate.
-                    </p>
-                  </article>
                 </div>
               </div>
-
-              <WidgetSettingsHost
-                registeredWidgets={registeredWidgets}
-                widgetSettingsMap={widgetSettingsMap}
-                onSaveWidgetSettings={handleSaveWidgetSettings}
-              />
 
               <WidgetMetadataAdminHost
                 registeredWidgets={registeredWidgets}
@@ -1073,6 +994,15 @@ function App() {
                 availableSourceLocations={registeredWidgets.map(
                   (widget) => widget.module.folderName,
                 )}
+                widgetSettingsMap={widgetSettingsMap}
+                onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
+                  handleSaveWidgetSettings(widgetId, settings).catch(() => {
+                    setWidgetSettingsError(
+                      'Failed to persist widget settings to the backend.',
+                    )
+                    throw new Error('widget settings save failed')
+                  })
+                }
                 onSaveWidgetMetadata={(widgetId: string, draft: WidgetMetadataDraft) =>
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminError(

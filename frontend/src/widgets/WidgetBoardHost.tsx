@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { buildBadgeStyle } from './widgetAppearance'
 import type {
   AgendaItem,
@@ -6,12 +6,14 @@ import type {
   AudienceBadgeRenderer,
   FilterId,
   FilterOption,
-  MeasureItem,
   NewsItem,
   TodoItem,
   WeatherWidgetData,
 } from './widgetHostModels'
-import { widgetPlacementZones } from './widgetPlacementZones'
+import {
+  widgetGridPlacementZones,
+  widgetPlacementZones,
+} from './widgetPlacementZones'
 import type {
   RegisteredWidget,
   WidgetPlacementAssignment,
@@ -30,8 +32,6 @@ interface WidgetBoardHostProps {
   visibleTodos: TodoItem[]
   visibleNews: NewsItem[]
   weatherData: WeatherWidgetData
-  measureItems: MeasureItem[]
-  squareStyle: CSSProperties
   currentAgenda: AgendaItem
   currentAlert: NewsItem
   nextTodo: TodoItem
@@ -45,7 +45,9 @@ interface WidgetZoneEntry {
   placement: WidgetPlacementAssignment
 }
 
-const buildWidgetNumberStyle = (widget: RegisteredWidget) =>
+type WidgetRenderMode = 'grid' | 'expanded'
+
+const buildWidgetBadgeStyle = (widget: RegisteredWidget) =>
   buildBadgeStyle(widget.entity.subwayColor)
 
 const renderEmptyState = (title: string, copy: string, className?: string) => (
@@ -54,6 +56,9 @@ const renderEmptyState = (title: string, copy: string, className?: string) => (
     <p className="empty-copy">{copy}</p>
   </div>
 )
+
+const hasMetaContent = (meta: ReactNode) =>
+  meta !== null && meta !== undefined && meta !== false && meta !== ''
 
 export function WidgetBoardHost({
   registeredWidgets,
@@ -66,8 +71,6 @@ export function WidgetBoardHost({
   visibleTodos,
   visibleNews,
   weatherData,
-  measureItems,
-  squareStyle,
   currentAgenda,
   currentAlert,
   nextTodo,
@@ -75,9 +78,20 @@ export function WidgetBoardHost({
   renderAudienceBadge,
   onToggleTodoDone,
 }: WidgetBoardHostProps) {
+  const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+
   const visibleWidgets = registeredWidgets.filter((widget) =>
     isWidgetVisibleForFilter(widget.entity, activeFilter),
   )
+
+  useEffect(() => {
+    if (
+      expandedWidgetId &&
+      !visibleWidgets.some((widget) => widget.entity.id === expandedWidgetId)
+    ) {
+      setExpandedWidgetId(null)
+    }
+  }, [expandedWidgetId, visibleWidgets])
 
   const zoneEntries = new Map<WidgetPlacementZoneId, WidgetZoneEntry[]>()
 
@@ -89,17 +103,97 @@ export function WidgetBoardHost({
     }
   }
 
-  const renderWidget = (widget: RegisteredWidget) => {
-    const badgeStyle = buildWidgetNumberStyle(widget)
+  const toggleExpandedWidget = (widgetId: string) => {
+    setExpandedWidgetId((currentWidgetId) =>
+      currentWidgetId === widgetId ? null : widgetId,
+    )
+  }
+
+  const renderExpandControl = (widget: RegisteredWidget) => {
+    const isExpanded = expandedWidgetId === widget.entity.id
+
+    return (
+      <button
+        type="button"
+        className={`widget-action-button${isExpanded ? ' is-active' : ''}`}
+        aria-label={
+          isExpanded
+            ? `Collapse ${widget.entity.title} expanded view`
+            : `Expand ${widget.entity.title} into the lower panel`
+        }
+        aria-pressed={isExpanded}
+        onClick={() => toggleExpandedWidget(widget.entity.id)}
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path
+            d="M4 8V4h4M12 4h4v4M4 12v4h4M16 12v4h-4"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+          />
+        </svg>
+        <span>{isExpanded ? 'Close' : 'Expand'}</span>
+      </button>
+    )
+  }
+
+  const renderWidgetFrame = ({
+    widget,
+    badgeStyle,
+    meta,
+    mode,
+    children,
+  }: {
+    widget: RegisteredWidget
+    badgeStyle: ReturnType<typeof buildWidgetBadgeStyle>
+    meta: ReactNode
+    mode: WidgetRenderMode
+    children: ReactNode
+  }) => (
+    <article
+      className={`widget${mode === 'expanded' ? ' widget--expanded' : ''}${
+        expandedWidgetId === widget.entity.id ? ' widget--active' : ''
+      }`}
+      key={`${widget.entity.id}-${mode}`}
+    >
+      <div className="widget-head">
+        <div className="widget-flag">
+          <span className="route-bullet route-bullet--large" style={badgeStyle}>
+            {widget.entity.subwayLetter}
+          </span>
+          <div className="widget-title-stack">
+            <h2>{widget.entity.title}</h2>
+            {hasMetaContent(meta) ? <p className="widget-meta">{meta}</p> : null}
+          </div>
+        </div>
+        <div className="widget-head-side">{renderExpandControl(widget)}</div>
+      </div>
+
+      {children}
+    </article>
+  )
+
+  const renderWidget = (
+    widget: RegisteredWidget,
+    mode: WidgetRenderMode = 'grid',
+  ) => {
+    const badgeStyle = buildWidgetBadgeStyle(widget)
 
     switch (widget.entity.id) {
       case 'arrival-board':
         return (
-          <article className="widget widget--board" key={widget.entity.id}>
+          <article
+            className={`widget widget--board${mode === 'expanded' ? ' widget--expanded' : ''}${
+              expandedWidgetId === widget.entity.id ? ' widget--active' : ''
+            }`}
+            key={`${widget.entity.id}-${mode}`}
+          >
             <div className="board-head">
               <div className="board-title-group">
                 <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
+                  {widget.entity.subwayLetter}
                 </span>
                 <div>
                   <p className="widget-kicker">{widget.presentation.boardKicker}</p>
@@ -114,6 +208,7 @@ export function WidgetBoardHost({
                 <p className="board-side-label">Ready next</p>
                 <p className="board-side-value">{nextTodo.task}</p>
                 <p className="board-side-detail">{nextTodo.due}</p>
+                {renderExpandControl(widget)}
               </div>
             </div>
 
@@ -158,92 +253,56 @@ export function WidgetBoardHost({
                 <span className="alert-dot" aria-hidden="true"></span>
                 <p>{currentAlert.headline}</p>
               </div>
-
-              <div
-                className="filter-row filter-row--compact"
-                role="group"
-                aria-label="Household filters"
-              >
-                {filterOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
-                    aria-pressed={option.id === activeFilter}
-                    onClick={() => onFilterChange(option.id)}
-                  >
-                    <span className="route-bullet" style={option.style}>
-                      {option.badgeText}
-                    </span>
-                    <span className="filter-copy">
-                      <span className="filter-label">{option.label}</span>
-                      <span className="filter-caption">{option.caption}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
           </article>
         )
       case 'weather':
-        return (
-          <article className="widget" key={widget.entity.id}>
-            <div className="widget-head">
-              <div className="widget-flag">
-                <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
-                </span>
-                <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
-                  <h2>{widget.entity.title}</h2>
-                </div>
-              </div>
-              <p className="widget-meta">
-                {weatherData.source} · {weatherData.location} · {weatherData.stale ? 'cached' : 'live'}
-              </p>
-            </div>
-
-            <div className="weather-summary">
-              <p className="weather-temp">{weatherData.currentTemperature}</p>
-              <div className="weather-copy">
-                <p className="weather-condition">{weatherData.condition}</p>
-                <p className="weather-range">{weatherData.rangeSummary}</p>
-                <p className="weather-note">{commuteNote}</p>
-                <p className="weather-updated">
-                  Updated {new Date(weatherData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            </div>
-
-            <div className="forecast-grid">
-              {weatherData.forecast.map((day) => (
-                <div className="forecast-card" key={day.day}>
-                  <p className="forecast-day">{day.day}</p>
-                  <p className="forecast-condition">{day.condition}</p>
-                  <p className="forecast-range">
-                    {day.high}° / {day.low}°
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: `${weatherData.source} · ${weatherData.location} · ${
+            weatherData.stale ? 'cached' : 'live'
+          }`,
+          mode,
+          children: (
+            <>
+              <div className="weather-summary">
+                <p className="weather-temp">{weatherData.currentTemperature}</p>
+                <div className="weather-copy">
+                  <p className="weather-condition">{weatherData.condition}</p>
+                  <p className="weather-range">{weatherData.rangeSummary}</p>
+                  <p className="weather-note">{commuteNote}</p>
+                  <p className="weather-updated">
+                    Updated{' '}
+                    {new Date(weatherData.updatedAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </p>
                 </div>
-              ))}
-            </div>
-          </article>
-        )
-      case 'calendar':
-        return (
-          <article className="widget" key={widget.entity.id}>
-            <div className="widget-head">
-              <div className="widget-flag">
-                <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
-                </span>
-                <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
-                  <h2>{widget.entity.title}</h2>
-                </div>
               </div>
-              <p className="widget-meta">{visibleAgenda.length} active stops</p>
-            </div>
 
+              <div className="forecast-grid">
+                {weatherData.forecast.map((day) => (
+                  <div className="forecast-card" key={day.day}>
+                    <p className="forecast-day">{day.day}</p>
+                    <p className="forecast-condition">{day.condition}</p>
+                    <p className="forecast-range">
+                      {day.high}° / {day.low}°
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ),
+        })
+      case 'calendar':
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: `${visibleAgenda.length} active stops`,
+          mode,
+          children: (
             <ul className="agenda-list">
               {visibleAgenda.length > 0
                 ? visibleAgenda.map((item) => (
@@ -262,26 +321,17 @@ export function WidgetBoardHost({
                     'This widget is hidden until its scope matches the active focused member.',
                   )}
             </ul>
-          </article>
-        )
+          ),
+        })
       case 'todo':
         const openTodoCount = visibleTodos.filter((todoItem) => !todoItem.done).length
 
-        return (
-          <article className="widget" key={widget.entity.id}>
-            <div className="widget-head">
-              <div className="widget-flag">
-                <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
-                </span>
-                <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
-                  <h2>{widget.entity.title}</h2>
-                </div>
-              </div>
-              <p className="widget-meta">{openTodoCount} open items</p>
-            </div>
-
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: `${openTodoCount} open items`,
+          mode,
+          children: (
             <ul className="todo-list">
               {visibleTodos.length > 0
                 ? visibleTodos.map((item) => (
@@ -317,24 +367,15 @@ export function WidgetBoardHost({
                     'This widget is assigned to another focused member in the current sample setup.',
                   )}
             </ul>
-          </article>
-        )
+          ),
+        })
       case 'bulletins':
-        return (
-          <article className="widget" key={widget.entity.id}>
-            <div className="widget-head">
-              <div className="widget-flag">
-                <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
-                </span>
-                <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
-                  <h2>{widget.entity.title}</h2>
-                </div>
-              </div>
-              <p className="widget-meta">Filtered by member color and initial</p>
-            </div>
-
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: 'Filtered by member color and initial',
+          mode,
+          children: (
             <div className="news-list">
               {visibleNews.length > 0
                 ? visibleNews.map((item) => (
@@ -353,67 +394,92 @@ export function WidgetBoardHost({
                     'This zone hides widgets whose configured member scope does not include the active focus.',
                   )}
             </div>
-          </article>
-        )
-      case 'calibration':
-        return (
-          <article className="widget widget--calibration" key={widget.entity.id}>
-            <div className="widget-head">
-              <div className="widget-flag">
-                <span className="route-bullet route-bullet--large" style={badgeStyle}>
-                  {widget.presentation.widgetNumber}
-                </span>
-                <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
-                  <h2>{widget.entity.title}</h2>
-                </div>
-              </div>
-              <p className="widget-meta">Display reference</p>
-            </div>
-
-            <div className="measure-stack">
-              {measureItems.map((item) => (
-                <div className="measure-chip" key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-
-            <div className="square-preview" style={squareStyle}>
-              <div className="square">
-                <span>5 x 5 cm</span>
-              </div>
-            </div>
-
-            <p className="calibration-note">
-              Keep the browser at 100% zoom on the installed portrait panel.
-              This widget stays visible for the household board regardless of focused member.
-            </p>
-          </article>
-        )
+          ),
+        })
       default:
         return null
     }
   }
 
+  const expandedWidget = expandedWidgetId
+    ? visibleWidgets.find((widget) => widget.entity.id === expandedWidgetId)
+    : undefined
+
+  const serviceBoardEntries = (zoneEntries.get('service-board') ?? []).sort(
+    (leftEntry, rightEntry) => leftEntry.placement.order - rightEntry.placement.order,
+  )
+
+  const populatedGridZones = widgetGridPlacementZones.flatMap((zone) => {
+    const widgetsInZone = (zoneEntries.get(zone.id) ?? []).sort(
+      (leftEntry, rightEntry) =>
+        leftEntry.placement.order - rightEntry.placement.order,
+    )
+
+    return widgetsInZone.length > 0 ? [{ zone, widgetsInZone }] : []
+  })
+
   return (
     <section className="dashboard-grid">
-      {widgetPlacementZones.map((zone) => {
-        const widgetsInZone = (zoneEntries.get(zone.id) ?? []).sort(
-          (leftEntry, rightEntry) => leftEntry.placement.order - rightEntry.placement.order,
-        )
+      <section className="widget-zone widget-zone--filters" aria-label="Household filters">
+        <div className="filter-row filter-row--board" role="group" aria-label="Household filters">
+          {filterOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
+              aria-pressed={option.id === activeFilter}
+              onClick={() => onFilterChange(option.id)}
+            >
+              <span className="route-bullet" style={option.style}>
+                {option.badgeText}
+              </span>
+              <span className="filter-copy">
+                <span className="filter-label">{option.label}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
 
-        if (widgetsInZone.length === 0) {
-          return null
-        }
+      <section
+        className="widget-zone widget-zone--service-board"
+        aria-label={widgetPlacementZones[0].label}
+      >
+        {serviceBoardEntries.length > 0
+          ? serviceBoardEntries.map((entry) => renderWidget(entry.widget))
+          : renderEmptyState(
+              'Family service board is empty',
+              'Assign the arrival board to the Family service board zone in settings.',
+              'empty-state--board',
+            )}
+      </section>
 
-        return (
-          <section className={zone.className} key={zone.id} aria-label={zone.label}>
-            {widgetsInZone.map((entry) => renderWidget(entry.widget))}
-          </section>
-        )
-      })}
+      {populatedGridZones.length > 0 ? (
+        <section className="widget-grid" aria-label="Two-column widget grid">
+          {populatedGridZones.map(({ zone, widgetsInZone }) => (
+            <section className={zone.className} key={zone.id} aria-label={zone.label}>
+              {widgetsInZone.map((entry) => renderWidget(entry.widget))}
+            </section>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="widget-zone widget-zone--expanded-stage" aria-label="Expanded widget view">
+        <div className="widget-stage-head">
+          <div>
+            <p className="widget-kicker">Extended view</p>
+            <h2>{expandedWidget ? expandedWidget.entity.title : 'Lower focus stage'}</h2>
+          </div>
+        </div>
+
+        {expandedWidget
+          ? renderWidget(expandedWidget, 'expanded')
+          : renderEmptyState(
+              'No widget selected',
+              'The lower section stays reserved for an expanded widget view.',
+              'empty-state--expanded',
+            )}
+      </section>
     </section>
   )
 }

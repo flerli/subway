@@ -50,7 +50,7 @@ const normalizeWidgetEntity = (
   placementZones:
     entity.placementZones && entity.placementZones.length > 0
       ? entity.placementZones
-      : [createPlacement('hero', 1)],
+      : [createPlacement('a1', 1)],
 })
 
 export const widgetEntitySeed: WidgetEntityRecord[] = [
@@ -60,7 +60,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     subwayColor: '#4aa8ff',
     sourceLocation: 'arrival-board',
     userScope: createScope('all'),
-    placementZones: [createPlacement('hero', 1)],
+    placementZones: [createPlacement('service-board', 1)],
   }),
   normalizeWidgetEntity({
     id: 'weather',
@@ -68,7 +68,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     subwayColor: '#fccc0a',
     sourceLocation: 'weather',
     userScope: createScope('all'),
-    placementZones: [createPlacement('triad', 1)],
+    placementZones: [createPlacement('a1', 1)],
   }),
   normalizeWidgetEntity({
     id: 'calendar',
@@ -76,7 +76,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     subwayColor: '#ff6319',
     sourceLocation: 'calendar',
     userScope: createScope('members', ['family-1', 'family-2']),
-    placementZones: [createPlacement('triad', 2)],
+    placementZones: [createPlacement('b1', 1)],
   }),
   normalizeWidgetEntity({
     id: 'todo',
@@ -84,7 +84,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     subwayColor: '#4edbe8',
     sourceLocation: 'todo',
     userScope: createScope('member', ['family-3']),
-    placementZones: [createPlacement('triad', 3)],
+    placementZones: [createPlacement('a2', 1)],
   }),
   normalizeWidgetEntity({
     id: 'bulletins',
@@ -92,15 +92,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     subwayColor: '#8b78ff',
     sourceLocation: 'bulletins',
     userScope: createScope('members', ['family-2', 'family-3', 'family-4']),
-    placementZones: [createPlacement('bottom-wide', 1)],
-  }),
-  normalizeWidgetEntity({
-    id: 'calibration',
-    title: 'Calibration',
-    subwayColor: '#ff7c70',
-    sourceLocation: 'calibration',
-    userScope: createScope('all'),
-    placementZones: [createPlacement('bottom-side', 1)],
+    placementZones: [createPlacement('b2', 1)],
   }),
 ]
 
@@ -118,7 +110,7 @@ export const mergeWidgetEntitiesWithSeed = (
       normalizeWidgetEntity({
         ...seededEntity,
         ...entity,
-        userScope: seededEntity?.userScope ?? entity.userScope,
+        userScope: entity.userScope ?? seededEntity?.userScope,
         placementZones: hasExplicitPlacements
           ? entity.placementZones
           : seededEntity?.placementZones,

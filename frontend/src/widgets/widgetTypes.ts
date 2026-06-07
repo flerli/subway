@@ -5,10 +5,13 @@ export type WidgetRefreshStatus = 'idle' | 'ok' | 'live' | 'cached' | 'static' |
 export type WidgetScopeMode = 'all' | 'member' | 'members'
 export type WidgetSettingFieldType = 'text' | 'number' | 'boolean'
 export type WidgetPlacementZoneId =
-  | 'hero'
-  | 'triad'
-  | 'bottom-wide'
-  | 'bottom-side'
+  | 'service-board'
+  | 'a1'
+  | 'b1'
+  | 'a2'
+  | 'b2'
+  | 'a3'
+  | 'b3'
 
 export type WidgetSettingsValues = Record<string, string | number | boolean>
 

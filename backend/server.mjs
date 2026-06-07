@@ -95,7 +95,7 @@ const seedWidgets = [
     subwayColor: '#4aa8ff',
     sourceLocation: 'arrival-board',
     userScope: { mode: 'all', memberIds: [] },
-    placementZones: [{ zoneId: 'hero', order: 1 }],
+    placementZones: [{ zoneId: 'service-board', order: 1 }],
   },
   {
     id: 'weather',
@@ -104,7 +104,7 @@ const seedWidgets = [
     subwayColor: '#fccc0a',
     sourceLocation: 'weather',
     userScope: { mode: 'all', memberIds: [] },
-    placementZones: [{ zoneId: 'triad', order: 1 }],
+    placementZones: [{ zoneId: 'a1', order: 1 }],
   },
   {
     id: 'calendar',
@@ -113,7 +113,7 @@ const seedWidgets = [
     subwayColor: '#ff6319',
     sourceLocation: 'calendar',
     userScope: { mode: 'members', memberIds: ['family-1', 'family-2'] },
-    placementZones: [{ zoneId: 'triad', order: 2 }],
+    placementZones: [{ zoneId: 'b1', order: 1 }],
   },
   {
     id: 'todo',
@@ -125,7 +125,7 @@ const seedWidgets = [
       mode: 'members',
       memberIds: ['family-1', 'family-2', 'family-3', 'family-4'],
     },
-    placementZones: [{ zoneId: 'triad', order: 3 }],
+    placementZones: [{ zoneId: 'a2', order: 1 }],
   },
   {
     id: 'bulletins',
@@ -134,16 +134,7 @@ const seedWidgets = [
     subwayColor: '#8b78ff',
     sourceLocation: 'bulletins',
     userScope: { mode: 'members', memberIds: ['family-2', 'family-3', 'family-4'] },
-    placementZones: [{ zoneId: 'bottom-wide', order: 1 }],
-  },
-  {
-    id: 'calibration',
-    title: 'Calibration',
-    subwayLetter: 'C',
-    subwayColor: '#ff7c70',
-    sourceLocation: 'calibration',
-    userScope: { mode: 'all', memberIds: [] },
-    placementZones: [{ zoneId: 'bottom-side', order: 1 }],
+    placementZones: [{ zoneId: 'b2', order: 1 }],
   },
 ]
 
@@ -389,6 +380,28 @@ const upsertWidgetSettings = (widgetId, settingsJson, timestamp) =>
     `)
     .run(widgetId, settingsJson, timestamp, timestamp)
 
+  const deleteWidgetById = (widgetId) =>
+    db.prepare('DELETE FROM widgets WHERE id = ?').run(widgetId)
+
+  const deleteWidgetSettingsById = (widgetId) =>
+    db.prepare('DELETE FROM widget_settings WHERE widget_id = ?').run(widgetId)
+
+  const deleteUnsupportedWidgets = () => {
+    const widgets = db
+      .prepare(`
+        SELECT id, source_location
+        FROM widgets
+      `)
+      .all()
+
+    for (const widget of widgets) {
+      if (!allowedWidgetSourceLocations.has(widget.source_location)) {
+        deleteWidgetSettingsById(widget.id)
+        deleteWidgetById(widget.id)
+      }
+    }
+  }
+
 const selectAllFamilyMembers = () =>
   db
     .prepare(`
@@ -423,23 +436,7 @@ const normalizeWidgetRow = (row) => ({
       (memberId) => typeof memberId === 'string',
     ),
   },
-  placementZones: parseJsonArray(row.placement_zones)
-    .map((placement) => {
-      if (
-        !placement ||
-        typeof placement !== 'object' ||
-        typeof placement.zoneId !== 'string' ||
-        typeof placement.order !== 'number'
-      ) {
-        return null
-      }
-
-      return {
-        zoneId: placement.zoneId,
-        order: placement.order,
-      }
-    })
-    .filter(Boolean),
+  placementZones: normalizeWidgetPlacementZones(parseJsonArray(row.placement_zones)),
 })
 
 const selectAllWidgets = () =>
@@ -459,6 +456,7 @@ const selectAllWidgets = () =>
     `)
     .all()
     .map(normalizeWidgetRow)
+    .filter((widget) => allowedWidgetSourceLocations.has(widget.sourceLocation))
 
 const selectAllCalendarEvents = () =>
   db
@@ -718,6 +716,45 @@ const normalizeWidgetScope = (value) => {
 }
 
 const normalizeWidgetPlacementZones = (value) => {
+  const widgetGridPlacementOrder = ['a1', 'b1', 'a2', 'b2', 'a3', 'b3']
+
+  const normalizePlacementZoneId = (zoneId, order) => {
+    if (
+      zoneId === 'service-board' ||
+      zoneId === 'a1' ||
+      zoneId === 'b1' ||
+      zoneId === 'a2' ||
+      zoneId === 'b2' ||
+      zoneId === 'a3' ||
+      zoneId === 'b3'
+    ) {
+      return zoneId
+    }
+
+    if (zoneId === 'hero') {
+      return 'service-board'
+    }
+
+    if (zoneId === 'triad') {
+      return widgetGridPlacementOrder[
+        Math.min(
+          Math.max(Math.round(order) - 1, 0),
+          widgetGridPlacementOrder.length - 1,
+        )
+      ]
+    }
+
+    if (zoneId === 'bottom-wide') {
+      return 'b2'
+    }
+
+    if (zoneId === 'bottom-side') {
+      return 'a3'
+    }
+
+    return null
+  }
+
   if (!Array.isArray(value)) {
     return []
   }
@@ -734,17 +771,17 @@ const normalizeWidgetPlacementZones = (value) => {
         return null
       }
 
-      if (
-        candidate.zoneId !== 'hero' &&
-        candidate.zoneId !== 'triad' &&
-        candidate.zoneId !== 'bottom-wide' &&
-        candidate.zoneId !== 'bottom-side'
-      ) {
+      const normalizedZoneId = normalizePlacementZoneId(
+        candidate.zoneId,
+        candidate.order,
+      )
+
+      if (!normalizedZoneId) {
         return null
       }
 
       return {
-        zoneId: candidate.zoneId,
+        zoneId: normalizedZoneId,
         order: Math.max(1, Math.round(candidate.order)),
       }
     })
@@ -771,6 +808,8 @@ if (widgetSeedCount === 0) {
     insertWidget(widget, now, now)
   }
 }
+
+deleteUnsupportedWidgets()
 
 if (calendarEventSeedCount === 0) {
   const now = new Date().toISOString()
