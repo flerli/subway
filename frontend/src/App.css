@@ -1,0 +1,910 @@
+.app-shell {
+  width: min(100%, max(780px, calc(100svh * 9 / 16)));
+}
+
+.screen {
+  position: relative;
+  min-height: calc(100svh - clamp(20px, 2vw, 28px));
+  padding: clamp(18px, 1.8vw, 28px);
+  border-radius: 32px;
+  border: 1px solid rgba(228, 202, 146, 0.14);
+  background:
+    linear-gradient(180deg, rgba(18, 22, 31, 0.98) 0%, rgba(7, 9, 12, 1) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: auto, 22px 22px, 22px 22px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: grid;
+  gap: 16px;
+  container-type: inline-size;
+}
+
+.screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(40, 80, 173, 0.14), transparent 22%),
+    radial-gradient(circle at bottom left, rgba(255, 99, 25, 0.1), transparent 26%);
+  pointer-events: none;
+}
+
+.terminal-marquee,
+.widget {
+  position: relative;
+  z-index: 1;
+  border-radius: 26px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(20, 24, 31, 0.96) 0%, rgba(10, 13, 17, 0.99) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.terminal-marquee {
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.terminal-left,
+.terminal-right,
+.widget-head,
+.widget-flag,
+.weather-copy,
+.todo-copy,
+.todo-side,
+.agenda-copy,
+.measure-stack,
+.board-title-group,
+.board-head-side,
+.terminal-copy,
+.clock-stack,
+.arrival-destination {
+  display: grid;
+  gap: 4px;
+}
+
+.terminal-left {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.terminal-right {
+  justify-items: end;
+  gap: 10px;
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.terminal-button {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.terminal-button.is-active {
+  border-color: rgba(214, 232, 255, 0.35);
+  background: rgba(214, 232, 255, 0.12);
+}
+
+.agency-badge {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #4aa8ff;
+  color: #f3fbff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.agency-badge--small {
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 0.8rem;
+}
+
+.terminal-location,
+.widget-kicker,
+.widget-meta,
+.board-side-label,
+.filter-caption,
+.measure-chip span,
+.forecast-day,
+.todo-due,
+.agenda-location,
+.weather-range,
+.news-meta,
+.arrival-unit,
+.terminal-exit span,
+.terminal-exit strong {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.terminal-location,
+.widget-kicker,
+.widget-meta,
+.board-side-label,
+.filter-caption,
+.measure-chip span,
+.forecast-day,
+.todo-due,
+.todo-lane,
+.agenda-location,
+.weather-range,
+.news-meta,
+.arrival-destination p,
+.terminal-exit strong {
+  color: var(--muted);
+}
+
+.terminal-title,
+.widget h2,
+.arrival-destination h3,
+.news-card h3,
+.filter-label,
+.agenda-title,
+.todo-task,
+.weather-condition {
+  margin: 0;
+  color: var(--text);
+}
+
+.terminal-title {
+  font-size: clamp(1.7rem, 3.5cqw, 3.1rem);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.terminal-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #d2180d 0%, #9e1008 100%);
+  color: #fff8e7;
+}
+
+.terminal-exit span:last-child {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.terminal-exit strong,
+.terminal-exit span {
+  color: #fff8e7;
+}
+
+.board-date,
+.board-clock {
+  margin: 0;
+  color: var(--text);
+}
+
+.board-date {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.board-clock {
+  font-size: clamp(1.45rem, 3cqw, 2.3rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.route-bullet {
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--route-color);
+  color: var(--route-ink);
+  font-weight: 800;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.route-bullet--large {
+  width: 2.9rem;
+  height: 2.9rem;
+  font-size: 1.15rem;
+}
+
+.route-bullet--small {
+  width: 1.85rem;
+  height: 1.85rem;
+  font-size: 0.88rem;
+}
+
+.dashboard-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  grid-auto-rows: minmax(220px, auto);
+}
+
+.widget {
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.widget--span-6 {
+  grid-column: span 6;
+}
+
+.widget--span-4 {
+  grid-column: span 4;
+}
+
+.widget--span-2 {
+  grid-column: span 2;
+}
+
+.widget--board {
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(11, 26, 47, 0.98) 0%, rgba(7, 16, 28, 0.99) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, 18px 18px, 18px 18px;
+  border-color: rgba(121, 162, 255, 0.25);
+}
+
+.board-head,
+.widget-head,
+.widget-flag,
+.weather-summary,
+.arrival-route,
+.news-meta,
+.board-footer {
+  display: grid;
+  gap: 14px;
+}
+
+.board-head,
+.widget-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.board-title-group,
+.widget-flag {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.board-head h2,
+.widget h2 {
+  font-size: 1.65rem;
+  letter-spacing: -0.03em;
+}
+
+.board-head-side {
+  justify-items: end;
+  text-align: right;
+}
+
+.board-side-value,
+.happening-copy,
+.alert-inline p,
+.weather-note,
+.agenda-note,
+.calibration-note,
+.news-card p,
+.todo-lane {
+  margin: 0;
+  color: var(--muted-soft);
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.board-side-value {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.board-side-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.arrival-board,
+.agenda-list,
+.todo-list,
+.news-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.arrival-strip,
+.forecast-card,
+.agenda-row,
+.todo-row,
+.news-card,
+.measure-chip,
+.square-preview,
+.filter-pill,
+.alert-inline,
+.happening-now {
+  border: 1px solid var(--line);
+}
+
+.arrival-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(87, 114, 153, 0.86) 0%, rgba(58, 81, 112, 0.92) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.arrival-route {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.arrival-destination h3 {
+  font-size: clamp(1.3rem, 2.2cqw, 2.1rem);
+  line-height: 1.02;
+}
+
+.arrival-destination p {
+  font-size: 0.95rem;
+}
+
+.arrival-minute-stack {
+  justify-items: end;
+  text-align: right;
+}
+
+.arrival-count,
+.weather-temp {
+  margin: 0;
+  color: var(--text);
+  line-height: 0.88;
+  font-weight: 800;
+}
+
+.arrival-count {
+  font-size: clamp(2.2rem, 4.8cqw, 3.9rem);
+}
+
+.arrival-unit {
+  margin: 0;
+  color: #d8e6ff;
+}
+
+.board-footer {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.happening-now,
+.alert-inline {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.alert-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  border-radius: 999px;
+  background: #4edbe8;
+  box-shadow: 0 0 0 4px rgba(78, 219, 232, 0.14);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.filter-row--compact {
+  grid-column: 1 / -1;
+}
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.filter-pill:hover {
+  transform: translateY(-1px);
+}
+
+.filter-pill.is-active {
+  border-color: rgba(214, 232, 255, 0.35);
+  background: rgba(214, 232, 255, 0.09);
+}
+
+.filter-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.filter-label {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.filter-caption {
+  font-size: 0.72rem;
+}
+
+.weather-summary {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+}
+
+.weather-temp {
+  font-size: clamp(3rem, 7cqw, 4.6rem);
+}
+
+.weather-condition {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.weather-range,
+.weather-note,
+.agenda-location,
+.news-card p,
+.news-card h3,
+.widget-meta {
+  margin: 0;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.forecast-card {
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.forecast-condition,
+.forecast-range {
+  margin: 0;
+  color: var(--text);
+}
+
+.forecast-condition {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.forecast-range {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.agenda-row,
+.todo-row {
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.agenda-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.agenda-time {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.06rem;
+  font-weight: 800;
+}
+
+.agenda-title,
+.todo-task {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.todo-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.todo-status {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid rgba(252, 204, 10, 0.85);
+  box-shadow: 0 0 0 4px rgba(252, 204, 10, 0.12);
+}
+
+.todo-side {
+  justify-items: end;
+  gap: 8px;
+}
+
+.todo-due {
+  margin: 0;
+}
+
+.news-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.news-card {
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.news-card h3 {
+  font-size: 1.06rem;
+  line-height: 1.34;
+}
+
+.measure-stack {
+  gap: 10px;
+}
+
+.measure-chip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.measure-chip strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.square-preview {
+  min-height: calc(var(--square-size) + 28px);
+  padding: 14px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  background:
+    linear-gradient(rgba(252, 204, 10, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(252, 204, 10, 0.08) 1px, transparent 1px),
+    rgba(255, 255, 255, 0.04);
+  background-size: 28px 28px, 28px 28px, auto;
+}
+
+.square {
+  width: min(var(--square-size), 100%);
+  aspect-ratio: 1;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: #f8f8f8;
+  background:
+    linear-gradient(rgba(252, 204, 10, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(252, 204, 10, 0.15) 1px, transparent 1px),
+    linear-gradient(180deg, #1c2129 0%, #0f1318 100%);
+  background-size: 20% 20%, 20% 20%, 100% 100%;
+  border: 6px solid #fccc0a;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.square span {
+  text-align: center;
+}
+
+.calibration-note {
+  font-size: 0.92rem;
+}
+
+.settings-page {
+  position: relative;
+  z-index: 1;
+}
+
+.settings-panel {
+  border-radius: 26px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(20, 24, 31, 0.96) 0%, rgba(10, 13, 17, 0.99) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.settings-panel h2,
+.member-editor h3,
+.settings-card h3,
+.empty-title {
+  margin: 0;
+  color: var(--text);
+}
+
+.settings-panel h2 {
+  font-size: 1.65rem;
+  letter-spacing: -0.03em;
+}
+
+.settings-copy,
+.member-editor p,
+.settings-note,
+.widget-number-row p,
+.empty-copy {
+  margin: 0;
+  color: var(--muted-soft);
+  line-height: 1.5;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.85fr);
+  gap: 14px;
+}
+
+.member-list,
+.settings-side,
+.widget-number-list,
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+
+.member-editor,
+.settings-card,
+.empty-state {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.member-editor,
+.settings-card {
+  padding: 16px;
+}
+
+.member-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.member-editor-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.member-form-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.settings-card-head {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-label {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-label span {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.settings-label--color {
+  align-self: start;
+}
+
+.settings-color {
+  width: 100%;
+  min-width: 72px;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px;
+}
+
+.settings-submit {
+  border: 1px solid rgba(214, 232, 255, 0.35);
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: rgba(214, 232, 255, 0.12);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.widget-number-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty-state {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.empty-state--board {
+  min-height: 140px;
+  place-content: center;
+}
+
+.empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.settings-note {
+  font-size: 0.92rem;
+}
+
+.terminal-button:focus-visible,
+.settings-input:focus-visible,
+.settings-submit:focus-visible {
+  outline: 2px solid rgba(214, 232, 255, 0.6);
+  outline-offset: 2px;
+}
+
+@container (max-width: 1220px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .widget--span-6,
+  .widget--span-4 {
+    grid-column: span 4;
+  }
+
+  .widget--span-2 {
+    grid-column: span 2;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container (max-width: 700px) {
+  .terminal-marquee,
+  .board-head,
+  .widget-head,
+  .weather-summary,
+  .board-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal-right,
+  .board-head-side,
+  .widget-meta,
+  .arrival-minute-stack,
+  .todo-side {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .terminal-actions {
+    justify-content: flex-start;
+  }
+}
+
+@container (max-width: 620px) {
+  .dashboard-grid,
+  .forecast-grid,
+  .news-list {
+    grid-template-columns: 1fr;
+  }
+
+  .widget--span-6,
+  .widget--span-4,
+  .widget--span-2 {
+    grid-column: span 1;
+  }
+
+  .arrival-strip,
+  .agenda-row,
+  .todo-row,
+  .weather-summary,
+  .member-form-fields,
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}

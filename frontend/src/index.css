@@ -1,0 +1,73 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 400;
+  --text: #f5f7fb;
+  --muted: #95a0ad;
+  --muted-soft: #bcc4cf;
+  --line: rgba(255, 255, 255, 0.1);
+  --panel: #10141a;
+  --panel-alt: #161b22;
+  --bg-top: #10161f;
+  --bg-bottom: #030507;
+  --shadow: 0 48px 120px rgba(0, 0, 0, 0.58);
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgba(40, 80, 173, 0.18), transparent 30%),
+    radial-gradient(circle at bottom, rgba(252, 204, 10, 0.1), transparent 35%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  justify-content: center;
+  padding: clamp(14px, 2vw, 26px);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+code {
+  font-family: var(--mono);
+}
+
+@media (max-width: 840px) {
+  :root {
+    font-size: 16px;
+  }
+}
