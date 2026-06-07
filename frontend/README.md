@@ -17,6 +17,15 @@ npm install
 npm run dev
 ```
 
+The frontend expects the backend API to be running as well.
+
+Start the backend from the repository root:
+
+```bash
+cd ../backend
+npm start
+```
+
 For a production check:
 
 ```bash
@@ -29,3 +38,5 @@ npm run preview
 - The layout is optimized for a portrait fullscreen browser surface.
 - The square size is calculated for the known display geometry, so browser zoom should remain fixed at 100% on the target hardware.
 - If the installed panel differs slightly because of scaling or kiosk settings, calibrate once on-device and keep that setup locked.
+- Family members are persisted through the backend API instead of browser-local storage.
+- Widget metadata is also loaded from the backend API so widget titles, colors, scope, placements, and source locations are centrally stored.

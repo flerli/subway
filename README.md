@@ -28,7 +28,20 @@ Current highlights:
 
 ![Family settings screenshot](frontend/public/screenshots/settings-page.png)
 
+## GUI Exploration Guide
+
+See the Epic 001 exploration guide for hands-on GUI tasks:
+
+`project_management/epics/001_WIDGET_ARCHITECTURE/001_WIDGET_ARCHITECTURE__GUI_EXPLORATION_GUIDE.md`
+
 ## Run it
+
+```bash
+cd backend
+npm start
+```
+
+In a second terminal:
 
 ```bash
 cd frontend
@@ -39,10 +52,26 @@ npm run dev
 ## Production check
 
 ```bash
+cd backend
+npm start
+```
+
+In a second terminal:
+
+```bash
 cd frontend
 npm run build
 npm run preview
 ```
+
+## Backend persistence
+
+- Family members are now stored in the backend persistence layer, not browser `localStorage`.
+- Widget metadata is also stored in the backend persistence layer.
+- The backend uses a local SQLite database at `backend/data/subway.sqlite`.
+- The frontend talks to the backend through `/api/family-members`.
+- The frontend also loads widget metadata through `/api/widgets`.
+- For local development, Vite proxies `/api` to `http://127.0.0.1:8787`.
 
 ## Display notes
 
