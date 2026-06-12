@@ -100,8 +100,31 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.ssh
-          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/id_ed25519
+          key_file=~/.ssh/id_ed25519
+          normalized_key="$(printf '%s' "${VPS_SSH_KEY}" | tr -d '\r')"
+
+          if grep -q 'BEGIN .*PRIVATE KEY' <<<"${normalized_key}"; then
+            printf '%s\n' "${normalized_key}" > "${key_file}"
+          else
+            printf '%s' "${normalized_key}" | base64 --decode > "${key_file}" 2>/dev/null || {
+              echo "VPS_SSH_KEY is neither a raw private key nor a valid base64-encoded private key." >&2
+              exit 1
+            }
+          fi
+
+          if ! ssh-keygen -y -f "${key_file}" >/dev/null 2>&1; then
+            echo "VPS_SSH_KEY could not be parsed by ssh-keygen. Save the full private key including BEGIN/END lines, or a base64-encoded version of that key." >&2
+            exit 1
+          fi
+
+          cat > ~/.ssh/config <<EOF
+          Host ${DEPLOY_HOST}
+            IdentityFile ${key_file}
+            IdentitiesOnly yes
+          EOF
+
           chmod 600 ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/config
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
 
       - name: Create deployment environment file
