@@ -26,6 +26,7 @@ const INITIAL_USER_ID = process.env.INITIAL_USER_ID ?? 'user-flerlage'
 const INITIAL_USER_USERNAME = process.env.INITIAL_USER_USERNAME ?? 'flerlage'
 const INITIAL_USER_PASSWORD =
   process.env.INITIAL_USER_PASSWORD ?? 'xupjo0-hyhdoF-tovsuc'
+const BACKEND_RUNTIME_INSTANCE_ID = randomUUID()
 const SESSION_COOKIE_NAME = 'subway_session'
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 10
 const SESSION_COOKIE_SECURE = process.env.SESSION_COOKIE_SECURE === 'true'
@@ -1374,6 +1375,13 @@ const server = createServer(async (request, response) => {
         id: authContext.session.userId,
         username: authContext.session.username,
       },
+    })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/runtime') {
+    sendJson(response, 200, {
+      instanceId: BACKEND_RUNTIME_INSTANCE_ID,
     })
     return
   }

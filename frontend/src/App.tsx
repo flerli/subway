@@ -7,6 +7,11 @@ import {
   type AuthUser,
 } from './api/auth'
 import {
+  currentFrontendBuildId,
+  fetchBackendRuntimeInfo,
+  fetchFrontendRuntimeInfo,
+} from './api/runtime'
+import {
   createFamilyMember,
   fetchFamilyMembers,
   updateFamilyMember,
@@ -24,6 +29,10 @@ import {
   defaultArrivalBoardSettings,
   normalizeArrivalBoardSettings,
 } from './widgets/arrival-board'
+import { fetchCalendarEvents } from './widgets/calendar/calendarApi'
+import { filterCalendarAgendaItems } from './widgets/calendar'
+import { fetchTodoItems } from './widgets/todo/todoApi'
+import { filterTodoItemsForView } from './widgets/todo'
 import { normalizeWeatherSettings } from './widgets/weather'
 import {
   WidgetMetadataAdminHost,
@@ -52,15 +61,15 @@ import type {
 const ALL_FILTER_ID = 'all'
 const ALL_MEMBERS_AUDIENCE = '*'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
-const APP_SHELL_WIDGET_SETTINGS_ID = 'app-shell'
+const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
+const LOCAL_APP_SHELL_STORAGE_KEY_PREFIX = 'subway-app-shell'
 
 type ViewMode = 'board' | 'settings'
 type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
 type MemberId = string
 
 interface AppShellPersistedState {
-  viewMode: ViewMode
-  expandedWidgetId: string | null
+  activeFilter: FilterId
 }
 
 const arrivals: Arrival[] = [
@@ -218,21 +227,51 @@ const badgeStyle = (color: string) => buildBadgeStyle(color)
 
 const householdBadgeStyle = badgeStyle('#7f8a98')
 
+const getLocalAppShellStorageKey = (userId: string) =>
+  `${LOCAL_APP_SHELL_STORAGE_KEY_PREFIX}:${userId}`
+
 const normalizeAppShellPersistedState = (
   value: unknown,
 ): AppShellPersistedState => {
   const candidate = value as {
-    viewMode?: unknown
-    expandedWidgetId?: unknown
+    activeFilter?: unknown
   }
 
   return {
-    viewMode: candidate?.viewMode === 'settings' ? 'settings' : 'board',
-    expandedWidgetId:
-      typeof candidate?.expandedWidgetId === 'string' &&
-      candidate.expandedWidgetId.trim().length > 0
-        ? candidate.expandedWidgetId
-        : null,
+    activeFilter:
+      typeof candidate?.activeFilter === 'string' && candidate.activeFilter.trim().length > 0
+        ? candidate.activeFilter
+        : ALL_FILTER_ID,
+  }
+}
+
+const readLocalAppShellState = (userId: string): AppShellPersistedState => {
+  if (typeof window === 'undefined') {
+    return { activeFilter: ALL_FILTER_ID }
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(getLocalAppShellStorageKey(userId))
+
+    if (!storedValue) {
+      return { activeFilter: ALL_FILTER_ID }
+    }
+
+    return normalizeAppShellPersistedState(JSON.parse(storedValue))
+  } catch {
+    return { activeFilter: ALL_FILTER_ID }
+  }
+}
+
+const persistLocalAppShellState = (userId: string, state: AppShellPersistedState) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(getLocalAppShellStorageKey(userId), JSON.stringify(state))
+  } catch {
+    // Ignore storage failures and keep the UI responsive.
   }
 }
 
@@ -302,19 +341,12 @@ function App() {
   const [, setDebugTapTimestamps] = useState<number[]>([])
   const [familyMembersLoaded, setFamilyMembersLoaded] = useState(false)
   const [widgetMetadataLoaded, setWidgetMetadataLoaded] = useState(false)
-  const [widgetSettingsLoaded, setWidgetSettingsLoaded] = useState(false)
-  const [widgetSettingsAvailable, setWidgetSettingsAvailable] = useState(false)
+  const [, setWidgetSettingsLoaded] = useState(false)
+  const [, setWidgetSettingsAvailable] = useState(false)
   const [appShellStateHydrated, setAppShellStateHydrated] = useState(false)
-  const skipNextAppShellPersistRef = useRef(true)
-  const appShellPersistTimerRef = useRef<number | null>(null)
+  const backendRuntimeInstanceIdRef = useRef<string | null>(null)
 
   const resetProtectedState = () => {
-    if (appShellPersistTimerRef.current !== null) {
-      window.clearTimeout(appShellPersistTimerRef.current)
-      appShellPersistTimerRef.current = null
-    }
-
-    skipNextAppShellPersistRef.current = true
     setViewMode('board')
     setExpandedWidgetId(null)
     setRegisteredWidgets([])
@@ -428,6 +460,76 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (
+      authStatus !== 'authenticated' ||
+      !authenticatedUser ||
+      appShellStateHydrated
+    ) {
+      return
+    }
+
+    const localAppShellState = readLocalAppShellState(authenticatedUser.id)
+
+    setActiveFilter(localAppShellState.activeFilter)
+    setAppShellStateHydrated(true)
+  }, [authStatus, authenticatedUser, appShellStateHydrated])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !authenticatedUser || !appShellStateHydrated) {
+      return
+    }
+
+    persistLocalAppShellState(authenticatedUser.id, {
+      activeFilter,
+    })
+  }, [activeFilter, appShellStateHydrated, authStatus, authenticatedUser])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const pollRuntimeVersions = async () => {
+      try {
+        const [frontendRuntimeInfo, backendRuntimeInfo] = await Promise.all([
+          fetchFrontendRuntimeInfo(),
+          fetchBackendRuntimeInfo(),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        if (frontendRuntimeInfo.buildId !== currentFrontendBuildId) {
+          window.location.reload()
+          return
+        }
+
+        if (
+          backendRuntimeInstanceIdRef.current !== null &&
+          backendRuntimeInstanceIdRef.current !== backendRuntimeInfo.instanceId
+        ) {
+          window.location.reload()
+          return
+        }
+
+        backendRuntimeInstanceIdRef.current = backendRuntimeInfo.instanceId
+      } catch {
+        // Ignore transient polling failures; a later poll can still trigger the reload.
+      }
+    }
+
+    void pollRuntimeVersions()
+
+    const runtimePollInterval = window.setInterval(() => {
+      void pollRuntimeVersions()
+    }, APP_RUNTIME_POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(runtimePollInterval)
+    }
+  }, [])
+
+  useEffect(() => {
     if (authStatus !== 'authenticated') {
       return
     }
@@ -471,69 +573,6 @@ function App() {
   }, [authStatus])
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !widgetSettingsLoaded || appShellStateHydrated) {
-      return
-    }
-
-    const persistedAppShellState = normalizeAppShellPersistedState(
-      widgetSettingsMap[APP_SHELL_WIDGET_SETTINGS_ID],
-    )
-
-    setViewMode(persistedAppShellState.viewMode)
-    setExpandedWidgetId(persistedAppShellState.expandedWidgetId)
-    skipNextAppShellPersistRef.current = true
-    setAppShellStateHydrated(true)
-  }, [authStatus, appShellStateHydrated, widgetSettingsLoaded, widgetSettingsMap])
-
-  useEffect(() => {
-    if (
-      authStatus !== 'authenticated' ||
-      !appShellStateHydrated ||
-      !widgetSettingsAvailable
-    ) {
-      return
-    }
-
-    if (skipNextAppShellPersistRef.current) {
-      skipNextAppShellPersistRef.current = false
-      return
-    }
-
-    if (appShellPersistTimerRef.current !== null) {
-      window.clearTimeout(appShellPersistTimerRef.current)
-    }
-
-    appShellPersistTimerRef.current = window.setTimeout(() => {
-      updateWidgetSettings(APP_SHELL_WIDGET_SETTINGS_ID, {
-        viewMode,
-        expandedWidgetId,
-      })
-        .then((persistedSettings) => {
-          setWidgetSettingsMap((currentValues) => ({
-            ...currentValues,
-            [persistedSettings.widgetId]: persistedSettings.settings,
-          }))
-          setWidgetSettingsError(null)
-        })
-        .catch((error) => {
-          if (isAuthRequiredError(error)) {
-            handleAuthRequired()
-            return
-          }
-
-          setWidgetSettingsError('Failed to persist the current app view state to the backend.')
-        })
-    }, 250)
-
-    return () => {
-      if (appShellPersistTimerRef.current !== null) {
-        window.clearTimeout(appShellPersistTimerRef.current)
-        appShellPersistTimerRef.current = null
-      }
-    }
-  }, [authStatus, appShellStateHydrated, expandedWidgetId, viewMode, widgetSettingsAvailable])
-
-  useEffect(() => {
     if (authStatus !== 'authenticated') {
       return
     }
@@ -546,6 +585,12 @@ function App() {
           setFamilyMembers(loadedMembers)
           setFamilyMembersLoaded(true)
           setFamilyMembersError(null)
+          setActiveFilter((currentFilter) =>
+            currentFilter === ALL_FILTER_ID ||
+            loadedMembers.some((member) => member.id === currentFilter)
+              ? currentFilter
+              : ALL_FILTER_ID,
+          )
         }
       })
       .catch((error) => {
@@ -699,26 +744,10 @@ function App() {
 
     let cancelled = false
 
-    const calendarWidget = registeredWidgets.find(
-      (widget) => widget.entity.id === 'calendar',
-    )
-
-    if (!calendarWidget) {
-      return () => {
-        cancelled = true
-      }
-    }
-
-    Promise.resolve(
-      calendarWidget.module.loadData({
-        focusedMemberId: activeFilter === ALL_FILTER_ID ? null : activeFilter,
-        settings: widgetSettingsMap.calendar,
-      }),
-    )
-      .then((result) => {
+    fetchCalendarEvents()
+      .then((agendaItems) => {
         if (!cancelled) {
-          const agendaResult = Array.isArray(result) ? (result as AgendaItem[]) : []
-          setCalendarEvents(agendaResult)
+          setCalendarEvents(agendaItems)
           setCalendarEventsError(null)
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
@@ -726,7 +755,7 @@ function App() {
               widgetId: 'calendar',
               refreshStatus: 'ok',
               lastRefreshAt: new Date().toISOString(),
-              itemCount: agendaResult.length,
+              itemCount: agendaItems.length,
             },
           }))
         }
@@ -756,7 +785,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, authStatus, registeredWidgets, widgetSettingsMap])
+  }, [authStatus])
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -765,24 +794,10 @@ function App() {
 
     let cancelled = false
 
-    const todoWidget = registeredWidgets.find((widget) => widget.entity.id === 'todo')
-
-    if (!todoWidget) {
-      return () => {
-        cancelled = true
-      }
-    }
-
-    Promise.resolve(
-      todoWidget.module.loadData({
-        focusedMemberId: activeFilter === ALL_FILTER_ID ? null : activeFilter,
-        settings: widgetSettingsMap.todo,
-      }),
-    )
-      .then((result) => {
+    fetchTodoItems()
+      .then((todoItems) => {
         if (!cancelled) {
-          const todoResult = Array.isArray(result) ? (result as TodoItem[]) : []
-          setTodoWidgetItems(todoResult)
+          setTodoWidgetItems(todoItems)
           setTodoItemsError(null)
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
@@ -790,7 +805,7 @@ function App() {
               widgetId: 'todo',
               refreshStatus: 'ok',
               lastRefreshAt: new Date().toISOString(),
-              itemCount: todoResult.length,
+              itemCount: todoItems.length,
             },
           }))
         }
@@ -820,7 +835,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, authStatus, registeredWidgets, todoRefreshToken, widgetSettingsMap])
+  }, [authStatus, todoRefreshToken])
 
   const membersById = new Map(familyMembers.map((member) => [member.id, member]))
   const filterOptions: FilterOption[] = [
@@ -843,8 +858,16 @@ function App() {
   const visibleArrivals = arrivals.filter((item) =>
     matchesFilter(item.members, activeFilter),
   )
-  const visibleAgenda = calendarEvents
-  const visibleTodos = todoWidgetItems
+  const visibleAgenda = filterCalendarAgendaItems(
+    calendarEvents,
+    activeFilter === ALL_FILTER_ID ? null : activeFilter,
+    widgetSettingsMap.calendar,
+  )
+  const visibleTodos = filterTodoItemsForView(
+    todoWidgetItems,
+    activeFilter === ALL_FILTER_ID ? null : activeFilter,
+    widgetSettingsMap.todo,
+  )
   const visibleNews = newsItems.filter((item) =>
     matchesFilter(item.members, activeFilter),
   )
@@ -1064,6 +1087,14 @@ function App() {
       return
     }
 
+    const previousTodoItems = todoWidgetItems
+
+    setTodoWidgetItems((currentValues) =>
+      currentValues.map((todoItem) =>
+        todoItem.id === todoItemId ? { ...todoItem, done } : todoItem,
+      ),
+    )
+
     Promise.resolve(
       todoWidget.module.mutateData({
         action: 'set-done-state',
@@ -1080,6 +1111,8 @@ function App() {
           handleAuthRequired()
           return
         }
+
+        setTodoWidgetItems(previousTodoItems)
 
         setTodoItemsError('Failed to update todo item state in the backend.')
         setWidgetHealthMap((currentValues) => ({
@@ -1185,7 +1218,6 @@ function App() {
 
   const isProtectedShellReady =
     authStatus === 'authenticated' &&
-    widgetSettingsLoaded &&
     familyMembersLoaded &&
     widgetMetadataLoaded &&
     appShellStateHydrated
@@ -1312,7 +1344,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="screen">
+      <section className="screen screen--shell">
         <header className="terminal-marquee">
           <div className="terminal-left">
             <div className="terminal-copy" onClick={handleHiddenDebugTrigger}>
@@ -1358,33 +1390,38 @@ function App() {
           </div>
         </header>
 
-        {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
+        <div
+          className={`screen-content ${
+            viewMode === 'board' ? 'screen-content--board' : 'screen-content--settings'
+          }`}
+        >
+          {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
 
-        {viewMode === 'board' ? (
-          <WidgetBoardHost
-            registeredWidgets={registeredWidgets}
-            activeFilter={activeFilter}
-            activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
-            expandedWidgetId={expandedWidgetId}
-            filterOptions={filterOptions}
-            onFilterChange={setActiveFilter}
-            onExpandedWidgetChange={setExpandedWidgetId}
-            visibleArrivals={visibleArrivals}
-            visibleAgenda={visibleAgenda}
-            visibleTodos={visibleTodos}
-            visibleNews={visibleNews}
-            weatherData={weatherWidgetData}
-            weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
-            currentAgenda={currentAgenda}
-            currentAlert={currentAlert}
-            nextTodo={nextTodo}
-            commuteNote={commuteNote}
-            renderAudienceBadge={renderAudienceBadge}
-            onToggleTodoDone={handleToggleTodoDone}
-          />
-        ) : (
-          <section className="settings-page">
-            <article className="settings-panel">
+          {viewMode === 'board' ? (
+            <WidgetBoardHost
+              registeredWidgets={registeredWidgets}
+              activeFilter={activeFilter}
+              activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
+              expandedWidgetId={expandedWidgetId}
+              filterOptions={filterOptions}
+              onFilterChange={setActiveFilter}
+              onExpandedWidgetChange={setExpandedWidgetId}
+              visibleArrivals={visibleArrivals}
+              visibleAgenda={visibleAgenda}
+              visibleTodos={visibleTodos}
+              visibleNews={visibleNews}
+              weatherData={weatherWidgetData}
+              weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
+              currentAgenda={currentAgenda}
+              currentAlert={currentAlert}
+              nextTodo={nextTodo}
+              commuteNote={commuteNote}
+              renderAudienceBadge={renderAudienceBadge}
+              onToggleTodoDone={handleToggleTodoDone}
+            />
+          ) : (
+            <section className="settings-page">
+              <article className="settings-panel">
               <div className="widget-head">
                 <div className="widget-flag">
                   <span
@@ -1543,9 +1580,10 @@ function App() {
                   })
                 }
               />
-            </article>
-          </section>
-        )}
+              </article>
+            </section>
+          )}
+        </div>
 
         {viewMode === 'board' && debugModeEnabled ? (
           <WidgetDebugOverlay

@@ -18,7 +18,7 @@ const matchesFocusedMember = (
   )
 }
 
-const normalizeTodoSettings = (value: unknown) => {
+export const normalizeTodoSettings = (value: unknown) => {
   const candidate = value as {
     maxItems?: unknown
     showCompleted?: unknown
@@ -35,6 +35,19 @@ const normalizeTodoSettings = (value: unknown) => {
         : true,
   }
 }
+
+  export const filterTodoItemsForView = (
+    todoItems: TodoItem[],
+    focusedMemberId: string | null | undefined,
+    settingsValue: unknown,
+  ) => {
+    const settings = normalizeTodoSettings(settingsValue)
+
+    return todoItems
+      .filter((todoItem) => matchesFocusedMember(todoItem, focusedMemberId))
+      .filter((todoItem) => (settings.showCompleted ? true : !todoItem.done))
+      .slice(0, settings.maxItems)
+  }
 
 export const todoWidget: WidgetMicroAppContract = {
   entityId: 'todo',
@@ -66,14 +79,8 @@ export const todoWidget: WidgetMicroAppContract = {
   },
   loadData: async (context) => {
     const todoItems = await fetchTodoItems()
-    const settings = normalizeTodoSettings(context.settings)
 
-    return todoItems
-      .filter((todoItem) =>
-        matchesFocusedMember(todoItem, context.focusedMemberId),
-      )
-      .filter((todoItem) => (settings.showCompleted ? true : !todoItem.done))
-      .slice(0, settings.maxItems)
+    return filterTodoItemsForView(todoItems, context.focusedMemberId, context.settings)
   },
   mutateData: async (context) => {
     if (context.action !== 'set-done-state') {

@@ -1,9 +1,12 @@
 .app-shell {
   width: min(100%, max(780px, calc(100svh * 9 / 16)));
+  height: 100svh;
+  overflow: hidden;
 }
 
 .screen {
   position: relative;
+  height: 100svh;
   min-height: 100svh;
   padding: clamp(12px, 1.3vw, 20px);
   border-radius: 0;
@@ -20,6 +23,10 @@
   container-type: inline-size;
 }
 
+.screen--shell {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .screen::before {
   content: '';
   position: absolute;
@@ -33,6 +40,23 @@
 .auth-screen {
   align-content: center;
   padding: clamp(18px, 2.4vw, 30px);
+}
+
+.screen-content {
+  min-height: 0;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.screen-content::-webkit-scrollbar,
+.filter-row--board::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.screen-content--board,
+.screen-content--settings {
+  overflow-y: auto;
 }
 
 .hero-layout {
@@ -356,6 +380,7 @@
 .dashboard-grid {
   position: relative;
   z-index: 1;
+  min-height: 100%;
   display: grid;
   gap: 10px;
   align-content: start;
@@ -370,6 +395,11 @@
 
 .widget-zone--filters {
   gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding-bottom: 4px;
+  background: linear-gradient(180deg, rgba(18, 22, 31, 0.98) 0%, rgba(18, 22, 31, 0.92) 72%, rgba(18, 22, 31, 0) 100%);
 }
 
 .widget-zone--service-board {
@@ -389,7 +419,7 @@
 
 .widget-zone--expanded-stage {
   padding: 14px;
-  min-height: 960px;
+  min-height: 320px;
   border-radius: 24px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
@@ -621,6 +651,7 @@
   gap: 10px;
   flex-wrap: nowrap;
   overflow-x: auto;
+  scrollbar-width: none;
   padding: 4px 2px 2px;
 }
 
@@ -696,7 +727,7 @@
 }
 
 .widget--expanded {
-  min-height: 960px;
+  min-height: 100%;
 }
 
 .filter-caption {
@@ -1188,6 +1219,7 @@
 .settings-page {
   position: relative;
   z-index: 1;
+  min-height: 100%;
 }
 
 .settings-panel {
@@ -1339,7 +1371,7 @@
 }
 
 .empty-state--expanded {
-  min-height: 960px;
+  min-height: 100%;
   place-content: center;
 }
 

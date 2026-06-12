@@ -18,7 +18,7 @@ const matchesFocusedMember = (
   )
 }
 
-const normalizeCalendarSettings = (value: unknown) => {
+export const normalizeCalendarSettings = (value: unknown) => {
   const candidate = value as {
     maxItems?: unknown
     includeHouseholdEvents?: unknown
@@ -35,6 +35,23 @@ const normalizeCalendarSettings = (value: unknown) => {
         : true,
   }
 }
+
+  export const filterCalendarAgendaItems = (
+    agendaItems: AgendaItem[],
+    focusedMemberId: string | null | undefined,
+    settingsValue: unknown,
+  ) => {
+    const settings = normalizeCalendarSettings(settingsValue)
+
+    return agendaItems
+      .filter((agendaItem) => matchesFocusedMember(agendaItem, focusedMemberId))
+      .filter((agendaItem) =>
+        settings.includeHouseholdEvents
+          ? true
+          : !agendaItem.members.includes(ALL_MEMBERS_AUDIENCE),
+      )
+      .slice(0, settings.maxItems)
+  }
 
 export const calendarWidget: WidgetMicroAppContract = {
   entityId: 'calendar',
@@ -66,18 +83,12 @@ export const calendarWidget: WidgetMicroAppContract = {
   },
   loadData: async (context) => {
     const agendaItems = await fetchCalendarEvents()
-    const settings = normalizeCalendarSettings(context.settings)
 
-    return agendaItems
-      .filter((agendaItem) =>
-        matchesFocusedMember(agendaItem, context.focusedMemberId),
-      )
-      .filter((agendaItem) =>
-        settings.includeHouseholdEvents
-          ? true
-          : !agendaItem.members.includes(ALL_MEMBERS_AUDIENCE),
-      )
-      .slice(0, settings.maxItems)
+    return filterCalendarAgendaItems(
+      agendaItems,
+      context.focusedMemberId,
+      context.settings,
+    )
   },
 }
 
