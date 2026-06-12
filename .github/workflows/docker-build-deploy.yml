@@ -91,17 +91,21 @@ jobs:
 
       - name: Configure SSH access
         env:
-          VPS_SSH_KEY: ${{ secrets['VPS_SSH_KEY'] }}
+          VPS_SSH_KEY: ${{ secrets['VPS_SSH_KEY_B64'] || secrets['VPS_SSH_KEY'] }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${VPS_SSH_KEY}" ]]; then
-            echo "The VPS_SSH_KEY secret is required for deployment." >&2
+            echo "A deploy key secret is required for deployment. Set VPS_SSH_KEY_B64 or VPS_SSH_KEY." >&2
             exit 1
           fi
           mkdir -p ~/.ssh
           key_file=~/.ssh/id_ed25519
           normalized_key="$(printf '%s' "${VPS_SSH_KEY}" | tr -d '\r')"
+
+          if [[ "${normalized_key}" == *'\\n'* ]]; then
+            normalized_key="${normalized_key//\\n/$'\n'}"
+          fi
 
           if grep -q 'BEGIN .*PRIVATE KEY' <<<"${normalized_key}"; then
             printf '%s\n' "${normalized_key}" > "${key_file}"
@@ -114,6 +118,8 @@ jobs:
 
           if ! ssh-keygen -y -f "${key_file}" >/dev/null 2>&1; then
             echo "VPS_SSH_KEY could not be parsed by ssh-keygen. Save the full private key including BEGIN/END lines, or a base64-encoded version of that key." >&2
+            echo "Decoded key size: $(wc -c < "${key_file}") bytes" >&2
+            head -n 1 "${key_file}" >&2 || true
             exit 1
           fi
 
