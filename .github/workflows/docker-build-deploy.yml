@@ -99,6 +99,7 @@ jobs:
             echo "A deploy key secret is required for deployment. Set VPS_SSH_KEY_B64 or VPS_SSH_KEY." >&2
             exit 1
           fi
+          umask 077
           mkdir -p ~/.ssh
           key_file=~/.ssh/id_ed25519
           normalized_key="$(printf '%s' "${VPS_SSH_KEY}" | tr -d '\r')"
@@ -116,6 +117,8 @@ jobs:
             }
           fi
 
+          chmod 600 "${key_file}"
+
           if ! ssh-keygen -y -f "${key_file}" >/dev/null 2>&1; then
             echo "VPS_SSH_KEY could not be parsed by ssh-keygen. Save the full private key including BEGIN/END lines, or a base64-encoded version of that key." >&2
             echo "Decoded key size: $(wc -c < "${key_file}") bytes" >&2
@@ -129,7 +132,6 @@ jobs:
             IdentitiesOnly yes
           EOF
 
-          chmod 600 ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/config
           ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
 
