@@ -1,15 +1,53 @@
-import type { ForecastDay, WeatherWidgetData } from '../widgetHostModels'
+import type {
+  ForecastDay,
+  WeatherLocationData,
+  WeatherWidgetData,
+} from '../widgetHostModels'
+import { fetchApi, isAuthRequiredError } from '../../api/request'
+import { deriveWeatherVisualState } from './weatherVisualState'
 
-interface WeatherQueryOptions {
-  locationLabel: string
+interface WeatherLocationQueryOptions {
+  id: string
+  label: string
   latitude: number
   longitude: number
 }
 
-const WEATHER_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+interface WeatherWidgetQueryOptions {
+  focusLocationId: string
+  locations: WeatherLocationQueryOptions[]
+}
 
-const getApiUrl = (path: string) =>
-  `${WEATHER_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+const fallbackForecastDays: ForecastDay[] = [
+  {
+    day: 'MON',
+    high: 0,
+    low: 0,
+    condition: 'Unavailable',
+    visualState: 'fallback',
+  },
+  {
+    day: 'TUE',
+    high: 0,
+    low: 0,
+    condition: 'Unavailable',
+    visualState: 'fallback',
+  },
+  {
+    day: 'WED',
+    high: 0,
+    low: 0,
+    condition: 'Unavailable',
+    visualState: 'fallback',
+  },
+  {
+    day: 'THU',
+    high: 0,
+    low: 0,
+    condition: 'Unavailable',
+    visualState: 'fallback',
+  },
+]
 
 const normalizeForecastDay = (value: unknown): ForecastDay | null => {
   const candidate = value as {
@@ -35,10 +73,14 @@ const normalizeForecastDay = (value: unknown): ForecastDay | null => {
     high: candidate.high,
     low: candidate.low,
     condition: candidate.condition,
+    visualState: deriveWeatherVisualState(candidate.condition),
   }
 }
 
-const normalizeWeatherWidgetData = (value: unknown): WeatherWidgetData | null => {
+const normalizeWeatherLocationData = (
+  value: unknown,
+  id: string,
+): WeatherLocationData | null => {
   const candidate = value as {
     location?: unknown
     source?: unknown
@@ -66,12 +108,14 @@ const normalizeWeatherWidgetData = (value: unknown): WeatherWidgetData | null =>
   }
 
   return {
+    id,
     location: candidate.location,
     source: candidate.source,
     stale: candidate.stale,
     updatedAt: candidate.updatedAt,
     currentTemperature: candidate.currentTemperature,
     condition: candidate.condition,
+    visualState: deriveWeatherVisualState(candidate.condition),
     rangeSummary: candidate.rangeSummary,
     forecast: candidate.forecast
       .map(normalizeForecastDay)
@@ -79,25 +123,71 @@ const normalizeWeatherWidgetData = (value: unknown): WeatherWidgetData | null =>
   }
 }
 
-export const fetchWeatherWidgetData = async (options: WeatherQueryOptions) => {
+const fetchWeatherLocationData = async (options: WeatherLocationQueryOptions) => {
   const query = new URLSearchParams({
-    locationLabel: options.locationLabel,
+    locationLabel: options.label,
     latitude: options.latitude.toString(),
     longitude: options.longitude.toString(),
   })
 
-  const response = await fetch(getApiUrl(`/weather?${query.toString()}`))
+  const response = await fetchApi(`/weather?${query.toString()}`)
 
   if (!response.ok) {
     throw new Error('Failed to load weather data from backend.')
   }
 
   const payload = (await response.json()) as { weather?: unknown }
-  const weather = normalizeWeatherWidgetData(payload.weather)
+  const weather = normalizeWeatherLocationData(payload.weather, options.id)
 
   if (!weather) {
     throw new Error('Backend returned an invalid weather payload.')
   }
 
   return weather
+}
+
+const fetchWeatherLocationDataWithFallback = async (
+  options: WeatherLocationQueryOptions,
+) => {
+  try {
+    return await fetchWeatherLocationData(options)
+  } catch (error) {
+    if (isAuthRequiredError(error)) {
+      throw error
+    }
+
+    return {
+      id: options.id,
+      location: options.label,
+      source: 'Open-Meteo',
+      stale: true,
+      updatedAt: new Date(0).toISOString(),
+      currentTemperature: '--°',
+      condition: 'Weather unavailable',
+      visualState: 'fallback' as const,
+      rangeSummary: 'No live weather data available',
+      forecast: fallbackForecastDays,
+    } satisfies WeatherLocationData
+  }
+}
+
+export const fetchWeatherWidgetData = async (
+  options: WeatherWidgetQueryOptions,
+) => {
+  const locations = await Promise.all(
+    options.locations.map((location) => fetchWeatherLocationDataWithFallback(location)),
+  )
+
+  const focusLocation =
+    locations.find((location) => location.id === options.focusLocationId) ?? locations[0]
+
+  if (!focusLocation) {
+    throw new Error('No valid weather locations were configured.')
+  }
+
+  return {
+    ...focusLocation,
+    focusLocationId: focusLocation.id,
+    locations,
+  } satisfies WeatherWidgetData
 }

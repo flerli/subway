@@ -1,9 +1,5 @@
 import type { FamilyMember } from '../widgets/widgetHostModels'
-
-const FAMILY_MEMBERS_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
-
-const getApiUrl = (path: string) =>
-  `${FAMILY_MEMBERS_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+import { fetchApi } from './request'
 
 const normalizeMember = (value: unknown): FamilyMember | null => {
   const candidate = value as {
@@ -30,7 +26,7 @@ const normalizeMember = (value: unknown): FamilyMember | null => {
 }
 
 export const fetchFamilyMembers = async () => {
-  const response = await fetch(getApiUrl('/family-members'))
+  const response = await fetchApi('/family-members')
 
   if (!response.ok) {
     throw new Error('Failed to load family members from backend.')
@@ -47,7 +43,7 @@ export const createFamilyMember = async (input: {
   firstName: string
   color: string
 }) => {
-  const response = await fetch(getApiUrl('/family-members'), {
+  const response = await fetchApi('/family-members', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -73,7 +69,7 @@ export const updateFamilyMember = async (
   memberId: string,
   input: { firstName?: string; color?: string },
 ) => {
-  const response = await fetch(getApiUrl(`/family-members/${memberId}`), {
+  const response = await fetchApi(`/family-members/${memberId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

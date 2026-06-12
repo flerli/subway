@@ -54,6 +54,60 @@ type SyncState = 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
 const getMemberBadgeText = (member: FamilyMember) =>
   member.firstName.trim().charAt(0).toUpperCase() || '?'
 
+const buildOrderedSpecificFields = (widget: RegisteredWidget) => {
+  const settingsDefinition = widget.module.settingsDefinition
+
+  if (!settingsDefinition) {
+    return []
+  }
+
+  if (widget.entity.id !== 'weather') {
+    return settingsDefinition.fields
+  }
+
+  const fieldsByKey = new Map(
+    settingsDefinition.fields.map((field) => [field.key, field]),
+  )
+  const orderedFields = []
+
+  const focusField = fieldsByKey.get('focusLocationSlot')
+  const refreshIntervalField = fieldsByKey.get('refreshIntervalMinutes')
+
+  if (focusField) {
+    orderedFields.push(focusField)
+  }
+
+  if (refreshIntervalField) {
+    orderedFields.push(refreshIntervalField)
+  }
+
+  for (let slotIndex = 1; slotIndex <= 5; slotIndex += 1) {
+    const labelField = fieldsByKey.get(`location${slotIndex}Label`)
+    const longitudeField = fieldsByKey.get(`location${slotIndex}Longitude`)
+    const latitudeField = fieldsByKey.get(`location${slotIndex}Latitude`)
+
+    if (labelField) {
+      orderedFields.push(labelField)
+    }
+
+    if (longitudeField) {
+      orderedFields.push(longitudeField)
+    }
+
+    if (latitudeField) {
+      orderedFields.push(latitudeField)
+    }
+  }
+
+  return orderedFields
+}
+
+const buildSpecificFieldsByKey = (widget: RegisteredWidget) => {
+  const settingsDefinition = widget.module.settingsDefinition
+
+  return new Map(settingsDefinition?.fields.map((field) => [field.key, field]) ?? [])
+}
+
 const buildSettingsDraft = (
   widget: RegisteredWidget,
   settings: WidgetSettingsValues | undefined,
@@ -131,6 +185,8 @@ function WidgetMetadataCard({
   )
 
   const settingsDefinition = widget.module.settingsDefinition
+  const orderedSpecificFields = buildOrderedSpecificFields(widget)
+  const specificFieldsByKey = buildSpecificFieldsByKey(widget)
 
   const isAllScope = draft.userScopeMode === 'all'
 
@@ -231,7 +287,7 @@ function WidgetMetadataCard({
   const updateSettingsDraft = (
     updater: (currentSettings: WidgetSettingsValues) => WidgetSettingsValues,
   ) => {
-    setSettingsDraft((currentSettings) => {
+    setSettingsDraft((currentSettings: WidgetSettingsValues) => {
       const nextSettings = updater(currentSettings)
 
       queueSync(metadataDraftRef.current, nextSettings)
@@ -311,7 +367,61 @@ function WidgetMetadataCard({
             ? 'Sync failed'
             : 'Idle'
 
-  const hasSpecificSettings = Boolean(settingsDefinition)
+
+  const renderSpecificField = (
+    fieldKey: string,
+    className = 'settings-label',
+  ) => {
+    const field = specificFieldsByKey.get(fieldKey)
+
+    if (!field) {
+      return null
+    }
+
+    const fieldValue = settingsDraft[field.key]
+
+    if (field.type === 'boolean') {
+      return (
+        <label className="settings-toggle" key={field.key}>
+          <span>{field.label}</span>
+          <input
+            type="checkbox"
+            checked={Boolean(fieldValue)}
+            onChange={(event) =>
+              updateSettingsDraft((currentSettings) => ({
+                ...currentSettings,
+                [field.key]: event.target.checked,
+              }))
+            }
+          />
+        </label>
+      )
+    }
+
+    return (
+      <label className={className} key={field.key}>
+        <span>{field.label}</span>
+        <input
+          className="settings-input"
+          type={field.type === 'number' ? 'number' : 'text'}
+          value={String(fieldValue ?? '')}
+          min={field.min}
+          max={field.max}
+          step={field.step}
+          placeholder={field.placeholder}
+          onChange={(event) =>
+            updateSettingsDraft((currentSettings) => ({
+              ...currentSettings,
+              [field.key]:
+                field.type === 'number'
+                  ? Number(event.target.value)
+                  : event.target.value,
+            }))
+          }
+        />
+      </label>
+    )
+  }
 
   return (
     <article className="settings-card widget-config-row">
@@ -334,186 +444,166 @@ function WidgetMetadataCard({
       </div>
 
       <div className="widget-config-body">
-        <div className={`widget-config-top${hasSpecificSettings ? '' : ' widget-config-top--single'}`}>
-          <div className="widget-config-column widget-config-column--standard">
-            <div className="widget-config-fields widget-config-fields--meta">
-              <label className="settings-label">
-                <span>Title</span>
-                <input
-                  className="settings-input"
-                  type="text"
-                  value={draft.title}
-                  onChange={(event) =>
-                    updateMetadataDraft((currentDraft) => ({
-                      ...currentDraft,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
+        {settingsDefinition ? (
+          <div className="widget-config-section widget-config-section--specific">
+            <div
+              className={`widget-config-fields widget-config-fields--specific${
+                widget.entity.id === 'weather' ? ' widget-config-fields--weather' : ''
+              }`}
+            >
+              {widget.entity.id === 'weather' ? (
+                <>
+                  {renderSpecificField(
+                    'focusLocationSlot',
+                    'settings-label settings-label--span-full',
+                  )}
+                  {renderSpecificField(
+                    'refreshIntervalMinutes',
+                    'settings-label settings-label--span-full',
+                  )}
+                  {Array.from({ length: 5 }, (_, index) => {
+                    const slotNumber = index + 1
 
-              <label className="settings-label">
-                <span>Letter</span>
-                <input
-                  className="settings-input"
-                  type="text"
-                  maxLength={1}
-                  value={draft.subwayLetter}
-                  onChange={(event) =>
-                    updateMetadataDraft((currentDraft) => ({
-                      ...currentDraft,
-                      subwayLetter: event.target.value.toUpperCase(),
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="settings-label settings-label--color">
-                <span>Color</span>
-                <input
-                  className="settings-color"
-                  type="color"
-                  value={draft.subwayColor}
-                  onChange={(event) =>
-                    updateMetadataDraft((currentDraft) => ({
-                      ...currentDraft,
-                      subwayColor: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <label className="settings-label">
-                <span>Source</span>
-                <select
-                  className="settings-input settings-select"
-                  value={draft.sourceLocation}
-                  onChange={(event) =>
-                    updateMetadataDraft((currentDraft) => ({
-                      ...currentDraft,
-                      sourceLocation: event.target.value,
-                    }))
-                  }
-                >
-                  {availableSourceLocations.map((sourceLocation) => (
-                    <option key={sourceLocation} value={sourceLocation}>
-                      {sourceLocation}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                    return (
+                      <div className="weather-location-settings-row" key={slotNumber}>
+                        {renderSpecificField(`location${slotNumber}Label`)}
+                        {renderSpecificField(`location${slotNumber}Longitude`)}
+                        {renderSpecificField(`location${slotNumber}Latitude`)}
+                      </div>
+                    )
+                  })}
+                </>
+              ) : (
+                orderedSpecificFields.map((field) => renderSpecificField(field.key))
+              )}
             </div>
           </div>
+        ) : null}
 
-          {settingsDefinition ? (
-            <div className="widget-config-column widget-config-column--specific">
-              <div className="widget-config-fields widget-config-fields--specific">
-                {settingsDefinition.fields.map((field) => {
-                  const fieldValue = settingsDraft[field.key]
+        <div className="widget-config-section widget-config-section--standard">
+          <div className="widget-config-fields widget-config-fields--meta">
+            <label className="settings-label">
+              <span>Title</span>
+              <input
+                className="settings-input"
+                type="text"
+                value={draft.title}
+                onChange={(event) =>
+                  updateMetadataDraft((currentDraft) => ({
+                    ...currentDraft,
+                    title: event.target.value,
+                  }))
+                }
+              />
+            </label>
 
-                  if (field.type === 'boolean') {
-                    return (
-                      <label className="settings-toggle" key={field.key}>
-                        <span>{field.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(fieldValue)}
-                          onChange={(event) =>
-                            updateSettingsDraft((currentSettings) => ({
-                              ...currentSettings,
-                              [field.key]: event.target.checked,
-                            }))
-                          }
-                        />
-                      </label>
-                    )
-                  }
+            <label className="settings-label">
+              <span>Letter</span>
+              <input
+                className="settings-input"
+                type="text"
+                maxLength={1}
+                value={draft.subwayLetter}
+                onChange={(event) =>
+                  updateMetadataDraft((currentDraft) => ({
+                    ...currentDraft,
+                    subwayLetter: event.target.value.toUpperCase(),
+                  }))
+                }
+              />
+            </label>
 
-                  return (
-                    <label className="settings-label" key={field.key}>
-                      <span>{field.label}</span>
-                      <input
-                        className="settings-input"
-                        type={field.type === 'number' ? 'number' : 'text'}
-                        value={String(fieldValue ?? '')}
-                        min={field.min}
-                        max={field.max}
-                        step={field.step}
-                        placeholder={field.placeholder}
-                        onChange={(event) =>
-                          updateSettingsDraft((currentSettings) => ({
-                            ...currentSettings,
-                            [field.key]:
-                              field.type === 'number'
-                                ? Number(event.target.value)
-                                : event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
+            <label className="settings-label settings-label--color">
+              <span>Color</span>
+              <input
+                className="settings-color"
+                type="color"
+                value={draft.subwayColor}
+                onChange={(event) =>
+                  updateMetadataDraft((currentDraft) => ({
+                    ...currentDraft,
+                    subwayColor: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="settings-label">
+              <span>Source</span>
+              <select
+                className="settings-input settings-select"
+                value={draft.sourceLocation}
+                onChange={(event) =>
+                  updateMetadataDraft((currentDraft) => ({
+                    ...currentDraft,
+                    sourceLocation: event.target.value,
+                  }))
+                }
+              >
+                {availableSourceLocations.map((sourceLocation) => (
+                  <option key={sourceLocation} value={sourceLocation}>
+                    {sourceLocation}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
 
-        <div className="widget-config-secondary">
-          <div className="widget-config-block">
-            <p className="widget-kicker">Scope</p>
-            <div className="settings-chip-row">
-              <button
-                type="button"
-                className={`settings-scope-chip settings-scope-chip--all${
-                  isAllScope ? ' is-active' : ''
-                }`}
-                aria-pressed={isAllScope}
-                aria-label="All members scope"
-                onClick={toggleAllScope}
-              >
-                All
-              </button>
+        <div className="widget-config-section widget-config-section--scope">
+          <p className="widget-kicker">Scope</p>
+          <div className="settings-chip-row">
+            <button
+              type="button"
+              className={`settings-scope-chip settings-scope-chip--all${
+                isAllScope ? ' is-active' : ''
+              }`}
+              aria-pressed={isAllScope}
+              aria-label="All members scope"
+              onClick={toggleAllScope}
+            >
+              All
+            </button>
 
-              {familyMembers.map((member) => {
-                const isActive =
-                  !isAllScope && draft.userScopeMemberIds.includes(member.id)
+            {familyMembers.map((member) => {
+              const isActive =
+                !isAllScope && draft.userScopeMemberIds.includes(member.id)
 
-                return (
-                  <button
-                    key={member.id}
-                    type="button"
-                    className={`settings-scope-chip route-bullet route-bullet--small${
-                      isActive ? ' is-active' : ''
-                    }`}
-                    style={buildBadgeStyle(member.color)}
-                    aria-pressed={isActive}
-                    aria-label={member.firstName}
-                    onClick={() => toggleMemberId(member.id, !isActive)}
-                  >
-                    {getMemberBadgeText(member)}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="widget-config-block">
-            <p className="widget-kicker">Cells</p>
-            <div className="settings-cell-layout">
-              {draft.placementZones.map((placement) => (
+              return (
                 <button
-                  key={placement.zoneId}
+                  key={member.id}
                   type="button"
-                  className={`settings-cell-chip settings-cell-chip--${placement.zoneId}${placement.enabled ? ' is-active' : ''}`}
-                  data-zone-id={placement.zoneId}
-                  aria-pressed={placement.enabled}
-                  aria-label={`Toggle ${zoneBadgeLabels[placement.zoneId]}`}
-                  onClick={() => togglePlacement(placement.zoneId)}
+                  className={`settings-scope-chip route-bullet route-bullet--small${
+                    isActive ? ' is-active' : ''
+                  }`}
+                  style={buildBadgeStyle(member.color)}
+                  aria-pressed={isActive}
+                  aria-label={member.firstName}
+                  onClick={() => toggleMemberId(member.id, !isActive)}
                 >
-                  {zoneBadgeLabels[placement.zoneId]}
+                  {getMemberBadgeText(member)}
                 </button>
-              ))}
-            </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="widget-config-section widget-config-section--layout">
+          <p className="widget-kicker">Cells</p>
+          <div className="settings-cell-layout">
+            {draft.placementZones.map((placement) => (
+              <button
+                key={placement.zoneId}
+                type="button"
+                className={`settings-cell-chip settings-cell-chip--${placement.zoneId}${placement.enabled ? ' is-active' : ''}`}
+                data-zone-id={placement.zoneId}
+                aria-pressed={placement.enabled}
+                aria-label={`Toggle ${zoneBadgeLabels[placement.zoneId]}`}
+                onClick={() => togglePlacement(placement.zoneId)}
+              >
+                {zoneBadgeLabels[placement.zoneId]}
+              </button>
+            ))}
           </div>
         </div>
       </div>

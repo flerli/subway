@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { buildBadgeStyle } from './widgetAppearance'
 import type {
   AgendaItem,
@@ -14,6 +14,7 @@ import {
   widgetGridPlacementZones,
   widgetPlacementZones,
 } from './widgetPlacementZones'
+import { WeatherIcon } from './weather/WeatherIcon'
 import type {
   RegisteredWidget,
   WidgetPlacementAssignment,
@@ -25,13 +26,16 @@ interface WidgetBoardHostProps {
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   activeProfileLabel?: string
+  expandedWidgetId: string | null
   filterOptions: FilterOption[]
   onFilterChange: (filterId: FilterId) => void
+  onExpandedWidgetChange: (widgetId: string | null) => void
   visibleArrivals: Arrival[]
   visibleAgenda: AgendaItem[]
   visibleTodos: TodoItem[]
   visibleNews: NewsItem[]
   weatherData: WeatherWidgetData
+  weatherRefreshCountdownLabel: string
   currentAgenda: AgendaItem
   currentAlert: NewsItem
   nextTodo: TodoItem
@@ -64,13 +68,16 @@ export function WidgetBoardHost({
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
+  expandedWidgetId,
   filterOptions,
   onFilterChange,
+  onExpandedWidgetChange,
   visibleArrivals,
   visibleAgenda,
   visibleTodos,
   visibleNews,
   weatherData,
+  weatherRefreshCountdownLabel,
   currentAgenda,
   currentAlert,
   nextTodo,
@@ -78,8 +85,6 @@ export function WidgetBoardHost({
   renderAudienceBadge,
   onToggleTodoDone,
 }: WidgetBoardHostProps) {
-  const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
-
   const visibleWidgets = registeredWidgets.filter((widget) =>
     isWidgetVisibleForFilter(widget.entity, activeFilter),
   )
@@ -89,9 +94,9 @@ export function WidgetBoardHost({
       expandedWidgetId &&
       !visibleWidgets.some((widget) => widget.entity.id === expandedWidgetId)
     ) {
-      setExpandedWidgetId(null)
+      onExpandedWidgetChange(null)
     }
-  }, [expandedWidgetId, visibleWidgets])
+  }, [expandedWidgetId, onExpandedWidgetChange, visibleWidgets])
 
   const zoneEntries = new Map<WidgetPlacementZoneId, WidgetZoneEntry[]>()
 
@@ -104,9 +109,7 @@ export function WidgetBoardHost({
   }
 
   const toggleExpandedWidget = (widgetId: string) => {
-    setExpandedWidgetId((currentWidgetId) =>
-      currentWidgetId === widgetId ? null : widgetId,
-    )
+    onExpandedWidgetChange(expandedWidgetId === widgetId ? null : widgetId)
   }
 
   const renderExpandControl = (widget: RegisteredWidget) => {
@@ -267,11 +270,15 @@ export function WidgetBoardHost({
           children: (
             <>
               <div className="weather-summary">
-                <p className="weather-temp">{weatherData.currentTemperature}</p>
+                <div className="weather-hero-stack">
+                  <WeatherIcon state={weatherData.visualState} size="hero" />
+                  <p className="weather-temp">{weatherData.currentTemperature}</p>
+                </div>
                 <div className="weather-copy">
                   <p className="weather-condition">{weatherData.condition}</p>
                   <p className="weather-range">{weatherData.rangeSummary}</p>
                   <p className="weather-note">{commuteNote}</p>
+                  <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
                   <p className="weather-updated">
                     Updated{' '}
                     {new Date(weatherData.updatedAt).toLocaleTimeString([], {
@@ -282,14 +289,25 @@ export function WidgetBoardHost({
                 </div>
               </div>
 
-              <div className="forecast-grid">
+              <div className={`forecast-grid${mode === 'expanded' ? ' forecast-grid--expanded' : ''}`}>
                 {weatherData.forecast.map((day) => (
-                  <div className="forecast-card" key={day.day}>
-                    <p className="forecast-day">{day.day}</p>
-                    <p className="forecast-condition">{day.condition}</p>
-                    <p className="forecast-range">
-                      {day.high}° / {day.low}°
-                    </p>
+                  <div
+                    className={`forecast-card${mode === 'expanded' ? ' forecast-card--expanded' : ''}`}
+                    key={day.day}
+                  >
+                    <div className="forecast-copy-stack">
+                      <p className="forecast-day">{day.day}</p>
+                      <p className="forecast-condition">{day.condition}</p>
+                      <p className="forecast-range">
+                        {day.high}° / {day.low}°
+                      </p>
+                    </div>
+                    <div className="forecast-icon-wrap">
+                      <WeatherIcon
+                        state={day.visualState}
+                        size={mode === 'expanded' ? 'forecast-expanded' : 'forecast'}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -401,6 +419,34 @@ export function WidgetBoardHost({
     }
   }
 
+  const renderExpandedWidget = (widget: RegisteredWidget) => {
+    if (widget.entity.id === 'weather' && widget.module.renderDetailView) {
+      const badgeStyle = buildWidgetBadgeStyle(widget)
+      const detailContent = widget.module.renderDetailView({
+        widget,
+        data: {
+          weatherData,
+          commuteNote,
+          weatherRefreshCountdownLabel,
+        },
+      })
+
+      if (detailContent) {
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: `${weatherData.source} · ${weatherData.location} · ${
+            weatherData.stale ? 'cached' : 'live'
+          }`,
+          mode: 'expanded',
+          children: detailContent,
+        })
+      }
+    }
+
+    return renderWidget(widget, 'expanded')
+  }
+
   const expandedWidget = expandedWidgetId
     ? visibleWidgets.find((widget) => widget.entity.id === expandedWidgetId)
     : undefined
@@ -473,7 +519,7 @@ export function WidgetBoardHost({
         </div>
 
         {expandedWidget
-          ? renderWidget(expandedWidget, 'expanded')
+          ? renderExpandedWidget(expandedWidget)
           : renderEmptyState(
               'No widget selected',
               'The lower section stays reserved for an expanded widget view.',

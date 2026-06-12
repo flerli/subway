@@ -1,14 +1,42 @@
 import type { WidgetSettingsValues } from '../widgets/widgetTypes'
-
-const WIDGET_SETTINGS_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
-
-const getApiUrl = (path: string) =>
-  `${WIDGET_SETTINGS_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+import { fetchApi } from './request'
 
 export interface WidgetSettingRecord {
   widgetId: string
   settings: WidgetSettingsValues
   updatedAt: string
+}
+
+const normalizeWidgetSettingsValue = (
+  value: unknown,
+): unknown => {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeWidgetSettingsValue(entry))
+      .filter((entry) => entry !== undefined)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([key, nestedValue]) => {
+        const normalizedNestedValue = normalizeWidgetSettingsValue(nestedValue)
+
+        return normalizedNestedValue === undefined
+          ? []
+          : [[key, normalizedNestedValue]]
+      }),
+    )
+  }
+
+  return undefined
 }
 
 const normalizeWidgetSetting = (value: unknown): WidgetSettingRecord | null => {
@@ -34,15 +62,19 @@ const normalizeWidgetSetting = (value: unknown): WidgetSettingRecord | null => {
     widgetId: candidate.widgetId,
     updatedAt: candidate.updatedAt,
     settings: Object.fromEntries(
-      Object.entries(candidate.settings).filter(([, fieldValue]) =>
-        ['string', 'number', 'boolean'].includes(typeof fieldValue),
-      ),
+      Object.entries(candidate.settings).flatMap(([key, fieldValue]) => {
+        const normalizedFieldValue = normalizeWidgetSettingsValue(fieldValue)
+
+        return normalizedFieldValue === undefined
+          ? []
+          : [[key, normalizedFieldValue]]
+      }),
     ),
   }
 }
 
 export const fetchWidgetSettings = async () => {
-  const response = await fetch(getApiUrl('/widget-settings'))
+  const response = await fetchApi('/widget-settings')
 
   if (!response.ok) {
     throw new Error('Failed to load widget settings from backend.')
@@ -59,7 +91,7 @@ export const updateWidgetSettings = async (
   widgetId: string,
   settings: WidgetSettingsValues,
 ) => {
-  const response = await fetch(getApiUrl(`/widget-settings/${widgetId}`), {
+  const response = await fetchApi(`/widget-settings/${widgetId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

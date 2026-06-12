@@ -1,9 +1,5 @@
 import type { TodoItem } from '../widgetHostModels'
-
-const TODO_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
-
-const getApiUrl = (path: string) =>
-  `${TODO_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+import { fetchApi } from '../../api/request'
 
 const normalizeTodoItem = (value: unknown): TodoItem | null => {
   const candidate = value as {
@@ -42,7 +38,7 @@ const normalizeTodoItem = (value: unknown): TodoItem | null => {
 }
 
 export const fetchTodoItems = async () => {
-  const response = await fetch(getApiUrl('/todo-items'))
+  const response = await fetchApi('/todo-items')
 
   if (!response.ok) {
     throw new Error('Failed to load todo items from backend.')
@@ -56,7 +52,7 @@ export const fetchTodoItems = async () => {
 }
 
 export const updateTodoItemDoneState = async (todoItemId: string, done: boolean) => {
-  const response = await fetch(getApiUrl(`/todo-items/${todoItemId}`), {
+  const response = await fetchApi(`/todo-items/${todoItemId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

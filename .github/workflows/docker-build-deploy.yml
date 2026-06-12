@@ -1,0 +1,196 @@
+name: Docker Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: subway-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  DEPLOY_HOST: client.scaico.com
+  DEPLOY_USER: swaibian
+  DEPLOY_PATH: /home/swaibian/apps/subway
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.image-vars.outputs.backend_image }}
+      frontend_image: ${{ steps.image-vars.outputs.frontend_image }}
+      image_tag: ${{ steps.image-vars.outputs.image_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image names
+        id: image-vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          repo="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          echo "backend_image=${REGISTRY}/${owner}/${repo}-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${REGISTRY}/${owner}/${repo}-frontend" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image-vars.outputs.backend_image }}:${{ steps.image-vars.outputs.image_tag }}
+            ${{ steps.image-vars.outputs.backend_image }}:latest
+          cache-from: type=gha,scope=subway-backend
+          cache-to: type=gha,mode=max,scope=subway-backend
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          build-args: |
+            VITE_API_BASE_URL=/subway/api
+            VITE_BASE_PATH=/subway/
+          push: true
+          tags: |
+            ${{ steps.image-vars.outputs.frontend_image }}:${{ steps.image-vars.outputs.image_tag }}
+            ${{ steps.image-vars.outputs.frontend_image }}:latest
+          cache-from: type=gha,scope=subway-frontend
+          cache-to: type=gha,mode=max,scope=subway-frontend
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH access
+        env:
+          VPS_SSH_KEY: ${{ secrets['VPS_SSH_KEY'] }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VPS_SSH_KEY}" ]]; then
+            echo "The VPS_SSH_KEY secret is required for deployment." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Create deployment environment file
+        shell: bash
+        run: |
+          cat > deploy.env <<EOF
+          BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}:${{ needs.build.outputs.image_tag }}
+          FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}:${{ needs.build.outputs.image_tag }}
+          APP_PORT=8081
+          EOF
+
+      - name: Upload compose assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/backend/data'"
+          scp compose.yml compose.vps.yml deploy.env "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Initialize remote database on first deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "[[ -s '${DEPLOY_PATH}/backend/data/subway.sqlite' ]]"; then
+            echo "Remote database already exists; skipping initialization."
+          else
+            scp backend/data/subway.sqlite \
+              "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/backend/data/subway.sqlite"
+            ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "chmod 600 '${DEPLOY_PATH}/backend/data/subway.sqlite'"
+          fi
+
+      - name: Validate remote app port
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            set -euo pipefail
+            cd '${DEPLOY_PATH}'
+            docker network inspect scaico-client_default >/dev/null
+            app_port=\$(awk -F= '/^APP_PORT=/{print \$2}' deploy.env)
+            if [[ -z \"\${app_port}\" ]]; then
+              echo 'APP_PORT is missing from deploy.env.' >&2
+              exit 1
+            fi
+
+            if ss -ltnH | awk '{print \$4}' | grep -Eq \"(^|:)\${app_port}\$\"; then
+              if docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env ps frontend 2>/dev/null | tail -n +2 | grep -q .; then
+                echo \"Port \${app_port} is already bound by the existing subway deployment; continuing.\"
+              else
+                echo \"Port \${app_port} is already in use on ${DEPLOY_HOST}.\" >&2
+                exit 1
+              fi
+            fi
+          "
+
+      - name: Deploy containers on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            set -euo pipefail
+            cd '${DEPLOY_PATH}'
+            if ! docker compose version >/dev/null 2>&1; then
+              echo 'Docker Compose v2 is required on the VPS.' >&2
+              exit 1
+            fi
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login '${REGISTRY}' -u '${{ github.actor }}' --password-stdin
+            docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env pull
+            docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env up -d --no-build --remove-orphans
+            docker image prune -f
+          "
+
+      - name: Smoke test the deployed app
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_port="$(awk -F= '/^APP_PORT=/{print $2}' deploy.env)"
+
+          if [[ -z "${app_port}" ]]; then
+            echo "APP_PORT is missing from deploy.env." >&2
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "curl -fsS 'http://127.0.0.1:${app_port}/api/auth/session' >/dev/null"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Deployment did not become ready in time." >&2
+          exit 1

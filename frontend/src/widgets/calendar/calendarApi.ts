@@ -1,9 +1,5 @@
 import type { AgendaItem } from '../widgetHostModels'
-
-const CALENDAR_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
-
-const getApiUrl = (path: string) =>
-  `${CALENDAR_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+import { fetchApi } from '../../api/request'
 
 const normalizeAgendaItem = (value: unknown): AgendaItem | null => {
   const candidate = value as {
@@ -39,7 +35,7 @@ const normalizeAgendaItem = (value: unknown): AgendaItem | null => {
 }
 
 export const fetchCalendarEvents = async () => {
-  const response = await fetch(getApiUrl('/calendar-events'))
+  const response = await fetchApi('/calendar-events')
 
   if (!response.ok) {
     throw new Error('Failed to load calendar events from backend.')

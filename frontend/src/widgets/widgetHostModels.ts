@@ -57,17 +57,33 @@ export interface ForecastDay {
   high: number
   low: number
   condition: string
+  visualState: WeatherVisualState
 }
 
-export interface WeatherWidgetData {
+export type WeatherVisualState =
+  | 'sun'
+  | 'cloudy'
+  | 'rain'
+  | 'thunderstorm'
+  | 'wind'
+  | 'fallback'
+
+export interface WeatherLocationData {
+  id: string
   location: string
   source: string
   stale: boolean
   updatedAt: string
   currentTemperature: string
   condition: string
+  visualState: WeatherVisualState
   rangeSummary: string
   forecast: ForecastDay[]
+}
+
+export interface WeatherWidgetData extends WeatherLocationData {
+  focusLocationId: string
+  locations: WeatherLocationData[]
 }
 
 export interface MeasureItem {

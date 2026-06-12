@@ -1,0 +1,12 @@
+services:
+  frontend:
+    networks:
+      default: {}
+      scaico-public:
+        aliases:
+          - subway-frontend
+
+networks:
+  scaico-public:
+    external: true
+    name: scaico-client_default

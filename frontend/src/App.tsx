@@ -1,10 +1,17 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import './App.css'
+import {
+  fetchCurrentSession,
+  login as loginWithPassword,
+  logout as logoutCurrentSession,
+  type AuthUser,
+} from './api/auth'
 import {
   createFamilyMember,
   fetchFamilyMembers,
   updateFamilyMember,
 } from './api/familyMembers'
+import { isAuthRequiredError } from './api/request'
 import {
   fetchWidgetSettings,
   updateWidgetSettings,
@@ -17,6 +24,7 @@ import {
   defaultArrivalBoardSettings,
   normalizeArrivalBoardSettings,
 } from './widgets/arrival-board'
+import { normalizeWeatherSettings } from './widgets/weather'
 import {
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
@@ -31,9 +39,9 @@ import type {
   ForecastDay,
   NewsItem,
   TodoItem,
+  WeatherLocationData,
   WeatherWidgetData,
 } from './widgets/widgetHostModels'
-import { widgetEntitySeed } from './widgets/widgetDatabase'
 import { buildWidgetRegistry } from './widgets/widgetRegistry'
 import type {
   RegisteredWidget,
@@ -44,16 +52,16 @@ import type {
 const ALL_FILTER_ID = 'all'
 const ALL_MEMBERS_AUDIENCE = '*'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
+const APP_SHELL_WIDGET_SETTINGS_ID = 'app-shell'
 
 type ViewMode = 'board' | 'settings'
+type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
 type MemberId = string
 
-const defaultFamilyMembers: FamilyMember[] = [
-  { id: 'family-1', firstName: 'Alex', color: '#2850ad' },
-  { id: 'family-2', firstName: 'Bianca', color: '#b933ad' },
-  { id: 'family-3', firstName: 'Chris', color: '#5d748f' },
-  { id: 'family-4', firstName: 'Dana', color: '#fccc0a' },
-]
+interface AppShellPersistedState {
+  viewMode: ViewMode
+  expandedWidgetId: string | null
+}
 
 const arrivals: Arrival[] = [
   {
@@ -153,21 +161,29 @@ const newsItems: NewsItem[] = [
 ]
 
 const fallbackWeatherForecast: ForecastDay[] = [
-  { day: 'MON', high: 74, low: 61, condition: 'Partly cloudy' },
-  { day: 'TUE', high: 72, low: 60, condition: 'Light rain' },
-  { day: 'WED', high: 76, low: 63, condition: 'Bright sun' },
-  { day: 'THU', high: 70, low: 58, condition: 'Windy PM' },
+  { day: 'MON', high: 74, low: 61, condition: 'Partly cloudy', visualState: 'cloudy' },
+  { day: 'TUE', high: 72, low: 60, condition: 'Light rain', visualState: 'rain' },
+  { day: 'WED', high: 76, low: 63, condition: 'Bright sun', visualState: 'sun' },
+  { day: 'THU', high: 70, low: 58, condition: 'Windy PM', visualState: 'wind' },
 ]
 
-const fallbackWeatherData: WeatherWidgetData = {
+const fallbackWeatherLocation: WeatherLocationData = {
+  id: 'location-1',
   location: 'Berlin',
   source: 'Open-Meteo',
   stale: true,
   updatedAt: new Date(0).toISOString(),
   currentTemperature: '--°',
   condition: 'Weather unavailable',
+  visualState: 'fallback',
   rangeSummary: 'No live weather data available',
   forecast: fallbackWeatherForecast,
+}
+
+const fallbackWeatherData: WeatherWidgetData = {
+  ...fallbackWeatherLocation,
+  focusLocationId: fallbackWeatherLocation.id,
+  locations: [fallbackWeatherLocation],
 }
 
 const commuteNotes: Record<string, string> = {
@@ -202,6 +218,24 @@ const badgeStyle = (color: string) => buildBadgeStyle(color)
 
 const householdBadgeStyle = badgeStyle('#7f8a98')
 
+const normalizeAppShellPersistedState = (
+  value: unknown,
+): AppShellPersistedState => {
+  const candidate = value as {
+    viewMode?: unknown
+    expandedWidgetId?: unknown
+  }
+
+  return {
+    viewMode: candidate?.viewMode === 'settings' ? 'settings' : 'board',
+    expandedWidgetId:
+      typeof candidate?.expandedWidgetId === 'string' &&
+      candidate.expandedWidgetId.trim().length > 0
+        ? candidate.expandedWidgetId
+        : null,
+  }
+}
+
 const matchesFilter = (members: readonly AudienceId[], filter: FilterId) =>
   filter === ALL_FILTER_ID ||
   members.includes(ALL_MEMBERS_AUDIENCE) ||
@@ -233,15 +267,22 @@ const pickDisplayMember = (
 
 function App() {
   const [now, setNow] = useState(() => new Date())
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('bootstrapping')
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthUser | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authPending, setAuthPending] = useState(false)
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
-  const [registeredWidgets, setRegisteredWidgets] = useState<RegisteredWidget[]>(() =>
-    buildWidgetRegistry(widgetEntitySeed),
-  )
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(defaultFamilyMembers)
+  const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+  const [registeredWidgets, setRegisteredWidgets] = useState<RegisteredWidget[]>([])
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [calendarEvents, setCalendarEvents] = useState<AgendaItem[]>([])
   const [todoWidgetItems, setTodoWidgetItems] = useState<TodoItem[]>([])
   const [weatherWidgetData, setWeatherWidgetData] =
     useState<WeatherWidgetData>(fallbackWeatherData)
+  const [weatherRefreshToken, setWeatherRefreshToken] = useState(0)
+  const [nextWeatherRefreshAt, setNextWeatherRefreshAt] = useState<number | null>(null)
   const [activeFilter, setActiveFilter] = useState<FilterId>(ALL_FILTER_ID)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberColor, setNewMemberColor] = useState(DEFAULT_NEW_MEMBER_COLOR)
@@ -259,6 +300,76 @@ function App() {
   >({})
   const [widgetHealthMap, setWidgetHealthMap] = useState<Record<string, WidgetHealthState>>({})
   const [, setDebugTapTimestamps] = useState<number[]>([])
+  const [familyMembersLoaded, setFamilyMembersLoaded] = useState(false)
+  const [widgetMetadataLoaded, setWidgetMetadataLoaded] = useState(false)
+  const [widgetSettingsLoaded, setWidgetSettingsLoaded] = useState(false)
+  const [widgetSettingsAvailable, setWidgetSettingsAvailable] = useState(false)
+  const [appShellStateHydrated, setAppShellStateHydrated] = useState(false)
+  const skipNextAppShellPersistRef = useRef(true)
+  const appShellPersistTimerRef = useRef<number | null>(null)
+
+  const resetProtectedState = () => {
+    if (appShellPersistTimerRef.current !== null) {
+      window.clearTimeout(appShellPersistTimerRef.current)
+      appShellPersistTimerRef.current = null
+    }
+
+    skipNextAppShellPersistRef.current = true
+    setViewMode('board')
+    setExpandedWidgetId(null)
+    setRegisteredWidgets([])
+    setFamilyMembers([])
+    setCalendarEvents([])
+    setTodoWidgetItems([])
+    setWeatherWidgetData(fallbackWeatherData)
+    setWeatherRefreshToken(0)
+    setNextWeatherRefreshAt(null)
+    setActiveFilter(ALL_FILTER_ID)
+    setNewMemberName('')
+    setNewMemberColor(DEFAULT_NEW_MEMBER_COLOR)
+    setFamilyMembersError(null)
+    setWidgetMetadataError(null)
+    setWidgetMetadataAdminError(null)
+    setWidgetSettingsError(null)
+    setCalendarEventsError(null)
+    setTodoItemsError(null)
+    setWeatherError(null)
+    setDebugModeEnabled(false)
+    setTodoRefreshToken(0)
+    setWidgetSettingsMap({})
+    setWidgetHealthMap({})
+    setDebugTapTimestamps([])
+    setFamilyMembersLoaded(false)
+    setWidgetMetadataLoaded(false)
+    setWidgetSettingsLoaded(false)
+    setWidgetSettingsAvailable(false)
+    setAppShellStateHydrated(false)
+  }
+
+  const enterUnauthenticatedState = (message: string | null = null) => {
+    resetProtectedState()
+    setAuthenticatedUser(null)
+    setLoginUsername('')
+    setLoginPassword('')
+    setAuthStatus('unauthenticated')
+    setAuthPending(false)
+    setAuthError(message)
+  }
+
+  const enterAuthenticatedState = (user: AuthUser) => {
+    resetProtectedState()
+    setAuthenticatedUser(user)
+    setLoginUsername('')
+    setLoginPassword('')
+    setAuthStatus('authenticated')
+    setAuthPending(false)
+    setAuthError(null)
+  }
+
+  const handleAuthRequired = () => {
+    setLoginPassword('')
+    enterUnauthenticatedState('Your session expired. Please sign in again.')
+  }
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000)
@@ -290,6 +401,39 @@ function App() {
   useEffect(() => {
     let cancelled = false
 
+    fetchCurrentSession()
+      .then((sessionState) => {
+        if (cancelled) {
+          return
+        }
+
+        if (sessionState.authenticated && sessionState.user) {
+          enterAuthenticatedState(sessionState.user)
+          return
+        }
+
+        enterUnauthenticatedState()
+      })
+      .catch(() => {
+        if (!cancelled) {
+          enterUnauthenticatedState(
+            'Failed to verify the current session. Please sign in again.',
+          )
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
+    let cancelled = false
+
     fetchWidgetSettings()
       .then((widgetSettings) => {
         if (!cancelled) {
@@ -301,11 +445,20 @@ function App() {
               ]),
             ),
           )
+          setWidgetSettingsLoaded(true)
+          setWidgetSettingsAvailable(true)
           setWidgetSettingsError(null)
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          setWidgetSettingsLoaded(true)
+          setWidgetSettingsAvailable(false)
           setWidgetSettingsError(
             'Backend widget settings unavailable. Default widget settings are being used.',
           )
@@ -315,20 +468,95 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authStatus])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated' || !widgetSettingsLoaded || appShellStateHydrated) {
+      return
+    }
+
+    const persistedAppShellState = normalizeAppShellPersistedState(
+      widgetSettingsMap[APP_SHELL_WIDGET_SETTINGS_ID],
+    )
+
+    setViewMode(persistedAppShellState.viewMode)
+    setExpandedWidgetId(persistedAppShellState.expandedWidgetId)
+    skipNextAppShellPersistRef.current = true
+    setAppShellStateHydrated(true)
+  }, [authStatus, appShellStateHydrated, widgetSettingsLoaded, widgetSettingsMap])
+
+  useEffect(() => {
+    if (
+      authStatus !== 'authenticated' ||
+      !appShellStateHydrated ||
+      !widgetSettingsAvailable
+    ) {
+      return
+    }
+
+    if (skipNextAppShellPersistRef.current) {
+      skipNextAppShellPersistRef.current = false
+      return
+    }
+
+    if (appShellPersistTimerRef.current !== null) {
+      window.clearTimeout(appShellPersistTimerRef.current)
+    }
+
+    appShellPersistTimerRef.current = window.setTimeout(() => {
+      updateWidgetSettings(APP_SHELL_WIDGET_SETTINGS_ID, {
+        viewMode,
+        expandedWidgetId,
+      })
+        .then((persistedSettings) => {
+          setWidgetSettingsMap((currentValues) => ({
+            ...currentValues,
+            [persistedSettings.widgetId]: persistedSettings.settings,
+          }))
+          setWidgetSettingsError(null)
+        })
+        .catch((error) => {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          setWidgetSettingsError('Failed to persist the current app view state to the backend.')
+        })
+    }, 250)
+
+    return () => {
+      if (appShellPersistTimerRef.current !== null) {
+        window.clearTimeout(appShellPersistTimerRef.current)
+        appShellPersistTimerRef.current = null
+      }
+    }
+  }, [authStatus, appShellStateHydrated, expandedWidgetId, viewMode, widgetSettingsAvailable])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
     let cancelled = false
 
     fetchFamilyMembers()
       .then((loadedMembers) => {
-        if (!cancelled && loadedMembers.length > 0) {
+        if (!cancelled) {
           setFamilyMembers(loadedMembers)
+          setFamilyMembersLoaded(true)
           setFamilyMembersError(null)
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          setFamilyMembers([])
+          setFamilyMembersLoaded(true)
           setFamilyMembersError(
             'Backend sync unavailable. Family members shown below may not be current.',
           )
@@ -338,22 +566,34 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authStatus])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
     let cancelled = false
 
     fetchWidgetEntities()
       .then((widgetEntities) => {
         if (!cancelled) {
           setRegisteredWidgets(buildWidgetRegistry(widgetEntities))
+          setWidgetMetadataLoaded(true)
           setWidgetMetadataError(null)
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          setRegisteredWidgets([])
+          setWidgetMetadataLoaded(true)
           setWidgetMetadataError(
-            'Backend widget metadata unavailable. Seeded widget configuration is being used.',
+            'Backend widget metadata unavailable. Widget board contents may be incomplete until the connection returns.',
           )
         }
       })
@@ -361,7 +601,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authStatus])
 
   useEffect(() => {
     if (
@@ -373,9 +613,14 @@ function App() {
   }, [activeFilter, familyMembers])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
     let cancelled = false
 
     const weatherWidget = registeredWidgets.find((widget) => widget.entity.id === 'weather')
+    const weatherSettings = normalizeWeatherSettings(widgetSettingsMap.weather)
 
     if (!weatherWidget) {
       return () => {
@@ -386,12 +631,15 @@ function App() {
     Promise.resolve(
       weatherWidget.module.loadData({
         focusedMemberId: null,
-        settings: widgetSettingsMap.weather,
+        settings: weatherSettings,
       }),
     )
       .then((result) => {
         if (!cancelled && result) {
           setWeatherWidgetData(result as WeatherWidgetData)
+          setNextWeatherRefreshAt(
+            Date.now() + weatherSettings.refreshIntervalMinutes * 60 * 1000,
+          )
           setWeatherError(null)
           const weatherResult = result as WeatherWidgetData
           setWidgetHealthMap((currentValues) => ({
@@ -400,14 +648,20 @@ function App() {
               widgetId: 'weather',
               refreshStatus: weatherResult.stale ? 'cached' : 'live',
               lastRefreshAt: weatherResult.updatedAt,
-              itemCount: weatherResult.forecast.length,
+              itemCount: weatherResult.locations.length,
             },
           }))
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
           setWeatherWidgetData(fallbackWeatherData)
+          setNextWeatherRefreshAt(Date.now() + 60 * 1000)
           setWeatherError('Failed to load live weather data from the backend weather widget path.')
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
@@ -423,9 +677,26 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [registeredWidgets, widgetSettingsMap])
+  }, [authStatus, registeredWidgets, widgetSettingsMap, weatherRefreshToken])
 
   useEffect(() => {
+    if (nextWeatherRefreshAt === null) {
+      return
+    }
+
+    if (now.getTime() < nextWeatherRefreshAt) {
+      return
+    }
+
+    setNextWeatherRefreshAt(null)
+    setWeatherRefreshToken((currentValue) => currentValue + 1)
+  }, [now, nextWeatherRefreshAt])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
     let cancelled = false
 
     const calendarWidget = registeredWidgets.find(
@@ -460,8 +731,13 @@ function App() {
           }))
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
           setCalendarEvents([])
           setCalendarEventsError(
             'Failed to load calendar events from the backend calendar widget path.',
@@ -480,9 +756,13 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, registeredWidgets, widgetSettingsMap])
+  }, [activeFilter, authStatus, registeredWidgets, widgetSettingsMap])
 
   useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
     let cancelled = false
 
     const todoWidget = registeredWidgets.find((widget) => widget.entity.id === 'todo')
@@ -515,8 +795,13 @@ function App() {
           }))
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
           setTodoWidgetItems([])
           setTodoItemsError(
             'Failed to load todo items from the backend todo widget path.',
@@ -535,7 +820,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, registeredWidgets, todoRefreshToken, widgetSettingsMap])
+  }, [activeFilter, authStatus, registeredWidgets, todoRefreshToken, widgetSettingsMap])
 
   const membersById = new Map(familyMembers.map((member) => [member.id, member]))
   const filterOptions: FilterOption[] = [
@@ -591,6 +876,22 @@ function App() {
     arrivalBoardChromeSettings.boardSubheading.trim().length > 0
       ? arrivalBoardChromeSettings.boardSubheading
       : defaultArrivalBoardSettings.boardSubheading
+  const weatherRefreshCountdownLabel =
+    nextWeatherRefreshAt === null
+      ? 'Scheduling next update'
+      : (() => {
+          const millisecondsUntilRefresh = Math.max(
+            nextWeatherRefreshAt - now.getTime(),
+            0,
+          )
+          const totalSeconds = Math.ceil(millisecondsUntilRefresh / 1000)
+          const minutes = Math.floor(totalSeconds / 60)
+          const seconds = totalSeconds % 60
+
+          return totalSeconds <= 0
+            ? 'Refreshing now'
+            : `Next update in ${minutes}:${seconds.toString().padStart(2, '0')}`
+        })()
   const commuteNote =
     commuteNotes[activeFilter] ??
     `${activeProfile ? getMemberLabel(activeProfile) : 'This view'}: color and badge are ready. Personal items can be assigned next.`
@@ -630,7 +931,12 @@ function App() {
             )
             setFamilyMembersError(null)
           })
-          .catch(() => {
+          .catch((error) => {
+            if (isAuthRequiredError(error)) {
+              handleAuthRequired()
+              return
+            }
+
             setFamilyMembersError(
               'Failed to persist family-member changes to the backend.',
             )
@@ -661,8 +967,69 @@ function App() {
         setActiveFilter(persistedMember.id)
         setFamilyMembersError(null)
       })
-      .catch(() => {
+      .catch((error) => {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+          return
+        }
+
         setFamilyMembersError('Failed to create the family member in the backend.')
+      })
+  }
+
+  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const username = loginUsername.trim()
+    const password = loginPassword
+
+    if (!username || !password) {
+      setAuthError('Username and password are required.')
+      return
+    }
+
+    setAuthPending(true)
+    setAuthError(null)
+
+    loginWithPassword(username, password)
+      .then((user) => {
+        setLoginPassword('')
+        enterAuthenticatedState(user)
+      })
+      .catch((error) => {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+          return
+        }
+
+        setAuthError(
+          error instanceof Error ? error.message : 'Failed to sign in to the backend.',
+        )
+      })
+      .finally(() => {
+        setAuthPending(false)
+      })
+  }
+
+  const handleLogout = () => {
+    setAuthPending(true)
+    setAuthError(null)
+
+    logoutCurrentSession()
+      .then(() => {
+        setLoginPassword('')
+        enterUnauthenticatedState()
+      })
+      .catch((error) => {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+          return
+        }
+
+        setAuthError('Failed to sign out from the backend. Try again.')
+      })
+      .finally(() => {
+        setAuthPending(false)
       })
   }
 
@@ -708,7 +1075,12 @@ function App() {
         setTodoRefreshToken((currentValue) => currentValue + 1)
         setTodoItemsError(null)
       })
-      .catch(() => {
+      .catch((error) => {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+          return
+        }
+
         setTodoItemsError('Failed to update todo item state in the backend.')
         setWidgetHealthMap((currentValues) => ({
           ...currentValues,
@@ -745,52 +1117,197 @@ function App() {
     widgetId: string,
     draftSettings: WidgetSettingsValues,
   ) => {
-    const widget = registeredWidgets.find(
-      (registeredWidget) => registeredWidget.entity.id === widgetId,
-    )
-    const normalizedSettings =
-      widget?.module.settingsDefinition?.normalize(draftSettings) ?? draftSettings
-    const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
+    try {
+      const widget = registeredWidgets.find(
+        (registeredWidget) => registeredWidget.entity.id === widgetId,
+      )
+      const normalizedSettings =
+        widget?.module.settingsDefinition?.normalize(draftSettings) ?? draftSettings
+      const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
 
-    setWidgetSettingsMap((currentValues) => ({
-      ...currentValues,
-      [widgetId]: persistedSettings.settings,
-    }))
-    setWidgetSettingsError(null)
+      setWidgetSettingsMap((currentValues) => ({
+        ...currentValues,
+        [widgetId]: persistedSettings.settings,
+      }))
+      setWidgetSettingsError(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      throw error
+    }
   }
 
   const handleSaveWidgetMetadata = async (
     widgetId: string,
     draft: WidgetMetadataDraft,
   ) => {
-    const enabledPlacements = draft.placementZones.filter(
-      (placement: WidgetMetadataDraft['placementZones'][number]) => placement.enabled,
+    try {
+      const enabledPlacements = draft.placementZones.filter(
+        (placement: WidgetMetadataDraft['placementZones'][number]) => placement.enabled,
+      )
+
+      await updateWidgetEntity(widgetId, {
+        title: draft.title,
+        subwayLetter: draft.subwayLetter,
+        subwayColor: draft.subwayColor,
+        sourceLocation: draft.sourceLocation,
+        userScope: {
+          mode: draft.userScopeMode,
+          memberIds:
+            draft.userScopeMode === 'all' ? [] : draft.userScopeMemberIds,
+        },
+        placementZones: enabledPlacements.map(
+          (
+            placement: WidgetMetadataDraft['placementZones'][number],
+            index: number,
+          ) => ({
+            zoneId: placement.zoneId,
+            order: index + 1,
+          })),
+      })
+
+      const refreshedWidgetEntities = await fetchWidgetEntities()
+
+      setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
+      setWidgetMetadataAdminError(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      throw error
+    }
+  }
+
+  const isProtectedShellReady =
+    authStatus === 'authenticated' &&
+    widgetSettingsLoaded &&
+    familyMembersLoaded &&
+    widgetMetadataLoaded &&
+    appShellStateHydrated
+
+  if (authStatus === 'bootstrapping') {
+    return (
+      <main className="app-shell app-shell--auth">
+        <section className="screen auth-screen">
+          <div className="hero-layout hero-layout--loading">
+            <article className="hero-card hero-card--brand hero-card--loading">
+              <p className="terminal-location">Session bootstrap</p>
+              <h1 className="terminal-title">Restoring access</h1>
+              <p className="hero-copy">
+                Checking for an existing session before loading the protected board.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
     )
+  }
 
-    await updateWidgetEntity(widgetId, {
-      title: draft.title,
-      subwayLetter: draft.subwayLetter,
-      subwayColor: draft.subwayColor,
-      sourceLocation: draft.sourceLocation,
-      userScope: {
-        mode: draft.userScopeMode,
-        memberIds:
-          draft.userScopeMode === 'all' ? [] : draft.userScopeMemberIds,
-      },
-      placementZones: enabledPlacements.map(
-        (
-          placement: WidgetMetadataDraft['placementZones'][number],
-          index: number,
-        ) => ({
-          zoneId: placement.zoneId,
-          order: index + 1,
-        })),
-    })
+  if (authStatus === 'unauthenticated') {
+    return (
+      <main className="app-shell app-shell--auth">
+        <section className="screen auth-screen">
+          <div className="hero-layout hero-layout--single">
+            <article className="hero-card hero-card--gateway">
+              <div className="hero-subway-sign">
+                <div className="hero-route-row" aria-hidden="true">
+                  <span className="route-bullet route-bullet--large" style={badgeStyle('#0039a6')}>
+                    A
+                  </span>
+                  <span className="route-bullet route-bullet--large" style={badgeStyle('#fccc0a')}>
+                    Q
+                  </span>
+                  <span className="route-bullet route-bullet--large" style={badgeStyle('#b933ad')}>
+                    7
+                  </span>
+                </div>
+                <div className="hero-subway-copy">
+                  <p className="terminal-location">NYC subway-style access</p>
+                  <h1 className="terminal-title">{boardTitleDisplay}</h1>
+                  <p className="hero-copy">
+                    The subway is a rapid transit system built to move large numbers of people through one connected city network.
+                  </p>
+                  <p className="hero-copy">
+                    Its route bullets, colors, and signs make a complicated map readable in just a few seconds.
+                  </p>
+                  <p className="hero-copy">
+                    This board borrows that design language so household information feels as clear as a station platform.
+                  </p>
+                </div>
+              </div>
 
-    const refreshedWidgetEntities = await fetchWidgetEntities()
+              <div className="hero-login-block">
+                <div className="settings-card-head">
+                  <p className="widget-kicker">Sign in</p>
+                  <h2>Enter the board</h2>
+                </div>
 
-    setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
-    setWidgetMetadataAdminError(null)
+                <p className="settings-copy">
+                  Login is required before personal subway data and settings are shown.
+                </p>
+
+                {authError ? (
+                  <p className="settings-note settings-note--warning">{authError}</p>
+                ) : null}
+
+                <form className="settings-form auth-form" onSubmit={handleLogin}>
+                  <label className="settings-label">
+                    <span>Username</span>
+                    <input
+                      autoComplete="username"
+                      className="settings-input"
+                      type="text"
+                      value={loginUsername}
+                      onChange={(event) => setLoginUsername(event.target.value)}
+                      placeholder="Username"
+                    />
+                  </label>
+
+                  <label className="settings-label">
+                    <span>Password</span>
+                    <input
+                      autoComplete="current-password"
+                      className="settings-input"
+                      type="password"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      placeholder="Password"
+                    />
+                  </label>
+
+                  <button className="settings-submit" type="submit" disabled={authPending}>
+                    {authPending ? 'Signing in…' : 'Sign in'}
+                  </button>
+                </form>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (!isProtectedShellReady) {
+    return (
+      <main className="app-shell app-shell--auth">
+        <section className="screen auth-screen">
+          <div className="hero-layout hero-layout--loading">
+            <article className="hero-card hero-card--brand hero-card--loading">
+              <p className="terminal-location">Authenticated session</p>
+              <h1 className="terminal-title">Loading {authenticatedUser?.username}</h1>
+              <p className="hero-copy">
+                Restoring widgets, members, and saved settings for this account.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -810,6 +1327,7 @@ function App() {
 
           <div className="terminal-right">
             <div className="terminal-actions">
+              <span className="session-chip">{authenticatedUser?.username}</span>
               <button
                 type="button"
                 className={`terminal-button${viewMode === 'board' ? ' is-active' : ''}`}
@@ -824,6 +1342,14 @@ function App() {
               >
                 Settings
               </button>
+              <button
+                type="button"
+                className="terminal-button terminal-button--quiet"
+                onClick={handleLogout}
+                disabled={authPending}
+              >
+                {authPending ? 'Signing out…' : 'Log out'}
+              </button>
             </div>
             <div className="clock-stack">
               <p className="board-date">{boardDate}</p>
@@ -832,18 +1358,23 @@ function App() {
           </div>
         </header>
 
+        {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
+
         {viewMode === 'board' ? (
           <WidgetBoardHost
             registeredWidgets={registeredWidgets}
             activeFilter={activeFilter}
             activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
+            expandedWidgetId={expandedWidgetId}
             filterOptions={filterOptions}
             onFilterChange={setActiveFilter}
+            onExpandedWidgetChange={setExpandedWidgetId}
             visibleArrivals={visibleArrivals}
             visibleAgenda={visibleAgenda}
             visibleTodos={visibleTodos}
             visibleNews={visibleNews}
             weatherData={weatherWidgetData}
+            weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
             currentAgenda={currentAgenda}
             currentAlert={currentAlert}
             nextTodo={nextTodo}

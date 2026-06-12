@@ -49,6 +49,32 @@ npm install
 npm run dev
 ```
 
+## Run it with Docker
+
+```bash
+docker compose up --build -d
+```
+
+Local access:
+
+- App: `http://localhost:8081`
+- API: `http://localhost:8081/api/family-members`
+
+Useful commands:
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
+The Dockerized backend uses the same SQLite file as local non-Docker development:
+
+- `backend/data/subway.sqlite`
+
+On the VPS, the same compose file stores the database at:
+
+- `/home/swaibian/apps/subway/backend/data/subway.sqlite`
+
 ## Production check
 
 ```bash
@@ -63,6 +89,35 @@ cd frontend
 npm run build
 npm run preview
 ```
+
+## GitHub Actions deployment
+
+The repository includes `.github/workflows/docker-build-deploy.yml`.
+
+What it does:
+
+- Builds and pushes backend and frontend images to GHCR
+- Uploads `compose.yml`, `compose.vps.yml`, and a generated `deploy.env` file to the VPS
+- Copies `backend/data/subway.sqlite` to the VPS on the first deploy only
+- Verifies the configured public app port is free unless an existing subway deployment already owns it
+- Pulls the tagged images on `client.scaico.com` as user `swaibian`
+- Restarts the stack with `docker compose up -d --no-build --remove-orphans`
+
+Required GitHub secret:
+
+- `VPS_SSH_KEY`: private SSH key for `swaibian@client.scaico.com`
+
+The VPS must already have Docker Engine with the Docker Compose v2 plugin installed.
+
+The workflow currently binds subway to host port `8081` on the VPS because ports `80` and `443` are already occupied by the existing shared Nginx stack on `client.scaico.com`.
+
+`compose.vps.yml` also joins the subway frontend to the existing Docker network `scaico-client_default` with the alias `subway-frontend`, so the shared Nginx stack can reverse-proxy it.
+
+The workflow smoke-tests the app from inside the VPS with `curl http://127.0.0.1:8081/api/auth/session`, so deployment is not blocked by the server's current public ingress rules.
+
+The intended public route is `https://client.scaico.com/subway/`, which requires a matching reverse-proxy route in the existing Nginx stack.
+
+The backend readiness checks use `/api/auth/session`, which remains publicly readable even after the authenticated data endpoints are locked down.
 
 ## Backend persistence
 

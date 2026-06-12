@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 export type WidgetId = string
 export type WidgetCapability = 'read' | 'write'
 export type WidgetDataSource = 'database' | 'external-api' | 'system'
@@ -13,7 +15,7 @@ export type WidgetPlacementZoneId =
   | 'a3'
   | 'b3'
 
-export type WidgetSettingsValues = Record<string, string | number | boolean>
+export type WidgetSettingsValues = Record<string, unknown>
 
 export interface WidgetUserScope {
   mode: WidgetScopeMode
@@ -46,6 +48,11 @@ export interface WidgetMutationContext {
   payload?: unknown
 }
 
+export interface WidgetDetailViewContext {
+  widget: RegisteredWidget
+  data: unknown
+}
+
 export interface WidgetSettingFieldDefinition {
   key: string
   label: string
@@ -73,6 +80,7 @@ export interface WidgetMicroAppContract {
   settingsDefinition?: WidgetSettingsDefinition
   loadData: (context: WidgetLoadContext) => unknown | Promise<unknown>
   mutateData?: (context: WidgetMutationContext) => void | Promise<void>
+  renderDetailView?: (context: WidgetDetailViewContext) => ReactNode
 }
 
 export interface WidgetPresentation {

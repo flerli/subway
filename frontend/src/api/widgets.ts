@@ -1,18 +1,13 @@
 import {
   mergeWidgetEntitiesWithSeed,
-  widgetEntitySeed,
 } from '../widgets/widgetDatabase'
+import { fetchApi } from './request'
 import type {
   WidgetEntityRecord,
   WidgetPlacementAssignment,
   WidgetPlacementZoneId,
   WidgetUserScope,
 } from '../widgets/widgetTypes'
-
-const WIDGETS_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
-
-const getApiUrl = (path: string) =>
-  `${WIDGETS_API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 
 const widgetGridPlacementOrder: WidgetPlacementZoneId[] = [
   'a1',
@@ -185,7 +180,7 @@ const normalizeWidgetEntity = (value: unknown) => {
 }
 
 export const fetchWidgetEntities = async () => {
-  const response = await fetch(getApiUrl('/widgets'))
+  const response = await fetchApi('/widgets')
 
   if (!response.ok) {
     throw new Error('Failed to load widget metadata from backend.')
@@ -202,9 +197,11 @@ export const fetchWidgetEntities = async () => {
       })
     : []
 
-  return widgetEntities.length > 0
-    ? mergeWidgetEntitiesWithSeed(widgetEntities)
-    : widgetEntitySeed
+  const widgetIds = new Set(widgetEntities.map((widget) => widget.id))
+
+  return mergeWidgetEntitiesWithSeed(widgetEntities).filter((widgetEntity) =>
+    widgetIds.has(widgetEntity.id),
+  )
 }
 
 export const updateWidgetEntity = async (
@@ -218,7 +215,7 @@ export const updateWidgetEntity = async (
     placementZones: WidgetPlacementAssignment[]
   },
 ) => {
-  const response = await fetch(getApiUrl(`/widgets/${widgetId}`), {
+  const response = await fetchApi(`/widgets/${widgetId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
