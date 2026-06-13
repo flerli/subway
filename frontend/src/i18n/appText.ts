@@ -107,6 +107,7 @@ export interface AppTextBundle {
     title: string
     copy: string
     closeAction: string
+    performanceTitle: string
     sourceLabel: string
     scopeLabel: string
     visibleNowLabel: string
@@ -117,6 +118,12 @@ export interface AppTextBundle {
     lastRefreshLabel: string
     itemsLabel: string
     failureLabel: string
+    lastInteractionLabel: string
+    interactionDurationLabel: string
+    interactionMeasuredAtLabel: string
+    longTaskCountLabel: string
+    longestLongTaskLabel: string
+    lastLongTaskLabel: string
     notAvailableValue: string
     noneValue: string
     allMembersScope: string
@@ -269,6 +276,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       title: 'Widget diagnostics',
       copy: 'Hidden overlay for source, scope, refresh status, and failure inspection.',
       closeAction: 'Close',
+      performanceTitle: 'Performance',
       sourceLabel: 'Source',
       scopeLabel: 'Scope',
       visibleNowLabel: 'Visible now',
@@ -279,6 +287,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastRefreshLabel: 'Last refresh',
       itemsLabel: 'Items',
       failureLabel: 'Failure',
+      lastInteractionLabel: 'Last interaction',
+      interactionDurationLabel: 'Click to paint',
+      interactionMeasuredAtLabel: 'Measured at',
+      longTaskCountLabel: 'Long tasks',
+      longestLongTaskLabel: 'Longest long task',
+      lastLongTaskLabel: 'Last long task',
       notAvailableValue: 'n/a',
       noneValue: 'none',
       allMembersScope: 'All members',
@@ -437,6 +451,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       title: 'Widget-Diagnose',
       copy: 'Verstecktes Overlay fuer Quelle, Umfang, Aktualisierungsstatus und Fehlerpruefung.',
       closeAction: 'Schliessen',
+      performanceTitle: 'Performance',
       sourceLabel: 'Quelle',
       scopeLabel: 'Umfang',
       visibleNowLabel: 'Jetzt sichtbar',
@@ -447,6 +462,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastRefreshLabel: 'Letzte Aktualisierung',
       itemsLabel: 'Eintraege',
       failureLabel: 'Fehler',
+      lastInteractionLabel: 'Letzte Interaktion',
+      interactionDurationLabel: 'Klick bis Anzeige',
+      interactionMeasuredAtLabel: 'Gemessen um',
+      longTaskCountLabel: 'Long Tasks',
+      longestLongTaskLabel: 'Laengster Long Task',
+      lastLongTaskLabel: 'Letzter Long Task',
       notAvailableValue: 'k. A.',
       noneValue: 'kein',
       allMembersScope: 'Alle Mitglieder',
@@ -612,6 +633,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       title: 'Diagnostic des widgets',
       copy: 'Overlay cache pour la source, la portee, l etat de rafraichissement et l inspection des echecs.',
       closeAction: 'Fermer',
+      performanceTitle: 'Performance',
       sourceLabel: 'Source',
       scopeLabel: 'Portee',
       visibleNowLabel: 'Visible maintenant',
@@ -622,6 +644,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastRefreshLabel: 'Dernier rafraichissement',
       itemsLabel: 'Elements',
       failureLabel: 'Echec',
+      lastInteractionLabel: 'Derniere interaction',
+      interactionDurationLabel: 'Clic jusqu a l affichage',
+      interactionMeasuredAtLabel: 'Mesure a',
+      longTaskCountLabel: 'Taches longues',
+      longestLongTaskLabel: 'Plus longue tache',
+      lastLongTaskLabel: 'Derniere tache longue',
       notAvailableValue: 'n/d',
       noneValue: 'aucun',
       allMembersScope: 'Tous les membres',
@@ -639,6 +667,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       authVerifySessionFailed:
         'Impossible de verifier la session en cours. Veuillez vous reconnecter.',
       authCredentialsRequired: 'Le nom d utilisateur et le mot de passe sont requis.',
+      performanceTitle: 'Rendimiento',
       authInvalidCredentials: 'Nom d utilisateur ou mot de passe invalide.',
       authSignInFailed: 'Impossible de se connecter au backend.',
       authSignOutFailed: 'Impossible de se deconnecter du backend. Reessayez.',
@@ -649,6 +678,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       widgetMetadataUnavailable:
         'Les metadonnees des widgets du backend sont indisponibles. Le contenu du tableau peut rester incomplet jusqu au retour de la connexion.',
       weatherLoadFailed:
+      lastInteractionLabel: 'Ultima interaccion',
+      interactionDurationLabel: 'Clic hasta pintar',
+      interactionMeasuredAtLabel: 'Medido a las',
+      longTaskCountLabel: 'Tareas largas',
+      longestLongTaskLabel: 'Tarea larga mas larga',
+      lastLongTaskLabel: 'Ultima tarea larga',
         'Impossible de charger les donnees meteo live depuis le chemin meteo du backend.',
       calendarLoadFailed:
         'Impossible de charger les evenements du calendrier depuis le chemin calendrier du backend.',

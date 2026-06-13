@@ -39,9 +39,13 @@ import {
 } from './i18n/localization'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
-import { WidgetDebugOverlay } from './widgets/WidgetDebugOverlay'
+import {
+  WidgetDebugOverlay,
+  type WidgetDebugPerformanceState,
+} from './widgets/WidgetDebugOverlay'
 import {
   defaultArrivalBoardSettings,
+  getArrivalBoardWidgetTranslation,
   normalizeArrivalBoardSettings,
 } from './widgets/arrival-board'
 import {
@@ -50,8 +54,6 @@ import {
 } from './widgets/calendar/calendarApi'
 import {
   filterCalendarAgendaItems,
-  getCalendarWidgetTranslation,
-  type CalendarWidgetTranslation,
 } from './widgets/calendar'
 import { fetchTodoItems } from './widgets/todo/todoApi'
 import {
@@ -75,7 +77,6 @@ import type {
   FilterId,
   FilterOption,
   ForecastDay,
-  NewsItem,
   TodoItem,
   WeatherLocationData,
   WeatherWidgetData,
@@ -114,6 +115,11 @@ type AppPreferencesErrorKey = 'load-failed' | 'save-failed'
 type AppTextMessageKey = keyof AppTextBundle['messages']
 type MemberId = string
 
+interface PendingInteractionMeasurement {
+  label: string
+  startedAt: number
+}
+
 const resolveAppMessage = (
   messageKey: AppTextMessageKey | null,
   appText: AppTextBundle,
@@ -135,97 +141,57 @@ interface AppShellPersistedState {
   expandedWidgetId: string | null
 }
 
-const arrivals: Arrival[] = [
-  {
-    line: 'all-household',
-    destination: 'Home Sweep',
-    direction: 'Whole-house system refresh',
-    minutes: 1,
-    platform: 'Main display',
-    members: [ALL_MEMBERS_AUDIENCE],
+const buildArrivalBoardEvents = (
+  agendaItems: AgendaItem[],
+  referenceTime: Date,
+  arrivalLabel: string,
+  units: {
+    hourSingular: string
+    hourPlural: string
+    daySingular: string
+    dayPlural: string
   },
-  {
-    line: 'alex-school',
-    destination: 'School Run',
-    direction: 'North hall departure lane',
-    minutes: 3,
-    platform: 'Front door',
-    members: ['family-1'],
-  },
-  {
-    line: 'bianca-studio',
-    destination: 'Studio Call',
-    direction: 'East room focus session',
-    minutes: 5,
-    platform: 'Office',
-    members: ['family-2'],
-  },
-  {
-    line: 'chris-grocery',
-    destination: 'Groceries Drop',
-    direction: 'West lobby delivery window',
-    minutes: 7,
-    platform: 'Lobby',
-    members: ['family-3'],
-  },
-  {
-    line: 'dana-dinner',
-    destination: 'Dinner Arrival',
-    direction: 'South table setup',
-    minutes: 10,
-    platform: 'Kitchen',
-    members: ['family-4'],
-  },
-]
+): Arrival[] => {
+  const nowTime = referenceTime.getTime()
 
-const buildEmptyAgendaItem = (
-  calendarWidgetText: CalendarWidgetTranslation,
-): AgendaItem => ({
-  line: 'calendar-empty',
-  date: '',
-  time: '--:--',
-  title: calendarWidgetText.copy.emptyItemTitle,
-  location: calendarWidgetText.copy.emptyItemLocation,
-  locationCountry: '',
-  note: calendarWidgetText.copy.emptyItemNote,
-  isForeign: false,
-  members: [ALL_MEMBERS_AUDIENCE],
-})
+  return agendaItems
+    .map((agendaItem) => {
+      const eventDateTime = new Date(`${agendaItem.date}T${agendaItem.time}:00`)
 
-const newsItems: NewsItem[] = [
-  {
-    line: 'all-laundry',
-    source: 'HOME SYSTEM',
-    headline: 'Laundry cycle reaches transfer window in 12 minutes',
-    summary: 'Move the upstairs load before dinner setup begins.',
-    eta: 'Live now',
-    members: [ALL_MEMBERS_AUDIENCE],
-  },
-  {
-    line: 'alex-courier',
-    source: 'DOORBELL CAM',
-    headline: 'Courier with replacement air filters is two stops away',
-    summary: 'The front console can accept the drop if nobody is home.',
-    eta: 'Alert 4 min ago',
-    members: ['family-1'],
-  },
-  {
-    line: 'bianca-feed',
-    source: 'CREATOR FEED',
-    headline: 'Editing deadline moved to the first local stop after lunch',
-    summary: 'Exports should queue before the afternoon call begins.',
-    eta: 'Brief 31 min ago',
-    members: ['family-2'],
-  },
-  {
-    line: 'chris-market',
-    source: 'NEIGHBORHOOD',
-    headline: 'Corner market restocked cleaning and paper goods',
-    summary: 'The pantry run can clear two open errands in one trip.',
-    eta: 'Alert 40 min ago',
-    members: ['family-3', 'family-4'],
-  },
-]
+      return {
+        agendaItem,
+        eventDateTime,
+      }
+    })
+    .filter(({ eventDateTime }) => !Number.isNaN(eventDateTime.getTime()))
+    .filter(({ eventDateTime }) => eventDateTime.getTime() >= nowTime)
+    .sort((left, right) => left.eventDateTime.getTime() - right.eventDateTime.getTime())
+    .slice(0, 6)
+    .map(({ agendaItem, eventDateTime }) => {
+      const diffMs = Math.max(eventDateTime.getTime() - nowTime, 0)
+      const totalHours = diffMs / (1000 * 60 * 60)
+      const useHours = totalHours < 24
+      const value = useHours
+        ? Math.max(1, Math.ceil(totalHours))
+        : Math.max(1, Math.ceil(totalHours / 24))
+
+      return {
+        line: `arrival-${agendaItem.line}`,
+        destination: agendaItem.title,
+        direction: arrivalLabel,
+        platform: agendaItem.location,
+        value: `${value}`,
+        unit: useHours
+          ? value === 1
+            ? units.hourSingular
+            : units.hourPlural
+          : value === 1
+            ? units.daySingular
+            : units.dayPlural,
+        members: agendaItem.members,
+      }
+    })
+}
 
 const buildFallbackForecastDays = (
   languageCode: SupportedLanguageCode,
@@ -366,11 +332,6 @@ const persistLocalAppShellState = (userId: string, state: AppShellPersistedState
   }
 }
 
-const matchesFilter = (members: readonly AudienceId[], filter: FilterId) =>
-  filter === ALL_FILTER_ID ||
-  members.includes(ALL_MEMBERS_AUDIENCE) ||
-  members.includes(filter)
-
 const pickDisplayMember = (
   audience: readonly AudienceId[],
   activeFilter: FilterId,
@@ -450,11 +411,20 @@ function App() {
   const [, setWidgetSettingsLoaded] = useState(false)
   const [, setWidgetSettingsAvailable] = useState(false)
   const [appShellStateHydrated, setAppShellStateHydrated] = useState(false)
+  const [performanceState, setPerformanceState] =
+    useState<WidgetDebugPerformanceState>({
+      interactionLabel: null,
+      interactionDurationMs: null,
+      interactionMeasuredAt: null,
+      longTaskCount: 0,
+      longestLongTaskMs: null,
+      lastLongTaskAt: null,
+    })
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
+  const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
-  const calendarWidgetText = getCalendarWidgetTranslation(selectedLanguageCode)
+  const arrivalBoardWidgetText = getArrivalBoardWidgetTranslation(selectedLanguageCode)
   const weatherWidgetText = getWeatherWidgetTranslation(selectedLanguageCode)
-  const emptyAgendaItem = buildEmptyAgendaItem(calendarWidgetText)
   const fallbackWeatherData = buildFallbackWeatherData(
     weatherWidgetText,
     selectedLanguageCode,
@@ -515,6 +485,15 @@ function App() {
     setWidgetSettingsLoaded(false)
     setWidgetSettingsAvailable(false)
     setAppShellStateHydrated(false)
+    setPerformanceState({
+      interactionLabel: null,
+      interactionDurationMs: null,
+      interactionMeasuredAt: null,
+      longTaskCount: 0,
+      longestLongTaskMs: null,
+      lastLongTaskAt: null,
+    })
+    pendingInteractionRef.current = null
   }
 
   const enterUnauthenticatedState = (
@@ -580,6 +559,88 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof PerformanceObserver === 'undefined') {
+      return
+    }
+
+    let observer: PerformanceObserver | null = null
+
+    try {
+      observer = new PerformanceObserver((entryList) => {
+        for (const entry of entryList.getEntries()) {
+          const durationMs = Number(entry.duration.toFixed(1))
+
+          setPerformanceState((currentValue) => ({
+            ...currentValue,
+            longTaskCount: currentValue.longTaskCount + 1,
+            longestLongTaskMs:
+              currentValue.longestLongTaskMs === null
+                ? durationMs
+                : Math.max(currentValue.longestLongTaskMs, durationMs),
+            lastLongTaskAt: new Date().toISOString(),
+          }))
+        }
+      })
+      observer.observe({ entryTypes: ['longtask'] })
+    } catch {
+      observer = null
+    }
+
+    return () => {
+      observer?.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    const pendingInteraction = pendingInteractionRef.current
+
+    if (!pendingInteraction) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setPerformanceState((currentValue) => ({
+        ...currentValue,
+        interactionLabel: pendingInteraction.label,
+        interactionDurationMs: Number(
+          (performance.now() - pendingInteraction.startedAt).toFixed(1),
+        ),
+        interactionMeasuredAt: new Date().toISOString(),
+      }))
+
+      if (pendingInteractionRef.current === pendingInteraction) {
+        pendingInteractionRef.current = null
+      }
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeFilter, expandedWidgetId, todoWidgetItems, viewMode])
+
+  const beginInteractionMeasurement = (label: string) => {
+    pendingInteractionRef.current = {
+      label,
+      startedAt: performance.now(),
+    }
+  }
+
+  const handleFilterChange = (filterId: FilterId) => {
+    beginInteractionMeasurement(`filter:${filterId}`)
+    setActiveFilter(filterId)
+  }
+
+  const handleViewModeChange = (nextViewMode: ViewMode) => {
+    beginInteractionMeasurement(`view:${nextViewMode}`)
+    setViewMode(nextViewMode)
+  }
+
+  const handleExpandedWidgetChange = (widgetId: string | null) => {
+    beginInteractionMeasurement(widgetId ? `expand:${widgetId}` : 'expand:close')
+    setExpandedWidgetId(widgetId)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -1046,21 +1107,26 @@ function App() {
     })),
   ]
   const activeProfile = familyMembers.find((member) => member.id === activeFilter)
-  const visibleArrivals = arrivals.filter((item) =>
-    matchesFilter(item.members, activeFilter),
-  )
   const visibleAgenda = filterCalendarAgendaItems(
     calendarEvents,
     activeFilter === ALL_FILTER_ID ? null : activeFilter,
     widgetSettingsMap.calendar,
   )
+  const visibleArrivals = buildArrivalBoardEvents(
+    visibleAgenda,
+    now,
+    arrivalBoardWidgetText.copy.arrivalLabel,
+    {
+      hourSingular: arrivalBoardWidgetText.copy.hourUnitSingular,
+      hourPlural: arrivalBoardWidgetText.copy.hourUnitPlural,
+      daySingular: arrivalBoardWidgetText.copy.dayUnitSingular,
+      dayPlural: arrivalBoardWidgetText.copy.dayUnitPlural,
+    },
+  )
   const visibleTodos = filterTodoItemsForView(
     todoWidgetItems,
     activeFilter === ALL_FILTER_ID ? null : activeFilter,
     widgetSettingsMap.todo,
-  )
-  const visibleNews = newsItems.filter((item) =>
-    matchesFilter(item.members, activeFilter),
   )
   const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
     hour: '2-digit',
@@ -1075,8 +1141,6 @@ function App() {
     .format(now)
     .replace(',', '')
     .toUpperCase()
-  const currentAgenda = visibleAgenda[0] ?? emptyAgendaItem
-  const currentAlert = visibleNews[0] ?? newsItems[0]
   const arrivalBoardChromeSettings = normalizeArrivalBoardSettings(
     widgetSettingsMap['arrival-board'],
   )
@@ -1369,6 +1433,8 @@ function App() {
       return
     }
 
+    beginInteractionMeasurement(done ? `todo:done:${todoItemId}` : `todo:reopen:${todoItemId}`)
+
     const previousTodoItems = todoWidgetItems
 
     setTodoWidgetItems((currentValues) =>
@@ -1640,14 +1706,14 @@ function App() {
                 <button
                   type="button"
                   className="terminal-button"
-                  onClick={() => setViewMode('board')}
+                  onClick={() => handleViewModeChange('board')}
                 >
                   {appText.shell.boardTab}
                 </button>
                 <button
                   type="button"
                   className="terminal-button is-active"
-                  onClick={() => setViewMode('settings')}
+                  onClick={() => handleViewModeChange('settings')}
                 >
                   {appText.shell.settingsTab}
                 </button>
@@ -1686,9 +1752,9 @@ function App() {
               expandedWidgetId={expandedWidgetId}
               filterOptions={filterOptions}
               activeViewMode={viewMode}
-              onFilterChange={setActiveFilter}
-              onViewModeChange={setViewMode}
-              onExpandedWidgetChange={setExpandedWidgetId}
+              onFilterChange={handleFilterChange}
+              onViewModeChange={handleViewModeChange}
+              onExpandedWidgetChange={handleExpandedWidgetChange}
               onLogout={handleLogout}
               authPending={authPending}
               visibleArrivals={visibleArrivals}
@@ -1699,8 +1765,6 @@ function App() {
               calendarSettings={widgetSettingsMap.calendar ?? {}}
               weatherData={weatherWidgetData}
               weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
-              currentAgenda={currentAgenda}
-              currentAlert={currentAlert}
               commuteNote={commuteNote}
               renderAudienceBadge={renderAudienceBadge}
               onToggleTodoDone={handleToggleTodoDone}
@@ -1962,6 +2026,7 @@ function App() {
             registeredWidgets={registeredWidgets}
             activeFilter={activeFilter}
             widgetHealthMap={widgetHealthMap}
+            performanceState={performanceState}
             onClose={() => setDebugModeEnabled(false)}
           />
         ) : null}

@@ -71,3 +71,4 @@ export const arrivalBoardWidget: WidgetMicroAppContract = {
 }
 
 export const widgetModule = arrivalBoardWidget
+export { getArrivalBoardWidgetTranslation } from './translations'

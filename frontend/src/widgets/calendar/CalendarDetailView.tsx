@@ -588,9 +588,21 @@ export function CalendarDetailView({
 
   const renderEventRow = (event: CalendarEventRecord) => {
     const isForeign = homeCountryCode.trim().toUpperCase() !== event.locationCountry
+    const isSelected = selectedEventId === event.id
 
     return (
-      <article className="calendar-detail-event-row" key={`${event.id}-${event.date}`}>
+      <button
+        className={`calendar-detail-event-row${isSelected ? ' is-active' : ''}`}
+        key={`${event.id}-${event.date}`}
+        type="button"
+        onClick={() => {
+          setSelectedEventId((currentValue) =>
+            currentValue === event.id ? null : event.id,
+          )
+          setEditorMode(null)
+          setSubmitNotice(null)
+        }}
+      >
         <p className="calendar-detail-event-time">{event.time}</p>
         <div className="calendar-detail-event-copy">
           <p className="calendar-detail-event-title">{event.title}</p>
@@ -607,7 +619,7 @@ export function CalendarDetailView({
             {formatScopeSummary(event, familyMembersById, widgetText)} · {formatRecurrenceSummary(event, widgetText)}
           </p>
         </div>
-      </article>
+      </button>
     )
   }
 

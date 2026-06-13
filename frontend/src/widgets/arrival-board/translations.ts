@@ -10,8 +10,13 @@ export interface ArrivalBoardWidgetTranslation extends WidgetTranslationDefiniti
   copy: {
     allArrivalsTitle: string
     focusedArrivalsTitle: string
+    arrivalLabel: string
     readyNextLabel: string
     happeningNowLabel: string
+    hourUnitSingular: string
+    hourUnitPlural: string
+    dayUnitSingular: string
+    dayUnitPlural: string
     noArrivalsTitle: string
     noArrivalsCopy: string
   }
@@ -22,10 +27,15 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
     title: 'Arrival Board',
     boardKicker: 'Family service board',
     copy: {
-      allArrivalsTitle: 'All household arrivals',
-      focusedArrivalsTitle: '{name} arrivals',
+      allArrivalsTitle: 'Arrival',
+      focusedArrivalsTitle: '{name} arrival',
+      arrivalLabel: 'Arrival',
       readyNextLabel: 'Ready next',
       happeningNowLabel: 'Happening now',
+      hourUnitSingular: 'HR',
+      hourUnitPlural: 'HRS',
+      dayUnitSingular: 'DAY',
+      dayUnitPlural: 'DAYS',
       noArrivalsTitle: 'No personal arrivals yet',
       noArrivalsCopy: 'Add household data sources or switch back to the All filter.',
     },
@@ -48,10 +58,15 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
     title: 'Ankunftstafel',
     boardKicker: 'Familien-Service-Board',
     copy: {
-      allArrivalsTitle: 'Alle Haushaltsankuenfte',
-      focusedArrivalsTitle: '{name} Ankuenfte',
+      allArrivalsTitle: 'Ankunft',
+      focusedArrivalsTitle: '{name} Ankunft',
+      arrivalLabel: 'Ankunft',
       readyNextLabel: 'Als Naechstes',
       happeningNowLabel: 'Laeuft jetzt',
+      hourUnitSingular: 'STD',
+      hourUnitPlural: 'STD',
+      dayUnitSingular: 'TAG',
+      dayUnitPlural: 'TAGE',
       noArrivalsTitle: 'Noch keine persoenlichen Ankuenfte',
       noArrivalsCopy: 'Fuege Haushaltsdatenquellen hinzu oder wechsle zum Filter Alle zurueck.',
     },
@@ -74,10 +89,15 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
     title: 'Tableau des arrivees',
     boardKicker: 'Tableau de service familial',
     copy: {
-      allArrivalsTitle: 'Arrivees du foyer',
-      focusedArrivalsTitle: 'Arrivees de {name}',
+      allArrivalsTitle: 'Arrivee',
+      focusedArrivalsTitle: 'Arrivee de {name}',
+      arrivalLabel: 'Arrivee',
       readyNextLabel: 'A suivre',
       happeningNowLabel: 'En cours',
+      hourUnitSingular: 'H',
+      hourUnitPlural: 'H',
+      dayUnitSingular: 'JOUR',
+      dayUnitPlural: 'JOURS',
       noArrivalsTitle: 'Pas encore d arrivees personnelles',
       noArrivalsCopy: 'Ajoutez des sources de donnees du foyer ou revenez au filtre Tous.',
     },
@@ -100,10 +120,15 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
     title: 'Panel de llegadas',
     boardKicker: 'Panel de servicio familiar',
     copy: {
-      allArrivalsTitle: 'Llegadas del hogar',
-      focusedArrivalsTitle: 'Llegadas de {name}',
+      allArrivalsTitle: 'Llegada',
+      focusedArrivalsTitle: 'Llegada de {name}',
+      arrivalLabel: 'Llegada',
       readyNextLabel: 'Siguiente',
       happeningNowLabel: 'Ahora mismo',
+      hourUnitSingular: 'H',
+      hourUnitPlural: 'H',
+      dayUnitSingular: 'DIA',
+      dayUnitPlural: 'DIAS',
       noArrivalsTitle: 'Todavia no hay llegadas personales',
       noArrivalsCopy: 'Agrega fuentes de datos del hogar o vuelve al filtro Todos.',
     },

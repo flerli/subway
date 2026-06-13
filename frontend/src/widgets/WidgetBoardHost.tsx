@@ -14,7 +14,6 @@ import type {
   FamilyMember,
   FilterId,
   FilterOption,
-  NewsItem,
   TodoItem,
   WeatherWidgetData,
 } from './widgetHostModels'
@@ -27,7 +26,6 @@ import type {
   WidgetSettingsValues,
 } from './widgetTypes'
 import {
-  getWidgetBoardKicker,
   resolveWidgetTitle,
 } from './widgetLocalization'
 import type { TodoWidgetTranslation } from './todo/translations'
@@ -57,8 +55,6 @@ interface WidgetBoardHostProps {
   calendarSettings: WidgetSettingsValues
   weatherData: WeatherWidgetData
   weatherRefreshCountdownLabel: string
-  currentAgenda: AgendaItem
-  currentAlert: NewsItem
   commuteNote: string
   renderAudienceBadge: AudienceBadgeRenderer
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
@@ -122,8 +118,6 @@ export function WidgetBoardHost({
   calendarSettings,
   weatherData,
   weatherRefreshCountdownLabel,
-  currentAgenda,
-  currentAlert,
   commuteNote,
   renderAudienceBadge,
   onToggleTodoDone,
@@ -291,7 +285,6 @@ export function WidgetBoardHost({
                   {widget.entity.subwayLetter}
                 </span>
                 <div>
-                  <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
                   <h2>
                     {activeProfileLabel
                       ? formatLocalizedText(
@@ -318,14 +311,12 @@ export function WidgetBoardHost({
                         {renderAudienceBadge(item.members, 'route-bullet--large')}
                         <div className="arrival-destination">
                           <h3>{item.destination}</h3>
-                          <p>
-                            {item.direction} · {item.platform}
-                          </p>
+                          <p>{`${item.direction} ${item.platform}`.trim()}</p>
                         </div>
                       </div>
                       <div className="arrival-minute-stack">
-                        <p className="arrival-count">{item.minutes}</p>
-                        <p className="arrival-unit">MIN</p>
+                        <p className="arrival-count">{item.value}</p>
+                        <p className="arrival-unit">{item.unit}</p>
                       </div>
                     </article>
                   ))
@@ -334,20 +325,6 @@ export function WidgetBoardHost({
                     arrivalBoardWidgetText.copy.noArrivalsCopy,
                     'empty-state--board',
                   )}
-            </div>
-
-            <div className="board-footer">
-              <div className="happening-now">
-                <p className="board-side-label">{arrivalBoardWidgetText.copy.happeningNowLabel}</p>
-                <p className="happening-copy">
-                  {currentAgenda.time} · {currentAgenda.title} · {currentAgenda.location}
-                </p>
-              </div>
-
-              <div className="alert-inline">
-                <span className="alert-dot" aria-hidden="true"></span>
-                <p>{currentAlert.headline}</p>
-              </div>
             </div>
           </article>
         )

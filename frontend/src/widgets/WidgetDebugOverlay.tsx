@@ -15,7 +15,17 @@ interface WidgetDebugOverlayProps {
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   widgetHealthMap: Record<string, WidgetHealthState>
+  performanceState: WidgetDebugPerformanceState
   onClose: () => void
+}
+
+export interface WidgetDebugPerformanceState {
+  interactionLabel: string | null
+  interactionDurationMs: number | null
+  interactionMeasuredAt: string | null
+  longTaskCount: number
+  longestLongTaskMs: number | null
+  lastLongTaskAt: string | null
 }
 
 const formatScopeLabel = (widget: RegisteredWidget, appText: AppTextBundle) => {
@@ -76,12 +86,35 @@ const formatFailureLabel = (
     : failureState
 }
 
+const formatMetricDuration = (
+  value: number | null,
+  appText: AppTextBundle,
+) => (value === null ? appText.debug.notAvailableValue : `${value.toFixed(1)} ms`)
+
+const formatMetricTimestamp = (
+  value: string | null,
+  languageCode: SupportedLanguageCode,
+  appText: AppTextBundle,
+) => {
+  if (!value) {
+    return appText.debug.notAvailableValue
+  }
+
+  return new Intl.DateTimeFormat(languageCode, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(value))
+}
+
 export function WidgetDebugOverlay({
   appText,
   languageCode,
   registeredWidgets,
   activeFilter,
   widgetHealthMap,
+  performanceState,
   onClose,
 }: WidgetDebugOverlayProps) {
   return (
@@ -99,6 +132,57 @@ export function WidgetDebugOverlay({
         </div>
 
         <div className="debug-overlay-grid">
+          <article className="debug-card">
+            <div className="debug-card-head">
+              <span className="route-bullet" style={buildBadgeStyle('#f97316')}>
+                P
+              </span>
+              <div>
+                <h3>{appText.debug.performanceTitle}</h3>
+                <p>ui-performance</p>
+              </div>
+            </div>
+
+            <dl className="debug-list">
+              <div>
+                <dt>{appText.debug.lastInteractionLabel}</dt>
+                <dd>{performanceState.interactionLabel ?? appText.debug.noneValue}</dd>
+              </div>
+              <div>
+                <dt>{appText.debug.interactionDurationLabel}</dt>
+                <dd>{formatMetricDuration(performanceState.interactionDurationMs, appText)}</dd>
+              </div>
+              <div>
+                <dt>{appText.debug.interactionMeasuredAtLabel}</dt>
+                <dd>
+                  {formatMetricTimestamp(
+                    performanceState.interactionMeasuredAt,
+                    languageCode,
+                    appText,
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{appText.debug.longTaskCountLabel}</dt>
+                <dd>{performanceState.longTaskCount}</dd>
+              </div>
+              <div>
+                <dt>{appText.debug.longestLongTaskLabel}</dt>
+                <dd>{formatMetricDuration(performanceState.longestLongTaskMs, appText)}</dd>
+              </div>
+              <div>
+                <dt>{appText.debug.lastLongTaskLabel}</dt>
+                <dd>
+                  {formatMetricTimestamp(
+                    performanceState.lastLongTaskAt,
+                    languageCode,
+                    appText,
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </article>
+
           {registeredWidgets.map((widget) => {
             const state = widgetHealthMap[widget.entity.id]
             const visibleInCurrentFocus = isWidgetVisibleForFilter(

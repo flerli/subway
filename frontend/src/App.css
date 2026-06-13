@@ -770,6 +770,8 @@
   min-width: 0;
   width: 100%;
   max-width: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
   overflow: hidden;
 }
 
@@ -1646,6 +1648,15 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.calendar-detail-event-row.is-active {
+  border-color: rgba(74, 168, 255, 0.35);
+  background: rgba(74, 168, 255, 0.08);
 }
 
 .calendar-detail-event-time,

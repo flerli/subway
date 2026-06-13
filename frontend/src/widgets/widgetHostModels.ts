@@ -26,8 +26,9 @@ export interface ScopedItem {
 export interface Arrival extends ScopedItem {
   destination: string
   direction: string
-  minutes: number
   platform: string
+  value: string
+  unit: string
 }
 
 export interface AgendaItem extends ScopedItem {
