@@ -279,6 +279,7 @@ export const weatherWidget: WidgetMicroAppContract = {
 
     return fetchWeatherWidgetData({
       focusLocationId: `location-${settings.focusLocationSlot}`,
+      languageCode: context.languageCode ?? 'en',
       locations: settings.locations.map((location: WeatherLocationSetting) => ({
         id: location.id,
         label: location.label,
@@ -297,5 +298,5 @@ export const weatherWidget: WidgetMicroAppContract = {
 
 export const widgetModule = weatherWidget
 export { normalizeWeatherSettings }
-export { getWeatherWidgetTranslation } from './translations'
+export { getWeatherWidgetTranslation, localizeWeatherCondition } from './translations'
 export type { WeatherWidgetTranslation } from './translations'

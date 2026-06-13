@@ -56,6 +56,8 @@ const formatIsoDate = (value: Date) => {
   return `${year}-${month}-${day}`
 }
 
+const getTodayIsoDate = () => formatIsoDate(new Date())
+
 const parseIsoDate = (value: string) => new Date(`${value}T00:00:00`)
 
 const addDays = (value: Date, dayCount: number) => {
@@ -107,7 +109,7 @@ const buildRangeForView = (mode: CalendarDetailViewMode, anchorDate: string) => 
     }
     case 'week':
     default: {
-      const rangeStartDate = startOfWeek(anchor)
+      const rangeStartDate = anchor
       const rangeEndDate = addDays(rangeStartDate, 6)
 
       return {
@@ -328,7 +330,7 @@ export function CalendarDetailView({
   widgetText: CalendarWidgetTranslation
 }) {
   const [viewMode, setViewMode] = useState<CalendarDetailViewMode>('week')
-  const [anchorDate, setAnchorDate] = useState(() => formatIsoDate(new Date()))
+  const [anchorDate, setAnchorDate] = useState(() => getTodayIsoDate())
   const [rangeEvents, setRangeEvents] = useState<CalendarEventRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -410,6 +412,7 @@ export function CalendarDetailView({
     ? filteredRangeEvents.find((event) => event.id === selectedEventId) ?? null
     : null
   const isSidePanelOpen = Boolean(selectedEvent) || editorMode !== null
+  const usesOverlaySidePanel = isSidePanelOpen && viewMode !== 'week'
 
   const weekdayHeaders = useMemo(() => buildWeekdayHeaders(languageCode), [languageCode])
   const monthMatrix = useMemo(
@@ -1040,17 +1043,24 @@ export function CalendarDetailView({
 
   return (
     <div
-      className={`calendar-detail-view${isSidePanelOpen ? ' calendar-detail-view--with-side-panel' : ''}`}
+      className={`calendar-detail-view${isSidePanelOpen ? ' calendar-detail-view--with-side-panel' : ''}${usesOverlaySidePanel ? ' calendar-detail-view--overlay-panel' : ''}`}
+      style={
+        isSidePanelOpen && !usesOverlaySidePanel
+          ? { gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }
+          : undefined
+      }
     >
       <div className="calendar-detail-main-column">
-        <div className="calendar-detail-shell">
         <div className="calendar-detail-header">
           <div className="calendar-detail-header-copy">
             <div className="calendar-detail-mode-switcher" role="group" aria-label="Calendar view mode">
               <button
                 className={`calendar-detail-mode-button${viewMode === 'week' ? ' is-active' : ''}`}
                 type="button"
-                onClick={() => setViewMode('week')}
+                onClick={() => {
+                  setAnchorDate(getTodayIsoDate())
+                  setViewMode('week')
+                }}
               >
                 {widgetText.detail.weekViewAction}
               </button>
@@ -1103,7 +1113,6 @@ export function CalendarDetailView({
             </button>
           </div>
         </div>
-      </div>
 
         <div className="calendar-detail-main-body">
           {loading ? (
@@ -1121,7 +1130,7 @@ export function CalendarDetailView({
       </div>
 
       {isSidePanelOpen ? (
-        <div className="calendar-detail-side-column">
+        <div className={`calendar-detail-side-column${usesOverlaySidePanel ? ' calendar-detail-side-column--overlay' : ''}`}>
           {submitNotice ? <p className="settings-note">{submitNotice}</p> : null}
           {editorMode ? renderEditorPanel() : renderSelectedEventDetails()}
         </div>

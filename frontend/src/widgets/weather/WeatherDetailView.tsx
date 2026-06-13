@@ -26,6 +26,21 @@ const isWeatherDetailViewData = (
   )
 }
 
+const formatForecastDayLabel = (
+  day: string,
+  languageCode: SupportedLanguageCode,
+) => {
+  const parsedDay = new Date(`${day}T00:00:00`)
+
+  if (Number.isNaN(parsedDay.getTime())) {
+    return day
+  }
+
+  return new Intl.DateTimeFormat(languageCode, {
+    weekday: 'short',
+  }).format(parsedDay)
+}
+
 export function WeatherDetailView({
   data,
   languageCode,
@@ -58,8 +73,6 @@ export function WeatherDetailView({
             </div>
             <div className="weather-copy weather-copy--detail">
               <p className="weather-focus-location-name">{focusLocation.location}</p>
-              <p className="weather-condition">{focusLocation.condition}</p>
-              <p className="weather-range">{focusLocation.rangeSummary}</p>
               <p className="weather-detail-location">
                 {focusLocation.source} · {focusLocation.stale ? widgetText.copy.statusCached : widgetText.copy.statusLive}
               </p>
@@ -79,11 +92,12 @@ export function WeatherDetailView({
             {focusLocation.forecast.map((day) => (
               <div className="forecast-card forecast-card--expanded" key={day.day}>
                 <div className="forecast-copy-stack">
-                  <p className="forecast-day">{day.day}</p>
-                  <p className="forecast-condition">{day.condition}</p>
-                  <p className="forecast-range">
-                    {day.high}° / {day.low}°
-                  </p>
+                  <p className="forecast-day">{formatForecastDayLabel(day.day, languageCode)}</p>
+                  <div className="forecast-range" aria-label={`High ${day.high} degrees, low ${day.low} degrees`}>
+                    <span>{day.high}°</span>
+                    <span className="forecast-range-divider" aria-hidden="true"></span>
+                    <span>{day.low}°</span>
+                  </div>
                 </div>
                 <div className="forecast-icon-wrap">
                   <WeatherIcon state={day.visualState} size="forecast-expanded" />
@@ -106,8 +120,6 @@ export function WeatherDetailView({
                   <div className="weather-location-card-body">
                     <p className="weather-location-temp">{location.currentTemperature}</p>
                     <div className="weather-location-copy">
-                      <p className="weather-condition">{location.condition}</p>
-                      <p className="weather-range">{location.rangeSummary}</p>
                       <p className="weather-updated">
                         {widgetText.copy.updatedPrefix}{' '}
                         {new Intl.DateTimeFormat(languageCode, {

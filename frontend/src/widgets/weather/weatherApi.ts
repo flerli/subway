@@ -3,11 +3,13 @@ import type {
   WeatherLocationData,
   WeatherWidgetData,
 } from '../widgetHostModels'
+import type { SupportedLanguageCode } from '../../i18n/localization'
 import { fetchApi, isAuthRequiredError } from '../../api/request'
-import { getWeatherWidgetTranslation } from './translations'
+import {
+  getWeatherWidgetTranslation,
+  localizeWeatherCondition,
+} from './translations'
 import { deriveWeatherVisualState } from './weatherVisualState'
-
-const defaultWeatherWidgetTranslation = getWeatherWidgetTranslation('en')
 
 interface WeatherLocationQueryOptions {
   id: string
@@ -19,40 +21,33 @@ interface WeatherLocationQueryOptions {
 interface WeatherWidgetQueryOptions {
   focusLocationId: string
   locations: WeatherLocationQueryOptions[]
+  languageCode: SupportedLanguageCode
 }
 
-const fallbackForecastDays: ForecastDay[] = [
-  {
-    day: 'MON',
-    high: 0,
-    low: 0,
-    condition: 'Unavailable',
-    visualState: 'fallback',
-  },
-  {
-    day: 'TUE',
-    high: 0,
-    low: 0,
-    condition: 'Unavailable',
-    visualState: 'fallback',
-  },
-  {
-    day: 'WED',
-    high: 0,
-    low: 0,
-    condition: 'Unavailable',
-    visualState: 'fallback',
-  },
-  {
-    day: 'THU',
-    high: 0,
-    low: 0,
-    condition: 'Unavailable',
-    visualState: 'fallback',
-  },
-]
+const buildFallbackForecastDays = (
+  languageCode: SupportedLanguageCode,
+): ForecastDay[] => {
+  const baseDate = new Date()
+  const widgetText = getWeatherWidgetTranslation(languageCode)
 
-const normalizeForecastDay = (value: unknown): ForecastDay | null => {
+  return Array.from({ length: 8 }, (_, index) => {
+    const nextDate = new Date(baseDate)
+    nextDate.setDate(nextDate.getDate() + index)
+
+    return {
+      day: nextDate.toISOString().slice(0, 10),
+      high: 0,
+      low: 0,
+      condition: widgetText.copy.unavailableCondition,
+      visualState: 'fallback' as const,
+    }
+  })
+}
+
+const normalizeForecastDay = (
+  value: unknown,
+  languageCode: SupportedLanguageCode,
+): ForecastDay | null => {
   const candidate = value as {
     day?: unknown
     high?: unknown
@@ -71,18 +66,21 @@ const normalizeForecastDay = (value: unknown): ForecastDay | null => {
     return null
   }
 
+  const canonicalCondition = candidate.condition.trim()
+
   return {
     day: candidate.day,
     high: candidate.high,
     low: candidate.low,
-    condition: candidate.condition,
-    visualState: deriveWeatherVisualState(candidate.condition),
+    condition: localizeWeatherCondition(canonicalCondition, languageCode),
+    visualState: deriveWeatherVisualState(canonicalCondition),
   }
 }
 
 const normalizeWeatherLocationData = (
   value: unknown,
   id: string,
+  languageCode: SupportedLanguageCode,
 ): WeatherLocationData | null => {
   const candidate = value as {
     location?: unknown
@@ -110,6 +108,8 @@ const normalizeWeatherLocationData = (
     return null
   }
 
+  const canonicalCondition = candidate.condition.trim()
+
   return {
     id,
     location: candidate.location,
@@ -117,16 +117,19 @@ const normalizeWeatherLocationData = (
     stale: candidate.stale,
     updatedAt: candidate.updatedAt,
     currentTemperature: candidate.currentTemperature,
-    condition: candidate.condition,
-    visualState: deriveWeatherVisualState(candidate.condition),
+    condition: localizeWeatherCondition(canonicalCondition, languageCode),
+    visualState: deriveWeatherVisualState(canonicalCondition),
     rangeSummary: candidate.rangeSummary,
     forecast: candidate.forecast
-      .map(normalizeForecastDay)
+      .map((forecastDay) => normalizeForecastDay(forecastDay, languageCode))
       .filter((forecastDay): forecastDay is ForecastDay => Boolean(forecastDay)),
   }
 }
 
-const fetchWeatherLocationData = async (options: WeatherLocationQueryOptions) => {
+const fetchWeatherLocationData = async (
+  options: WeatherLocationQueryOptions,
+  languageCode: SupportedLanguageCode,
+) => {
   const query = new URLSearchParams({
     locationLabel: options.label,
     latitude: options.latitude.toString(),
@@ -140,7 +143,7 @@ const fetchWeatherLocationData = async (options: WeatherLocationQueryOptions) =>
   }
 
   const payload = (await response.json()) as { weather?: unknown }
-  const weather = normalizeWeatherLocationData(payload.weather, options.id)
+  const weather = normalizeWeatherLocationData(payload.weather, options.id, languageCode)
 
   if (!weather) {
     throw new Error('Backend returned an invalid weather payload.')
@@ -151,13 +154,16 @@ const fetchWeatherLocationData = async (options: WeatherLocationQueryOptions) =>
 
 const fetchWeatherLocationDataWithFallback = async (
   options: WeatherLocationQueryOptions,
+  languageCode: SupportedLanguageCode,
 ) => {
   try {
-    return await fetchWeatherLocationData(options)
+    return await fetchWeatherLocationData(options, languageCode)
   } catch (error) {
     if (isAuthRequiredError(error)) {
       throw error
     }
+
+    const widgetText = getWeatherWidgetTranslation(languageCode)
 
     return {
       id: options.id,
@@ -166,10 +172,10 @@ const fetchWeatherLocationDataWithFallback = async (
       stale: true,
       updatedAt: new Date(0).toISOString(),
       currentTemperature: '--°',
-      condition: defaultWeatherWidgetTranslation.copy.unavailableCondition,
+      condition: widgetText.copy.unavailableCondition,
       visualState: 'fallback' as const,
-      rangeSummary: defaultWeatherWidgetTranslation.copy.noLiveDataSummary,
-      forecast: fallbackForecastDays,
+      rangeSummary: widgetText.copy.noLiveDataSummary,
+      forecast: buildFallbackForecastDays(languageCode),
     } satisfies WeatherLocationData
   }
 }
@@ -178,7 +184,9 @@ export const fetchWeatherWidgetData = async (
   options: WeatherWidgetQueryOptions,
 ) => {
   const locations = await Promise.all(
-    options.locations.map((location) => fetchWeatherLocationDataWithFallback(location)),
+    options.locations.map((location) =>
+      fetchWeatherLocationDataWithFallback(location, options.languageCode),
+    ),
   )
 
   const focusLocation =

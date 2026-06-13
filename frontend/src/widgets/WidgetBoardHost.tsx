@@ -85,6 +85,21 @@ const renderEmptyState = (title: string, copy: string, className?: string) => (
 const hasMetaContent = (meta: ReactNode) =>
   meta !== null && meta !== undefined && meta !== false && meta !== ''
 
+const formatForecastDayLabel = (
+  day: string,
+  languageCode: SupportedLanguageCode,
+) => {
+  const parsedDay = new Date(`${day}T00:00:00`)
+
+  if (Number.isNaN(parsedDay.getTime())) {
+    return day
+  }
+
+  return new Intl.DateTimeFormat(languageCode, {
+    weekday: 'short',
+  }).format(parsedDay)
+}
+
 export function WidgetBoardHost({
   appText,
   languageCode,
@@ -359,8 +374,6 @@ export function WidgetBoardHost({
                   <p className="weather-temp">{weatherData.currentTemperature}</p>
                 </div>
                 <div className="weather-copy">
-                  <p className="weather-condition">{weatherData.condition}</p>
-                  <p className="weather-range">{weatherData.rangeSummary}</p>
                   <p className="weather-note">{commuteNote}</p>
                   <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
                   <p className="weather-updated">
@@ -380,11 +393,12 @@ export function WidgetBoardHost({
                     key={day.day}
                   >
                     <div className="forecast-copy-stack">
-                      <p className="forecast-day">{day.day}</p>
-                      <p className="forecast-condition">{day.condition}</p>
-                      <p className="forecast-range">
-                        {day.high}° / {day.low}°
-                      </p>
+                      <p className="forecast-day">{formatForecastDayLabel(day.day, languageCode)}</p>
+                      <div className="forecast-range" aria-label={`High ${day.high} degrees, low ${day.low} degrees`}>
+                        <span>{day.high}°</span>
+                        <span className="forecast-range-divider" aria-hidden="true"></span>
+                        <span>{day.low}°</span>
+                      </div>
                     </div>
                     <div className="forecast-icon-wrap">
                       <WeatherIcon

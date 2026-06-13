@@ -59,6 +59,7 @@ import {
 } from './widgets/todo'
 import {
   getWeatherWidgetTranslation,
+  localizeWeatherCondition,
   normalizeWeatherSettings,
   type WeatherWidgetTranslation,
 } from './widgets/weather'
@@ -131,6 +132,7 @@ const resolveLoginErrorKey = (error: unknown): AppTextMessageKey => {
 
 interface AppShellPersistedState {
   activeFilter: FilterId
+  expandedWidgetId: string | null
 }
 
 const arrivals: Arrival[] = [
@@ -225,15 +227,33 @@ const newsItems: NewsItem[] = [
   },
 ]
 
-const fallbackWeatherForecast: ForecastDay[] = [
-  { day: 'MON', high: 74, low: 61, condition: 'Partly cloudy', visualState: 'cloudy' },
-  { day: 'TUE', high: 72, low: 60, condition: 'Light rain', visualState: 'rain' },
-  { day: 'WED', high: 76, low: 63, condition: 'Bright sun', visualState: 'sun' },
-  { day: 'THU', high: 70, low: 58, condition: 'Windy PM', visualState: 'wind' },
-]
+const buildFallbackForecastDays = (
+  languageCode: SupportedLanguageCode,
+): ForecastDay[] => {
+  const baseDate = new Date()
+  const fallbackConditions = [
+    { condition: 'Partly cloudy', visualState: 'cloudy' as const, high: 74, low: 61 },
+    { condition: 'Light rain', visualState: 'rain' as const, high: 72, low: 60 },
+    { condition: 'Bright sun', visualState: 'sun' as const, high: 76, low: 63 },
+    { condition: 'Windy PM', visualState: 'wind' as const, high: 70, low: 58 },
+    { condition: 'Partly cloudy', visualState: 'cloudy' as const, high: 71, low: 57 },
+    { condition: 'Light rain', visualState: 'rain' as const, high: 69, low: 55 },
+    { condition: 'Bright sun', visualState: 'sun' as const, high: 75, low: 59 },
+    { condition: 'Partly cloudy', visualState: 'cloudy' as const, high: 73, low: 56 },
+  ]
+
+  return fallbackConditions.map((forecast, index) => ({
+    day: formatLocalIsoDate(addLocalDays(baseDate, index)),
+    high: forecast.high,
+    low: forecast.low,
+    condition: localizeWeatherCondition(forecast.condition, languageCode),
+    visualState: forecast.visualState,
+  }))
+}
 
 const buildFallbackWeatherData = (
   weatherWidgetText: WeatherWidgetTranslation,
+  languageCode: SupportedLanguageCode,
 ): WeatherWidgetData => {
   const fallbackWeatherLocation: WeatherLocationData = {
     id: 'location-1',
@@ -245,7 +265,7 @@ const buildFallbackWeatherData = (
     condition: weatherWidgetText.copy.unavailableCondition,
     visualState: 'fallback',
     rangeSummary: weatherWidgetText.copy.noLiveDataSummary,
-    forecast: fallbackWeatherForecast,
+    forecast: buildFallbackForecastDays(languageCode),
   }
 
   return {
@@ -257,6 +277,7 @@ const buildFallbackWeatherData = (
 
 const defaultFallbackWeatherData = buildFallbackWeatherData(
   getWeatherWidgetTranslation(DEFAULT_LANGUAGE_CODE),
+  DEFAULT_LANGUAGE_CODE,
 )
 
 const commuteNotes: Record<string, string> = {
@@ -299,6 +320,7 @@ const normalizeAppShellPersistedState = (
 ): AppShellPersistedState => {
   const candidate = value as {
     activeFilter?: unknown
+    expandedWidgetId?: unknown
   }
 
   return {
@@ -306,24 +328,29 @@ const normalizeAppShellPersistedState = (
       typeof candidate?.activeFilter === 'string' && candidate.activeFilter.trim().length > 0
         ? candidate.activeFilter
         : ALL_FILTER_ID,
+    expandedWidgetId:
+      typeof candidate?.expandedWidgetId === 'string' &&
+      candidate.expandedWidgetId.trim().length > 0
+        ? candidate.expandedWidgetId
+        : null,
   }
 }
 
 const readLocalAppShellState = (userId: string): AppShellPersistedState => {
   if (typeof window === 'undefined') {
-    return { activeFilter: ALL_FILTER_ID }
+    return { activeFilter: ALL_FILTER_ID, expandedWidgetId: null }
   }
 
   try {
     const storedValue = window.localStorage.getItem(getLocalAppShellStorageKey(userId))
 
     if (!storedValue) {
-      return { activeFilter: ALL_FILTER_ID }
+      return { activeFilter: ALL_FILTER_ID, expandedWidgetId: null }
     }
 
     return normalizeAppShellPersistedState(JSON.parse(storedValue))
   } catch {
-    return { activeFilter: ALL_FILTER_ID }
+    return { activeFilter: ALL_FILTER_ID, expandedWidgetId: null }
   }
 }
 
@@ -428,7 +455,10 @@ function App() {
   const calendarWidgetText = getCalendarWidgetTranslation(selectedLanguageCode)
   const weatherWidgetText = getWeatherWidgetTranslation(selectedLanguageCode)
   const emptyAgendaItem = buildEmptyAgendaItem(calendarWidgetText)
-  const fallbackWeatherData = buildFallbackWeatherData(weatherWidgetText)
+  const fallbackWeatherData = buildFallbackWeatherData(
+    weatherWidgetText,
+    selectedLanguageCode,
+  )
   const normalizedCountryCodeDraft = countryCodeDraft.trim().toUpperCase()
   const isCountryCodeDraftValid = /^[A-Z]{2}$/.test(normalizedCountryCodeDraft)
   const appPreferencesError =
@@ -620,6 +650,7 @@ function App() {
     const localAppShellState = readLocalAppShellState(authenticatedUser.id)
 
     setActiveFilter(localAppShellState.activeFilter)
+    setExpandedWidgetId(localAppShellState.expandedWidgetId)
     setAppShellStateHydrated(true)
   }, [authStatus, authenticatedUser, appShellStateHydrated])
 
@@ -630,8 +661,15 @@ function App() {
 
     persistLocalAppShellState(authenticatedUser.id, {
       activeFilter,
+      expandedWidgetId,
     })
-  }, [activeFilter, appShellStateHydrated, authStatus, authenticatedUser])
+  }, [
+    activeFilter,
+    expandedWidgetId,
+    appShellStateHydrated,
+    authStatus,
+    authenticatedUser,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -819,6 +857,7 @@ function App() {
     Promise.resolve(
       weatherWidget.module.loadData({
         focusedMemberId: null,
+        languageCode: selectedLanguageCode,
         settings: weatherSettings,
       }),
     )
@@ -865,7 +904,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authStatus, registeredWidgets, widgetSettingsMap, weatherRefreshToken])
+  }, [authStatus, registeredWidgets, selectedLanguageCode, widgetSettingsMap, weatherRefreshToken])
 
   useEffect(() => {
     if (nextWeatherRefreshAt === null) {

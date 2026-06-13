@@ -41,6 +41,7 @@ export interface WidgetEntityRecord {
 export interface WidgetLoadContext {
   focusedMemberId?: string | null
   settings?: WidgetSettingsValues
+  languageCode?: SupportedLanguageCode
 }
 
 export interface WidgetMutationContext {

@@ -6,7 +6,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -14,13 +14,14 @@ import { DatabaseSync } from 'node:sqlite'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDirectory = join(__dirname, 'data')
 const databasePath = join(dataDirectory, 'subway.sqlite')
+const calendarSeedEventsPath = join(__dirname, 'calendarSeedEvents.json')
 const HOST = process.env.HOST ?? '0.0.0.0'
 const PORT = Number.parseInt(process.env.PORT ?? '8787', 10)
 const WEATHER_LATITUDE = Number.parseFloat(process.env.WEATHER_LATITUDE ?? '52.52')
 const WEATHER_LONGITUDE = Number.parseFloat(process.env.WEATHER_LONGITUDE ?? '13.405')
 const WEATHER_LOCATION = process.env.WEATHER_LOCATION ?? 'Berlin'
 const WEATHER_TIMEZONE = process.env.WEATHER_TIMEZONE ?? 'auto'
-const WEATHER_FORECAST_DAYS = 4
+const WEATHER_FORECAST_DAYS = 8
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000
 const INITIAL_USER_ID = process.env.INITIAL_USER_ID ?? 'user-flerlage'
 const INITIAL_USER_USERNAME = process.env.INITIAL_USER_USERNAME ?? 'flerlage'
@@ -939,73 +940,17 @@ const allowedWidgetSourceLocations = new Set(
 
 const allowedWidgetIds = new Set(seedWidgets.map((widget) => widget.id))
 
-const seedCalendarEvents = [
-  {
-    id: 'calendar-household-sync',
-    date: todayIsoDate,
-    timeLabel: '06:45',
-    title: 'Morning status sync',
-    locationCity: 'Berlin',
-    locationCountry: 'DE',
-    note: 'Shared display refresh, weather pull, and door lock review.',
-    memberIds: [LEGACY_HOUSEHOLD_MEMBER_ID],
-    recurrence: {
-      frequency: 'daily',
-      interval: 1,
-      count: 7,
-    },
-  },
-  {
-    id: 'calendar-alex-breakfast',
-    date: todayIsoDate,
-    timeLabel: '07:30',
-    title: 'Breakfast transfer window',
-    locationCity: 'Berlin',
-    locationCountry: 'DE',
-    note: 'School bags staged and departure lane opens in 20 min.',
-    memberIds: ['family-1'],
-    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
-  },
-  {
-    id: 'calendar-bianca-studio',
-    date: addDaysToIsoDate(todayIsoDate, 1),
-    timeLabel: '09:15',
-    title: 'Studio work block',
-    locationCity: 'Paris',
-    locationCountry: 'FR',
-    note: 'Editing queue, exports, and video call setup.',
-    memberIds: ['family-2'],
-    recurrence: {
-      frequency: 'weekly',
-      interval: 1,
-      byWeekdays: [parseIsoDate(addDaysToIsoDate(todayIsoDate, 1))?.date.getUTCDay() ?? 0],
-      count: 6,
-      until: null,
-    },
-  },
-  {
-    id: 'calendar-chris-package',
-    date: addDaysToIsoDate(todayIsoDate, 2),
-    timeLabel: '14:30',
-    title: 'Package pickup window',
-    locationCity: 'Zurich',
-    locationCountry: 'CH',
-    note: 'Replacement smart sensor reaches the building today.',
-    memberIds: ['family-3'],
-    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
-  },
-  {
-    id: 'calendar-dana-dinner',
-    date: addDaysToIsoDate(todayIsoDate, 3),
-    timeLabel: '18:45',
-    title: 'Dinner arrival',
-    locationCity: 'Hamburg',
-    locationCountry: 'DE',
-    note: 'Table reset and final prep before guests land.',
-    memberIds: ['family-4'],
-    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
-  },
-]
+const LEGACY_MOCK_CALENDAR_EVENT_IDS = new Set([
+  'calendar-household-sync',
+  'calendar-alex-breakfast',
+  'calendar-bianca-studio',
+  'calendar-chris-package',
+  'calendar-dana-dinner',
+])
+
+const seedCalendarEvents = JSON.parse(
+  readFileSync(calendarSeedEventsPath, 'utf8'),
+)
 
 const seedTodoItems = [
   {
@@ -1664,12 +1609,7 @@ const buildWeatherApiUrl = (latitude, longitude) => {
 const buildWeatherPayload = (apiPayload, locationLabel) => {
   const forecast = Array.isArray(apiPayload.daily?.time)
     ? apiPayload.daily.time.map((day, index) => ({
-        day: new Intl.DateTimeFormat('en-US', {
-          weekday: 'short',
-          timeZone: WEATHER_TIMEZONE === 'auto' ? undefined : WEATHER_TIMEZONE,
-        })
-          .format(new Date(day))
-          .toUpperCase(),
+        day,
         high: Math.round(apiPayload.daily.temperature_2m_max?.[index] ?? 0),
         low: Math.round(apiPayload.daily.temperature_2m_min?.[index] ?? 0),
         condition: formatWeatherCondition(apiPayload.daily.weather_code?.[index] ?? -1),
@@ -1951,6 +1891,65 @@ const widgetSeedCount = getWidgetCount(defaultAppUserId)
 const calendarEventSeedCount = getCalendarEventCount(defaultAppUserId)
 const todoItemSeedCount = getTodoItemCount(defaultAppUserId)
 
+const migrateLegacyMockCalendarEvents = (ownerUserId) => {
+  const existingCalendarEventRows = db
+    .prepare(`
+      SELECT id
+      FROM calendar_events
+      WHERE owner_user_id = ?
+      ORDER BY event_date ASC, time_label ASC, id ASC
+    `)
+    .all(ownerUserId)
+
+  const legacyMockIds = existingCalendarEventRows
+    .map((row) => row.id)
+    .filter((calendarEventId) => LEGACY_MOCK_CALENDAR_EVENT_IDS.has(calendarEventId))
+
+  if (legacyMockIds.length === 0) {
+    return
+  }
+
+  const hasRealSeedEvents = existingCalendarEventRows.some((row) =>
+    row.id.startsWith('calendar-real-'),
+  )
+
+  if (hasRealSeedEvents) {
+    db.exec('BEGIN')
+
+    try {
+      for (const legacyMockId of legacyMockIds) {
+        deleteCalendarEventById(ownerUserId, legacyMockId)
+      }
+
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+
+    return
+  }
+
+  const now = new Date().toISOString()
+
+  db.exec('BEGIN')
+
+  try {
+    for (const legacyMockId of legacyMockIds) {
+      deleteCalendarEventById(ownerUserId, legacyMockId)
+    }
+
+    for (const calendarEvent of seedCalendarEvents) {
+      insertCalendarEvent(ownerUserId, calendarEvent, now, now)
+    }
+
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 if (seedCount === 0) {
   const now = new Date().toISOString()
 
@@ -1968,6 +1967,8 @@ if (widgetSeedCount === 0) {
 }
 
 deleteUnsupportedWidgets()
+
+migrateLegacyMockCalendarEvents(defaultAppUserId)
 
 if (calendarEventSeedCount === 0) {
   const now = new Date().toISOString()
