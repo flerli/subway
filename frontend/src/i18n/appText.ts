@@ -667,7 +667,6 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       authVerifySessionFailed:
         'Impossible de verifier la session en cours. Veuillez vous reconnecter.',
       authCredentialsRequired: 'Le nom d utilisateur et le mot de passe sont requis.',
-      performanceTitle: 'Rendimiento',
       authInvalidCredentials: 'Nom d utilisateur ou mot de passe invalide.',
       authSignInFailed: 'Impossible de se connecter au backend.',
       authSignOutFailed: 'Impossible de se deconnecter du backend. Reessayez.',
@@ -678,12 +677,6 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       widgetMetadataUnavailable:
         'Les metadonnees des widgets du backend sont indisponibles. Le contenu du tableau peut rester incomplet jusqu au retour de la connexion.',
       weatherLoadFailed:
-      lastInteractionLabel: 'Ultima interaccion',
-      interactionDurationLabel: 'Clic hasta pintar',
-      interactionMeasuredAtLabel: 'Medido a las',
-      longTaskCountLabel: 'Tareas largas',
-      longestLongTaskLabel: 'Tarea larga mas larga',
-      lastLongTaskLabel: 'Ultima tarea larga',
         'Impossible de charger les donnees meteo live depuis le chemin meteo du backend.',
       calendarLoadFailed:
         'Impossible de charger les evenements du calendrier depuis le chemin calendrier du backend.',
@@ -822,6 +815,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       title: 'Diagnostico de widgets',
       copy: 'Overlay oculto para revisar fuente, alcance, estado de refresco y fallos.',
       closeAction: 'Cerrar',
+      performanceTitle: 'Rendimiento',
       sourceLabel: 'Fuente',
       scopeLabel: 'Alcance',
       visibleNowLabel: 'Visible ahora',
@@ -832,6 +826,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastRefreshLabel: 'Ultima actualizacion',
       itemsLabel: 'Elementos',
       failureLabel: 'Fallo',
+      lastInteractionLabel: 'Ultima interaccion',
+      interactionDurationLabel: 'Clic hasta pintar',
+      interactionMeasuredAtLabel: 'Medido a las',
+      longTaskCountLabel: 'Tareas largas',
+      longestLongTaskLabel: 'Tarea larga mas larga',
+      lastLongTaskLabel: 'Ultima tarea larga',
       notAvailableValue: 'n/d',
       noneValue: 'ninguno',
       allMembersScope: 'Todos los miembros',
