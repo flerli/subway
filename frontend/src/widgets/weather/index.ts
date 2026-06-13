@@ -2,6 +2,12 @@ import { createElement } from 'react'
 import { fetchWeatherWidgetData } from './weatherApi'
 import { WeatherDetailView } from './WeatherDetailView'
 import type { WidgetMicroAppContract } from '../widgetTypes'
+import {
+  getWeatherWidgetTranslation,
+  matchesWeatherWidgetTitle,
+} from './translations'
+
+const defaultWeatherWidgetTranslation = getWeatherWidgetTranslation('en')
 
 const WEATHER_LOCATION_SLOT_COUNT = 5
 const DEFAULT_FOCUS_LOCATION_SLOT = 1
@@ -200,14 +206,20 @@ export const weatherWidget: WidgetMicroAppContract = {
   dataSource: 'external-api',
   capabilities: ['read'],
   hasSettingsPanel: true,
+  getTranslation: getWeatherWidgetTranslation,
+  matchesDefaultTitle: matchesWeatherWidgetTitle,
   settingsDefinition: {
-    title: 'Weather widget settings',
-    description: 'Configure up to five weather locations and choose the compact focus location.',
+    title: defaultWeatherWidgetTranslation.settings?.title ?? 'Weather widget settings',
+    description:
+      defaultWeatherWidgetTranslation.settings?.description ??
+      'Configure up to five weather locations and choose the compact focus location.',
     defaults: normalizeWeatherSettings({}),
     fields: [
       {
         key: 'focusLocationSlot',
-        label: 'Focus location slot',
+        label:
+          defaultWeatherWidgetTranslation.settings?.fields.focusLocationSlot.label ??
+          'Focus location slot',
         type: 'number',
         min: 1,
         max: WEATHER_LOCATION_SLOT_COUNT,
@@ -215,7 +227,9 @@ export const weatherWidget: WidgetMicroAppContract = {
       },
       {
         key: 'refreshIntervalMinutes',
-        label: 'Refresh interval minutes',
+        label:
+          defaultWeatherWidgetTranslation.settings?.fields.refreshIntervalMinutes.label ??
+          'Refresh interval minutes',
         type: 'number',
         min: 1,
         max: 120,
@@ -224,13 +238,22 @@ export const weatherWidget: WidgetMicroAppContract = {
       ...Array.from({ length: WEATHER_LOCATION_SLOT_COUNT }, (_, index) => [
         {
           key: `location${index + 1}Label`,
-          label: `Location ${index + 1} label`,
+          label:
+            defaultWeatherWidgetTranslation.settings?.fields[
+              `location${index + 1}Label`
+            ]?.label ?? `Location ${index + 1} label`,
           type: 'text' as const,
-          placeholder: index === 0 ? 'Berlin' : `Location ${index + 1}`,
+          placeholder:
+            defaultWeatherWidgetTranslation.settings?.fields[
+              `location${index + 1}Label`
+            ]?.placeholder ?? (index === 0 ? 'Berlin' : `Location ${index + 1}`),
         },
         {
           key: `location${index + 1}Latitude`,
-          label: `Location ${index + 1} latitude`,
+          label:
+            defaultWeatherWidgetTranslation.settings?.fields[
+              `location${index + 1}Latitude`
+            ]?.label ?? `Location ${index + 1} latitude`,
           type: 'number' as const,
           min: -90,
           max: 90,
@@ -238,7 +261,10 @@ export const weatherWidget: WidgetMicroAppContract = {
         },
         {
           key: `location${index + 1}Longitude`,
-          label: `Location ${index + 1} longitude`,
+          label:
+            defaultWeatherWidgetTranslation.settings?.fields[
+              `location${index + 1}Longitude`
+            ]?.label ?? `Location ${index + 1} longitude`,
           type: 'number' as const,
           min: -180,
           max: 180,
@@ -261,8 +287,15 @@ export const weatherWidget: WidgetMicroAppContract = {
       })),
     })
   },
-  renderDetailView: ({ data }) => createElement(WeatherDetailView, { data }),
+  renderDetailView: ({ data, languageCode }) =>
+    createElement(WeatherDetailView, {
+      data,
+      languageCode,
+      widgetText: getWeatherWidgetTranslation(languageCode),
+    }),
 }
 
 export const widgetModule = weatherWidget
 export { normalizeWeatherSettings }
+export { getWeatherWidgetTranslation } from './translations'
+export type { WeatherWidgetTranslation } from './translations'

@@ -31,10 +31,13 @@ export interface Arrival extends ScopedItem {
 }
 
 export interface AgendaItem extends ScopedItem {
+  date: string
   time: string
   title: string
   location: string
+  locationCountry: string
   note: string
+  isForeign: boolean
 }
 
 export interface TodoItem extends ScopedItem {

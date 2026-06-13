@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import type { AppTextBundle } from '../i18n/appText'
+import {
+  formatLocalizedText,
+  type SupportedLanguageCode,
+} from '../i18n/localization'
 import { buildBadgeStyle } from './widgetAppearance'
 import type { FamilyMember } from './widgetHostModels'
 import {
@@ -10,6 +15,10 @@ import type {
   WidgetScopeMode,
   WidgetSettingsValues,
 } from './widgetTypes'
+import {
+  getLocalizedSettingsDefinition,
+  resolveWidgetTitle,
+} from './widgetLocalization'
 
 export interface WidgetMetadataDraft {
   title: string
@@ -26,6 +35,8 @@ export interface WidgetMetadataDraft {
 }
 
 interface WidgetMetadataAdminHostProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   registeredWidgets: RegisteredWidget[]
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
@@ -54,14 +65,16 @@ type SyncState = 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
 const getMemberBadgeText = (member: FamilyMember) =>
   member.firstName.trim().charAt(0).toUpperCase() || '?'
 
-const buildOrderedSpecificFields = (widget: RegisteredWidget) => {
-  const settingsDefinition = widget.module.settingsDefinition
+const buildOrderedSpecificFields = (
+  widgetId: string,
+  settingsDefinition: RegisteredWidget['module']['settingsDefinition'],
+) => {
 
   if (!settingsDefinition) {
     return []
   }
 
-  if (widget.entity.id !== 'weather') {
+  if (widgetId !== 'weather') {
     return settingsDefinition.fields
   }
 
@@ -102,9 +115,9 @@ const buildOrderedSpecificFields = (widget: RegisteredWidget) => {
   return orderedFields
 }
 
-const buildSpecificFieldsByKey = (widget: RegisteredWidget) => {
-  const settingsDefinition = widget.module.settingsDefinition
-
+const buildSpecificFieldsByKey = (
+  settingsDefinition: RegisteredWidget['module']['settingsDefinition'],
+) => {
   return new Map(settingsDefinition?.fields.map((field) => [field.key, field]) ?? [])
 }
 
@@ -152,6 +165,8 @@ const buildDraftFromWidget = (widget: RegisteredWidget): WidgetMetadataDraft => 
 
 function WidgetMetadataCard({
   widget,
+  appText,
+  languageCode,
   familyMembers,
   availableSourceLocations,
   widgetSettings,
@@ -159,6 +174,8 @@ function WidgetMetadataCard({
   onSaveSettings,
 }: {
   widget: RegisteredWidget
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
   widgetSettings: WidgetSettingsValues | undefined
@@ -185,8 +202,15 @@ function WidgetMetadataCard({
   )
 
   const settingsDefinition = widget.module.settingsDefinition
-  const orderedSpecificFields = buildOrderedSpecificFields(widget)
-  const specificFieldsByKey = buildSpecificFieldsByKey(widget)
+  const localizedSettingsDefinition = getLocalizedSettingsDefinition(
+    widget.module,
+    languageCode,
+  )
+  const orderedSpecificFields = buildOrderedSpecificFields(
+    widget.entity.id,
+    localizedSettingsDefinition,
+  )
+  const specificFieldsByKey = buildSpecificFieldsByKey(localizedSettingsDefinition)
 
   const isAllScope = draft.userScopeMode === 'all'
 
@@ -358,14 +382,14 @@ function WidgetMetadataCard({
 
   const syncStateLabel =
     syncState === 'pending'
-      ? 'Pending sync'
+      ? appText.widgetAdmin.pendingSync
       : syncState === 'syncing'
-        ? 'Syncing...'
+        ? appText.widgetAdmin.syncing
         : syncState === 'synced'
-          ? 'Synced'
+          ? appText.widgetAdmin.synced
           : syncState === 'error'
-            ? 'Sync failed'
-            : 'Idle'
+            ? appText.widgetAdmin.syncFailed
+            : appText.widgetAdmin.idle
 
 
   const renderSpecificField = (
@@ -434,7 +458,7 @@ function WidgetMetadataCard({
             {widget.entity.subwayLetter}
           </span>
           <div>
-            <h3>{widget.entity.title}</h3>
+            <h3>{resolveWidgetTitle(widget, languageCode)}</h3>
           </div>
         </div>
 
@@ -483,7 +507,7 @@ function WidgetMetadataCard({
         <div className="widget-config-section widget-config-section--standard">
           <div className="widget-config-fields widget-config-fields--meta">
             <label className="settings-label">
-              <span>Title</span>
+              <span>{appText.widgetAdmin.titleLabel}</span>
               <input
                 className="settings-input"
                 type="text"
@@ -498,7 +522,7 @@ function WidgetMetadataCard({
             </label>
 
             <label className="settings-label">
-              <span>Letter</span>
+              <span>{appText.widgetAdmin.letterLabel}</span>
               <input
                 className="settings-input"
                 type="text"
@@ -514,7 +538,7 @@ function WidgetMetadataCard({
             </label>
 
             <label className="settings-label settings-label--color">
-              <span>Color</span>
+              <span>{appText.widgetAdmin.colorLabel}</span>
               <input
                 className="settings-color"
                 type="color"
@@ -529,7 +553,7 @@ function WidgetMetadataCard({
             </label>
 
             <label className="settings-label">
-              <span>Source</span>
+              <span>{appText.widgetAdmin.sourceLabel}</span>
               <select
                 className="settings-input settings-select"
                 value={draft.sourceLocation}
@@ -551,7 +575,7 @@ function WidgetMetadataCard({
         </div>
 
         <div className="widget-config-section widget-config-section--scope">
-          <p className="widget-kicker">Scope</p>
+          <p className="widget-kicker">{appText.widgetAdmin.scopeHeading}</p>
           <div className="settings-chip-row">
             <button
               type="button"
@@ -559,10 +583,10 @@ function WidgetMetadataCard({
                 isAllScope ? ' is-active' : ''
               }`}
               aria-pressed={isAllScope}
-              aria-label="All members scope"
+              aria-label={appText.widgetAdmin.allScopeAriaLabel}
               onClick={toggleAllScope}
             >
-              All
+              {appText.widgetAdmin.allScopeAction}
             </button>
 
             {familyMembers.map((member) => {
@@ -589,7 +613,7 @@ function WidgetMetadataCard({
         </div>
 
         <div className="widget-config-section widget-config-section--layout">
-          <p className="widget-kicker">Cells</p>
+          <p className="widget-kicker">{appText.widgetAdmin.cellsHeading}</p>
           <div className="settings-cell-layout">
             {draft.placementZones.map((placement) => (
               <button
@@ -598,7 +622,12 @@ function WidgetMetadataCard({
                 className={`settings-cell-chip settings-cell-chip--${placement.zoneId}${placement.enabled ? ' is-active' : ''}`}
                 data-zone-id={placement.zoneId}
                 aria-pressed={placement.enabled}
-                aria-label={`Toggle ${zoneBadgeLabels[placement.zoneId]}`}
+                aria-label={formatLocalizedText(
+                  appText.widgetAdmin.toggleCellAriaLabel,
+                  {
+                    zoneLabel: zoneBadgeLabels[placement.zoneId],
+                  },
+                )}
                 onClick={() => togglePlacement(placement.zoneId)}
               >
                 {zoneBadgeLabels[placement.zoneId]}
@@ -612,6 +641,8 @@ function WidgetMetadataCard({
 }
 
 export function WidgetMetadataAdminHost({
+  appText,
+  languageCode,
   registeredWidgets,
   familyMembers,
   availableSourceLocations,
@@ -625,6 +656,8 @@ export function WidgetMetadataAdminHost({
         <WidgetMetadataCard
           key={widget.entity.id}
           widget={widget}
+          appText={appText}
+          languageCode={languageCode}
           familyMembers={familyMembers}
           availableSourceLocations={availableSourceLocations}
           widgetSettings={widgetSettingsMap[widget.entity.id]}

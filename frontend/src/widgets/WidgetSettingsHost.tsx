@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { AppTextBundle } from '../i18n/appText'
+import type { SupportedLanguageCode } from '../i18n/localization'
 import type { RegisteredWidget, WidgetSettingsValues } from './widgetTypes'
+import {
+  getLocalizedSettingsDefinition,
+  getWidgetBoardKicker,
+} from './widgetLocalization'
 
 interface WidgetSettingsHostProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   registeredWidgets: RegisteredWidget[]
   widgetSettingsMap: Record<string, WidgetSettingsValues>
   onSaveWidgetSettings: (
@@ -11,12 +19,16 @@ interface WidgetSettingsHostProps {
 }
 
 interface WidgetSettingsCardProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   widget: RegisteredWidget
   initialSettings: WidgetSettingsValues
   onSave: (widgetId: string, settings: WidgetSettingsValues) => Promise<void>
 }
 
 function WidgetSettingsCard({
+  appText,
+  languageCode,
   widget,
   initialSettings,
   onSave,
@@ -28,7 +40,7 @@ function WidgetSettingsCard({
     setDraftSettings(initialSettings)
   }, [initialSettings])
 
-  const settingsDefinition = widget.module.settingsDefinition
+  const settingsDefinition = getLocalizedSettingsDefinition(widget.module, languageCode)
 
   if (!settingsDefinition) {
     return null
@@ -48,7 +60,7 @@ function WidgetSettingsCard({
   return (
     <article className="settings-card widget-settings-card">
       <div className="settings-card-head">
-        <p className="widget-kicker">{widget.presentation.boardKicker}</p>
+        <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
         <h3>{settingsDefinition.title}</h3>
         <p>{settingsDefinition.description}</p>
       </div>
@@ -103,16 +115,16 @@ function WidgetSettingsCard({
 
       <div className="widget-settings-actions">
         <button className="settings-submit" type="button" onClick={handleSave}>
-          Save widget settings
+          {appText.widgetSettingsHost.saveAction}
         </button>
         <p className="settings-note">
           {saveState === 'saving'
-            ? 'Saving...'
+            ? appText.widgetSettingsHost.savingState
             : saveState === 'saved'
-              ? 'Saved.'
+              ? appText.widgetSettingsHost.savedState
               : saveState === 'error'
-                ? 'Save failed.'
-                : 'Pending changes.'}
+                ? appText.widgetSettingsHost.saveFailedState
+                : appText.widgetSettingsHost.pendingChangesState}
         </p>
       </div>
     </article>
@@ -120,6 +132,8 @@ function WidgetSettingsCard({
 }
 
 export function WidgetSettingsHost({
+  appText,
+  languageCode,
   registeredWidgets,
   widgetSettingsMap,
   onSaveWidgetSettings,
@@ -138,6 +152,8 @@ export function WidgetSettingsHost({
       {settingsWidgets.map((widget) => (
         <WidgetSettingsCard
           key={widget.entity.id}
+          appText={appText}
+          languageCode={languageCode}
           widget={widget}
           initialSettings={widgetSettingsMap[widget.entity.id] ?? {}}
           onSave={onSaveWidgetSettings}

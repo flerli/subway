@@ -1,40 +1,84 @@
+import type { AppTextBundle } from '../i18n/appText'
+import {
+  formatLocalizedText,
+  type SupportedLanguageCode,
+} from '../i18n/localization'
 import { buildBadgeStyle } from './widgetAppearance'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { FilterId } from './widgetHostModels'
 import type { RegisteredWidget, WidgetHealthState } from './widgetTypes'
+import { resolveWidgetTitle } from './widgetLocalization'
 
 interface WidgetDebugOverlayProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   widgetHealthMap: Record<string, WidgetHealthState>
   onClose: () => void
 }
 
-const formatScopeLabel = (widget: RegisteredWidget) => {
+const formatScopeLabel = (widget: RegisteredWidget, appText: AppTextBundle) => {
   const { mode, memberIds } = widget.entity.userScope
 
   if (mode === 'all') {
-    return 'All members'
+    return appText.debug.allMembersScope
   }
 
   if (mode === 'member') {
-    return `Member: ${memberIds[0] ?? 'n/a'}`
+    return formatLocalizedText(appText.debug.memberScope, {
+      memberId: memberIds[0] ?? appText.debug.notAvailableValue,
+    })
   }
 
-  return `Members: ${memberIds.join(', ')}`
+  return formatLocalizedText(appText.debug.membersScope, {
+    memberIds: memberIds.join(', '),
+  })
 }
 
-const formatRefreshLabel = (widgetId: string, widgetHealthMap: Record<string, WidgetHealthState>) => {
+const formatRefreshLabel = (
+  widgetId: string,
+  widgetHealthMap: Record<string, WidgetHealthState>,
+  appText: AppTextBundle,
+) => {
   const state = widgetHealthMap[widgetId]
 
   if (!state) {
-    return 'idle'
+    return appText.debug.refreshStatusIdle
   }
 
-  return state.refreshStatus
+  switch (state.refreshStatus) {
+    case 'ok':
+      return appText.debug.refreshStatusOk
+    case 'live':
+      return appText.debug.refreshStatusLive
+    case 'cached':
+      return appText.debug.refreshStatusCached
+    case 'static':
+      return appText.debug.refreshStatusStatic
+    case 'error':
+      return appText.debug.refreshStatusError
+    default:
+      return appText.debug.refreshStatusIdle
+  }
+}
+
+const formatFailureLabel = (
+  failureState: string | undefined,
+  appText: AppTextBundle,
+) => {
+  if (!failureState) {
+    return appText.debug.noneValue
+  }
+
+  return Object.prototype.hasOwnProperty.call(appText.messages, failureState)
+    ? appText.messages[failureState as keyof AppTextBundle['messages']]
+    : failureState
 }
 
 export function WidgetDebugOverlay({
+  appText,
+  languageCode,
   registeredWidgets,
   activeFilter,
   widgetHealthMap,
@@ -45,14 +89,12 @@ export function WidgetDebugOverlay({
       <section className="debug-overlay-panel">
         <div className="debug-overlay-head">
           <div>
-            <p className="widget-kicker">Maintenance</p>
-            <h2>Widget diagnostics</h2>
-            <p className="debug-overlay-copy">
-              Hidden overlay for source, scope, refresh status, and failure inspection.
-            </p>
+            <p className="widget-kicker">{appText.debug.kicker}</p>
+            <h2>{appText.debug.title}</h2>
+            <p className="debug-overlay-copy">{appText.debug.copy}</p>
           </div>
           <button className="terminal-button is-active" type="button" onClick={onClose}>
-            Close
+            {appText.debug.closeAction}
           </button>
         </div>
 
@@ -74,28 +116,28 @@ export function WidgetDebugOverlay({
                     {widget.entity.subwayLetter}
                   </span>
                   <div>
-                    <h3>{widget.entity.title}</h3>
+                    <h3>{resolveWidgetTitle(widget, languageCode)}</h3>
                     <p>{widget.entity.id}</p>
                   </div>
                 </div>
 
                 <dl className="debug-list">
                   <div>
-                    <dt>Source</dt>
+                    <dt>{appText.debug.sourceLabel}</dt>
                     <dd>
                       {widget.module.dataSource} / {widget.entity.sourceLocation}
                     </dd>
                   </div>
                   <div>
-                    <dt>Scope</dt>
-                    <dd>{formatScopeLabel(widget)}</dd>
+                    <dt>{appText.debug.scopeLabel}</dt>
+                    <dd>{formatScopeLabel(widget, appText)}</dd>
                   </div>
                   <div>
-                    <dt>Visible now</dt>
-                    <dd>{visibleInCurrentFocus ? 'yes' : 'no'}</dd>
+                    <dt>{appText.debug.visibleNowLabel}</dt>
+                    <dd>{visibleInCurrentFocus ? appText.debug.yesValue : appText.debug.noValue}</dd>
                   </div>
                   <div>
-                    <dt>Placement</dt>
+                    <dt>{appText.debug.placementLabel}</dt>
                     <dd>
                       {widget.entity.placementZones
                         .map((placement) => `${placement.zoneId}#${placement.order}`)
@@ -103,20 +145,20 @@ export function WidgetDebugOverlay({
                     </dd>
                   </div>
                   <div>
-                    <dt>Refresh</dt>
-                    <dd>{formatRefreshLabel(widget.entity.id, widgetHealthMap)}</dd>
+                    <dt>{appText.debug.refreshLabel}</dt>
+                    <dd>{formatRefreshLabel(widget.entity.id, widgetHealthMap, appText)}</dd>
                   </div>
                   <div>
-                    <dt>Last refresh</dt>
-                    <dd>{state?.lastRefreshAt ?? 'n/a'}</dd>
+                    <dt>{appText.debug.lastRefreshLabel}</dt>
+                    <dd>{state?.lastRefreshAt ?? appText.debug.notAvailableValue}</dd>
                   </div>
                   <div>
-                    <dt>Items</dt>
-                    <dd>{state?.itemCount ?? 'n/a'}</dd>
+                    <dt>{appText.debug.itemsLabel}</dt>
+                    <dd>{state?.itemCount ?? appText.debug.notAvailableValue}</dd>
                   </div>
                   <div>
-                    <dt>Failure</dt>
-                    <dd>{state?.failureState ?? 'none'}</dd>
+                    <dt>{appText.debug.failureLabel}</dt>
+                    <dd>{formatFailureLabel(state?.failureState, appText)}</dd>
                   </div>
                 </dl>
               </article>

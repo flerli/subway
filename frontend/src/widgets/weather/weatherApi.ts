@@ -4,7 +4,10 @@ import type {
   WeatherWidgetData,
 } from '../widgetHostModels'
 import { fetchApi, isAuthRequiredError } from '../../api/request'
+import { getWeatherWidgetTranslation } from './translations'
 import { deriveWeatherVisualState } from './weatherVisualState'
+
+const defaultWeatherWidgetTranslation = getWeatherWidgetTranslation('en')
 
 interface WeatherLocationQueryOptions {
   id: string
@@ -163,9 +166,9 @@ const fetchWeatherLocationDataWithFallback = async (
       stale: true,
       updatedAt: new Date(0).toISOString(),
       currentTemperature: '--°',
-      condition: 'Weather unavailable',
+      condition: defaultWeatherWidgetTranslation.copy.unavailableCondition,
       visualState: 'fallback' as const,
-      rangeSummary: 'No live weather data available',
+      rangeSummary: defaultWeatherWidgetTranslation.copy.noLiveDataSummary,
       forecast: fallbackForecastDays,
     } satisfies WeatherLocationData
   }

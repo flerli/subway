@@ -1,6 +1,12 @@
 import { fetchTodoItems, updateTodoItemDoneState } from './todoApi'
 import type { TodoItem } from '../widgetHostModels'
 import type { WidgetMicroAppContract } from '../widgetTypes'
+import {
+  getTodoWidgetTranslation,
+  matchesTodoWidgetTitle,
+} from './translations'
+
+const defaultTodoWidgetTranslation = getTodoWidgetTranslation('en')
 
 const ALL_MEMBERS_AUDIENCE = '*'
 
@@ -55,15 +61,20 @@ export const todoWidget: WidgetMicroAppContract = {
   dataSource: 'database',
   capabilities: ['read', 'write'],
   hasSettingsPanel: true,
+  getTranslation: getTodoWidgetTranslation,
+  matchesDefaultTitle: matchesTodoWidgetTitle,
   settingsDefinition: {
-    title: 'Todo widget settings',
+    title: defaultTodoWidgetTranslation.settings?.title ?? 'Todo widget settings',
     description:
+      defaultTodoWidgetTranslation.settings?.description ??
       'Choose whether completed tasks remain visible and how many tasks are rendered at once.',
     defaults: normalizeTodoSettings({}),
     fields: [
       {
         key: 'maxItems',
-        label: 'Max visible tasks',
+        label:
+          defaultTodoWidgetTranslation.settings?.fields.maxItems.label ??
+          'Max visible tasks',
         type: 'number',
         min: 1,
         max: 10,
@@ -71,7 +82,9 @@ export const todoWidget: WidgetMicroAppContract = {
       },
       {
         key: 'showCompleted',
-        label: 'Show completed tasks',
+        label:
+          defaultTodoWidgetTranslation.settings?.fields.showCompleted.label ??
+          'Show completed tasks',
         type: 'boolean',
       },
     ],
@@ -104,3 +117,5 @@ export const todoWidget: WidgetMicroAppContract = {
 }
 
 export const widgetModule = todoWidget
+export { getTodoWidgetTranslation } from './translations'
+export type { TodoWidgetTranslation } from './translations'

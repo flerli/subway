@@ -1,6 +1,14 @@
+import { createElement } from 'react'
 import { fetchCalendarEvents } from './calendarApi'
 import type { AgendaItem } from '../widgetHostModels'
 import type { WidgetMicroAppContract } from '../widgetTypes'
+import {
+  getCalendarWidgetTranslation,
+  matchesCalendarWidgetTitle,
+} from './translations'
+import { CalendarDetailView } from './CalendarDetailView'
+
+const defaultCalendarWidgetTranslation = getCalendarWidgetTranslation('en')
 
 const ALL_MEMBERS_AUDIENCE = '*'
 
@@ -20,15 +28,10 @@ const matchesFocusedMember = (
 
 export const normalizeCalendarSettings = (value: unknown) => {
   const candidate = value as {
-    maxItems?: unknown
     includeHouseholdEvents?: unknown
   }
 
   return {
-    maxItems:
-      typeof candidate?.maxItems === 'number' && candidate.maxItems > 0
-        ? Math.min(candidate.maxItems, 10)
-        : 4,
     includeHouseholdEvents:
       typeof candidate?.includeHouseholdEvents === 'boolean'
         ? candidate.includeHouseholdEvents
@@ -50,7 +53,10 @@ export const normalizeCalendarSettings = (value: unknown) => {
           ? true
           : !agendaItem.members.includes(ALL_MEMBERS_AUDIENCE),
       )
-      .slice(0, settings.maxItems)
+      .sort(
+        (left, right) =>
+          left.date.localeCompare(right.date) || left.time.localeCompare(right.time),
+      )
   }
 
 export const calendarWidget: WidgetMicroAppContract = {
@@ -59,23 +65,20 @@ export const calendarWidget: WidgetMicroAppContract = {
   dataSource: 'database',
   capabilities: ['read'],
   hasSettingsPanel: true,
+  getTranslation: getCalendarWidgetTranslation,
+  matchesDefaultTitle: matchesCalendarWidgetTitle,
   settingsDefinition: {
-    title: 'Calendar widget settings',
+    title: defaultCalendarWidgetTranslation.settings?.title ?? 'Calendar widget settings',
     description:
-      'Control how many events the calendar shows and whether household-wide events are included.',
+      defaultCalendarWidgetTranslation.settings?.description ??
+      'Control whether household-wide events are included in the seven-day calendar view.',
     defaults: normalizeCalendarSettings({}),
     fields: [
       {
-        key: 'maxItems',
-        label: 'Max visible items',
-        type: 'number',
-        min: 1,
-        max: 10,
-        step: 1,
-      },
-      {
         key: 'includeHouseholdEvents',
-        label: 'Include household-wide events',
+        label:
+          defaultCalendarWidgetTranslation.settings?.fields.includeHouseholdEvents.label ??
+          'Include household-wide events',
         type: 'boolean',
       },
     ],
@@ -90,6 +93,14 @@ export const calendarWidget: WidgetMicroAppContract = {
       context.settings,
     )
   },
+  renderDetailView: ({ data, languageCode }) =>
+    createElement(CalendarDetailView, {
+      data,
+      languageCode,
+      widgetText: getCalendarWidgetTranslation(languageCode),
+    }),
 }
 
 export const widgetModule = calendarWidget
+export { getCalendarWidgetTranslation } from './translations'
+export type { CalendarWidgetTranslation } from './translations'

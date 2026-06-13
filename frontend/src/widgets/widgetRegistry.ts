@@ -23,23 +23,15 @@ for (const moduleRecord of Object.values(discoveredWidgetModules)) {
 const widgetPresentation: Record<string, WidgetPresentation> = {
   'arrival-board': {
     widgetNumber: 1,
-    boardKicker: 'Family service board',
   },
   weather: {
     widgetNumber: 2,
-    boardKicker: 'Forecast',
   },
   calendar: {
     widgetNumber: 3,
-    boardKicker: 'Calendar',
   },
   todo: {
     widgetNumber: 4,
-    boardKicker: 'Todo',
-  },
-  bulletins: {
-    widgetNumber: 5,
-    boardKicker: 'Bulletin panel',
   },
 }
 
@@ -59,7 +51,6 @@ export const buildWidgetRegistry = (
         module: widgetModule,
         presentation: widgetPresentation[entity.id] ?? {
           widgetNumber: 99,
-          boardKicker: entity.title,
         },
       },
     ]

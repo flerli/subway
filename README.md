@@ -4,7 +4,7 @@ Portrait-first family smart home kiosk UI with a dark transit-inspired visual la
 
 ## Overview
 
-The app in `frontend/` is a fullscreen home information board designed for a 27 inch 4K display in portrait mode. It combines a family arrival board, weather, calendar, todo list, bulletins, a calibration panel, and a settings page where family members can be added and customized.
+The app in `frontend/` is a fullscreen home information board designed for a 27 inch 4K display in portrait mode. It combines a family arrival board, weather, calendar, a todo list, a calibration panel, and a settings page where family members can be added and customized.
 
 Current highlights:
 

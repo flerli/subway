@@ -1,4 +1,10 @@
 import type { WidgetMicroAppContract } from '../widgetTypes'
+import {
+  getArrivalBoardWidgetTranslation,
+  matchesArrivalBoardWidgetTitle,
+} from './translations'
+
+const defaultArrivalBoardWidgetTranslation = getArrivalBoardWidgetTranslation('en')
 
 export const defaultArrivalBoardSettings = {
   boardTitle: 'Home Info Kiosk',
@@ -29,22 +35,34 @@ export const arrivalBoardWidget: WidgetMicroAppContract = {
   dataSource: 'system',
   capabilities: ['read'],
   hasSettingsPanel: true,
+  getTranslation: getArrivalBoardWidgetTranslation,
+  matchesDefaultTitle: matchesArrivalBoardWidgetTitle,
   settingsDefinition: {
-    title: 'Board chrome settings',
-    description: 'Configure the title and subheading used in the top board header.',
+    title: defaultArrivalBoardWidgetTranslation.settings?.title ?? 'Board chrome settings',
+    description:
+      defaultArrivalBoardWidgetTranslation.settings?.description ??
+      'Configure the title and subheading used in the top board header.',
     defaults: defaultArrivalBoardSettings,
     fields: [
       {
         key: 'boardTitle',
-        label: 'Board title',
+        label:
+          defaultArrivalBoardWidgetTranslation.settings?.fields.boardTitle.label ??
+          'Board title',
         type: 'text',
-        placeholder: 'Home Info Kiosk',
+        placeholder:
+          defaultArrivalBoardWidgetTranslation.settings?.fields.boardTitle.placeholder ??
+          'Home Info Kiosk',
       },
       {
         key: 'boardSubheading',
-        label: 'Board subheading',
+        label:
+          defaultArrivalBoardWidgetTranslation.settings?.fields.boardSubheading.label ??
+          'Board subheading',
         type: 'text',
-        placeholder: 'Family Avenue South',
+        placeholder:
+          defaultArrivalBoardWidgetTranslation.settings?.fields.boardSubheading
+            .placeholder ?? 'Family Avenue South',
       },
     ],
     normalize: normalizeArrivalBoardSettings,

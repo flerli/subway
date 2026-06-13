@@ -45,3 +45,31 @@ Issues:
 | 003_USER_MANAGEMENT__ISSUE_DEFINITION__002_PASSWORD_AUTH_AND_PERSISTENT_SESSIONS.md | Add password login, the seeded `flerlage` account, and concurrent persistent sessions across multiple machines. | implemented |
 | 003_USER_MANAGEMENT__ISSUE_DEFINITION__003_USER_SCOPED_API_ENFORCEMENT_AND_DATA_MIGRATION.md | Protect the backend routes, scope all reads and writes by authenticated user, and assign the existing dataset to `flerlage`. | implemented |
 | 003_USER_MANAGEMENT__ISSUE_DEFINITION__004_HERO_PAGE_AND_AUTHENTICATED_APP_SHELL.md | Add the unauthenticated hero page, login flow, auth bootstrap, and logout-aware frontend shell. | implemented |
+
+## 004 MULTI LANGUAGE SUPPORT
+
+Description:
+Introduce a shared multilingual foundation so the kiosk can switch between English, German, French, and Spanish through one per-user global language setting, all shared application copy and existing widgets are translated through standardized translation files, and future widgets are required to ship with the same contract.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__001_SHARED_LOCALIZATION_FOUNDATION_AND_LANGUAGE_SETTING.md | Define the shared localization contract, supported languages, fallback behavior, and per-user global language persistence. | implemented |
+| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__002_APPLICATION_SHELL_AND_SHARED_TEXT_LOCALIZATION.md | Complete localization coverage for the remaining shared application shell, auth flow, settings page, and shared host copy. | implemented |
+| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__003_WIDGET_TRANSLATION_STANDARD_AND_EXISTING_WIDGET_MIGRATION.md | Standardize widget-local translation files and translate the existing arrival-board, weather, calendar, todo, and bulletins widgets. | implemented |
+| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__004_WIDGET_LOCALIZATION_GUIDELINES_AND_ISSUE_GUIDE_EXTENSION.md | Extend the development workflow so every new widget issue requires a standardized four-language translation file. | implemented |
+
+## 005 CALENDAR
+
+Description:
+Expand the sample calendar widget into a family scheduling system with recurring event support, structured location data, a per-user home-country setting in the shared settings panel, authenticated event CRUD operations, foreign-event nation flag indicators, a compact next-seven-days widget surface, and an extended calendar experience with week, month, and year views.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 005_CALENDAR__ISSUE_DEFINITION__001_EVENT_DOMAIN_AND_RECURRING_FOUNDATION.md | Define the persistent calendar event contract, normalized country fields, per-user home-country setting, family-member scope semantics, and recurring event foundations. | planned |
+| 005_CALENDAR__ISSUE_DEFINITION__002_EVENT_CRUD_OPERATIONS.md | Add authenticated create, read, update, and delete workflows for one-off and recurring calendar events with normalized country input. | planned |
+| 005_CALENDAR__ISSUE_DEFINITION__003_MINI_WEEK_WIDGET.md | Implement the compact calendar widget that shows the next seven days of upcoming events and flags events outside the user's country. | planned |
+| 005_CALENDAR__ISSUE_DEFINITION__004_EXTENDED_WEEK_MONTH_YEAR_VIEWS_AND_CRUD.md | Build the extended calendar experience with week, month, and year views, event management actions, and foreign-event flag indicators. | planned |

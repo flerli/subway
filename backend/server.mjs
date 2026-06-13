@@ -30,6 +30,21 @@ const BACKEND_RUNTIME_INSTANCE_ID = randomUUID()
 const SESSION_COOKIE_NAME = 'subway_session'
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365 * 10
 const SESSION_COOKIE_SECURE = process.env.SESSION_COOKIE_SECURE === 'true'
+const SUPPORTED_LANGUAGE_CODES = ['en', 'de', 'fr', 'es']
+const DEFAULT_LANGUAGE_CODE = 'en'
+const DEFAULT_COUNTRY_CODE = 'DE'
+const LEGACY_HOUSEHOLD_MEMBER_ID = '*'
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const TIME_LABEL_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
+const supportedLanguageCodeSet = new Set(SUPPORTED_LANGUAGE_CODES)
+const supportedRecurrenceFrequencySet = new Set([
+  'none',
+  'daily',
+  'weekly',
+  'monthly',
+  'yearly',
+])
 
 mkdirSync(dataDirectory, { recursive: true })
 
@@ -94,6 +109,347 @@ const hasOwnershipPrimaryKey = (tableName, expectedPrimaryKeyColumns) => {
       (columnName, index) => primaryKeyColumns[index] === columnName,
     )
   )
+}
+
+const normalizeLanguageCode = (value) => {
+  const normalizedValue =
+    typeof value === 'string' ? value.trim().toLowerCase() : DEFAULT_LANGUAGE_CODE
+
+  return supportedLanguageCodeSet.has(normalizedValue)
+    ? normalizedValue
+    : DEFAULT_LANGUAGE_CODE
+}
+
+const isSupportedLanguageCode = (value) =>
+  typeof value === 'string' &&
+  supportedLanguageCodeSet.has(value.trim().toLowerCase())
+
+const isSupportedCountryCode = (value) =>
+  typeof value === 'string' && COUNTRY_CODE_PATTERN.test(value.trim().toUpperCase())
+
+const normalizeCountryCode = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toUpperCase() : ''
+
+  return COUNTRY_CODE_PATTERN.test(normalizedValue)
+    ? normalizedValue
+    : DEFAULT_COUNTRY_CODE
+}
+
+const parseIsoDate = (value) => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const match = ISO_DATE_PATTERN.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return {
+    date,
+    year,
+    month,
+    day,
+    isoDate: `${match[1]}-${match[2]}-${match[3]}`,
+  }
+}
+
+const formatIsoDate = (value) => value.toISOString().slice(0, 10)
+
+const getTodayIsoDate = () => formatIsoDate(new Date())
+
+const normalizeIsoDate = (value, fallback = getTodayIsoDate()) =>
+  parseIsoDate(value)?.isoDate ?? fallback
+
+const addDaysToIsoDate = (value, dayCount) => {
+  const parsedDate = parseIsoDate(value)
+
+  if (!parsedDate) {
+    return getTodayIsoDate()
+  }
+
+  const nextDate = new Date(parsedDate.date)
+  nextDate.setUTCDate(nextDate.getUTCDate() + dayCount)
+
+  return formatIsoDate(nextDate)
+}
+
+const compareIsoDates = (left, right) => left.localeCompare(right)
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+const normalizeTimeLabel = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().slice(0, 5) : ''
+
+  return TIME_LABEL_PATTERN.test(normalizedValue) ? normalizedValue : '00:00'
+}
+
+const sanitizeCalendarText = (value, fallback = '') => {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  const normalizedValue = value.trim().replace(/\s+/g, ' ')
+
+  return normalizedValue.length > 0 ? normalizedValue : fallback
+}
+
+const normalizeRecurrenceFrequency = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : 'none'
+
+  return supportedRecurrenceFrequencySet.has(normalizedValue)
+    ? normalizedValue
+    : 'none'
+}
+
+const normalizeRecurrenceRule = (value, startDate) => {
+  const candidate = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const frequency = normalizeRecurrenceFrequency(candidate.frequency)
+  const interval =
+    typeof candidate.interval === 'number' &&
+    Number.isInteger(candidate.interval) &&
+    candidate.interval > 0
+      ? Math.min(candidate.interval, 366)
+      : 1
+  const startWeekday = parseIsoDate(startDate)?.date.getUTCDay() ?? 0
+  const normalizedWeekdays = Array.isArray(candidate.byWeekdays)
+    ? Array.from(
+        new Set(
+          candidate.byWeekdays.filter(
+            (weekday) =>
+              typeof weekday === 'number' &&
+              Number.isInteger(weekday) &&
+              weekday >= 0 &&
+              weekday <= 6,
+          ),
+        ),
+      ).sort((left, right) => left - right)
+    : []
+  const count =
+    typeof candidate.count === 'number' &&
+    Number.isInteger(candidate.count) &&
+    candidate.count > 0
+      ? Math.min(candidate.count, 366)
+      : null
+  const until = candidate.until == null ? null : normalizeIsoDate(candidate.until, null)
+
+  return {
+    frequency,
+    interval,
+    byWeekdays:
+      frequency === 'weekly'
+        ? normalizedWeekdays.length > 0
+          ? normalizedWeekdays
+          : [startWeekday]
+        : [],
+    count,
+    until,
+  }
+}
+
+const parseRecurrenceRuleJson = (value, startDate) => {
+  try {
+    return normalizeRecurrenceRule(JSON.parse(value), startDate)
+  } catch {
+    return normalizeRecurrenceRule(null, startDate)
+  }
+}
+
+const buildCalendarDisplayLocation = (city, countryCode) =>
+  city ? `${city}, ${countryCode}` : countryCode
+
+const validateCalendarTimeLabel = (value) =>
+  typeof value === 'string' && TIME_LABEL_PATTERN.test(value.trim().slice(0, 5))
+
+const validateCalendarIsoDate = (value) => typeof value === 'string' && Boolean(parseIsoDate(value))
+
+const validateRecurrenceRuleInput = (value, startDate) => {
+  if (value == null) {
+    return { recurrence: normalizeRecurrenceRule(null, startDate) }
+  }
+
+  if (!isPlainObject(value)) {
+    return { error: 'recurrence must be an object.' }
+  }
+
+  const candidate = value
+
+  if (
+    candidate.frequency !== undefined &&
+    normalizeRecurrenceFrequency(candidate.frequency) === 'none' &&
+    String(candidate.frequency).trim().toLowerCase() !== 'none'
+  ) {
+    return { error: 'recurrence.frequency is invalid.' }
+  }
+
+  if (
+    candidate.interval !== undefined &&
+    (!Number.isInteger(candidate.interval) || candidate.interval <= 0)
+  ) {
+    return { error: 'recurrence.interval must be a positive integer.' }
+  }
+
+  if (candidate.byWeekdays !== undefined) {
+    if (!Array.isArray(candidate.byWeekdays)) {
+      return { error: 'recurrence.byWeekdays must be an array.' }
+    }
+
+    if (
+      candidate.byWeekdays.some(
+        (weekday) =>
+          typeof weekday !== 'number' ||
+          !Number.isInteger(weekday) ||
+          weekday < 0 ||
+          weekday > 6,
+      )
+    ) {
+      return { error: 'recurrence.byWeekdays may only contain integers from 0 to 6.' }
+    }
+  }
+
+  if (
+    candidate.count !== undefined &&
+    candidate.count !== null &&
+    (!Number.isInteger(candidate.count) || candidate.count <= 0)
+  ) {
+    return { error: 'recurrence.count must be a positive integer or null.' }
+  }
+
+  if (
+    candidate.until !== undefined &&
+    candidate.until !== null &&
+    !validateCalendarIsoDate(candidate.until)
+  ) {
+    return { error: 'recurrence.until must be a valid ISO date in YYYY-MM-DD format or null.' }
+  }
+
+  return { recurrence: normalizeRecurrenceRule(candidate, startDate) }
+}
+
+const buildCalendarEventFromInput = ({
+  value,
+  validMemberIds,
+  currentEvent = null,
+}) => {
+  if (!isPlainObject(value)) {
+    return { error: 'Calendar event payload must be an object.' }
+  }
+
+  const titleInput = value.title ?? currentEvent?.title
+  const title = sanitizeCalendarText(titleInput, '')
+
+  if (!title) {
+    return { error: 'title is required.' }
+  }
+
+  const dateInput = value.date ?? currentEvent?.date
+
+  if (!validateCalendarIsoDate(dateInput)) {
+    return { error: 'date must be a valid ISO date in YYYY-MM-DD format.' }
+  }
+
+  const date = normalizeIsoDate(dateInput)
+  const timeInput = value.time ?? currentEvent?.time
+
+  if (!validateCalendarTimeLabel(timeInput)) {
+    return { error: 'time must be a valid 24-hour time in HH:MM format.' }
+  }
+
+  const time = normalizeTimeLabel(timeInput)
+  const locationCityInput = value.locationCity ?? currentEvent?.locationCity
+  const locationCity = sanitizeCalendarText(locationCityInput, '')
+
+  if (!locationCity) {
+    return { error: 'locationCity is required.' }
+  }
+
+  const locationCountryInput = value.locationCountry ?? currentEvent?.locationCountry
+
+  if (!isSupportedCountryCode(locationCountryInput)) {
+    return { error: 'locationCountry must be a two-letter ISO country code.' }
+  }
+
+  const locationCountry = normalizeCountryCode(locationCountryInput)
+  const description = sanitizeCalendarText(
+    value.description ?? value.note ?? currentEvent?.description ?? currentEvent?.note,
+    '',
+  )
+
+  const scopeInput = value.scope ?? currentEvent?.scope
+
+  if (!isPlainObject(scopeInput)) {
+    return { error: 'scope is required.' }
+  }
+
+  const scopeMode =
+    scopeInput.mode === 'members'
+      ? 'members'
+      : scopeInput.mode === 'all'
+        ? 'all'
+        : null
+
+  if (!scopeMode) {
+    return { error: 'scope.mode must be either all or members.' }
+  }
+
+  const scopeMemberIds = Array.isArray(scopeInput.memberIds)
+    ? Array.from(
+        new Set(
+          scopeInput.memberIds.filter((memberId) => typeof memberId === 'string'),
+        ),
+      )
+    : currentEvent?.scope.mode === 'members'
+      ? currentEvent.scope.memberIds
+      : []
+
+  if (scopeMode === 'members') {
+    if (scopeMemberIds.length === 0) {
+      return { error: 'Scoped calendar events require at least one member id.' }
+    }
+
+    if (scopeMemberIds.some((memberId) => !validMemberIds.has(memberId))) {
+      return { error: 'scope.memberIds contains an unknown family member id.' }
+    }
+  }
+
+  const recurrenceResult = validateRecurrenceRuleInput(
+    value.recurrence ?? currentEvent?.recurrence,
+    date,
+  )
+
+  if (recurrenceResult.error) {
+    return recurrenceResult
+  }
+
+  const memberIds =
+    scopeMode === 'all' ? [LEGACY_HOUSEHOLD_MEMBER_ID] : scopeMemberIds
+
+  return {
+    calendarEvent: {
+      title,
+      date,
+      timeLabel: time,
+      locationCity,
+      locationCountry,
+      note: description,
+      memberIds,
+      recurrence: recurrenceResult.recurrence,
+    },
+  }
 }
 
 const createPasswordHash = (password) => {
@@ -305,10 +661,14 @@ const createCalendarEventsTableSql = `
     owner_user_id TEXT NOT NULL REFERENCES users(id),
     id TEXT NOT NULL,
     time_label TEXT NOT NULL,
+    event_date TEXT NOT NULL,
     title TEXT NOT NULL,
     location TEXT NOT NULL,
+    location_city TEXT NOT NULL,
+    location_country TEXT NOT NULL,
     note TEXT NOT NULL,
     member_ids TEXT NOT NULL,
+    recurrence_rule_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (owner_user_id, id)
@@ -338,6 +698,16 @@ const createWidgetSettingsTableSql = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (owner_user_id, widget_id)
+  )
+`
+
+const createAppPreferencesTableSql = `
+  CREATE TABLE IF NOT EXISTS app_preferences (
+    owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
+    language_code TEXT NOT NULL,
+    country_code TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   )
 `
 
@@ -412,6 +782,108 @@ migrateOwnedTable({
   defaultOwnerUserId: defaultAppUserId,
 })
 
+db.exec(createAppPreferencesTableSql)
+
+const migrateCalendarEventsFoundation = () => {
+  if (!hasColumn('calendar_events', 'event_date')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN event_date TEXT')
+  }
+
+  if (!hasColumn('calendar_events', 'location_city')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN location_city TEXT')
+  }
+
+  if (!hasColumn('calendar_events', 'location_country')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN location_country TEXT')
+  }
+
+  if (!hasColumn('calendar_events', 'recurrence_rule_json')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN recurrence_rule_json TEXT')
+  }
+
+  const calendarRows = db
+    .prepare(`
+      SELECT
+        owner_user_id,
+        id,
+        time_label,
+        event_date,
+        location,
+        location_city,
+        location_country,
+        recurrence_rule_json,
+        updated_at
+      FROM calendar_events
+    `)
+    .all()
+
+  const updateCalendarFoundation = db.prepare(`
+    UPDATE calendar_events
+    SET
+      time_label = ?,
+      event_date = ?,
+      location = ?,
+      location_city = ?,
+      location_country = ?,
+      recurrence_rule_json = ?,
+      updated_at = ?
+    WHERE owner_user_id = ? AND id = ?
+  `)
+
+  db.exec('BEGIN')
+
+  try {
+    for (const row of calendarRows) {
+      const eventDate = normalizeIsoDate(row.event_date)
+      const locationCity = sanitizeCalendarText(
+        row.location_city,
+        sanitizeCalendarText(row.location, 'Unknown location'),
+      )
+      const locationCountry = normalizeCountryCode(row.location_country)
+      const recurrenceRuleJson = JSON.stringify(
+        parseRecurrenceRuleJson(row.recurrence_rule_json, eventDate),
+      )
+      const updatedAt = typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString()
+
+      updateCalendarFoundation.run(
+        normalizeTimeLabel(row.time_label),
+        eventDate,
+        buildCalendarDisplayLocation(locationCity, locationCountry),
+        locationCity,
+        locationCountry,
+        recurrenceRuleJson,
+        updatedAt,
+        row.owner_user_id,
+        row.id,
+      )
+    }
+
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+const migrateAppPreferencesFoundation = () => {
+  if (!hasColumn('app_preferences', 'country_code')) {
+    db.exec('ALTER TABLE app_preferences ADD COLUMN country_code TEXT')
+  }
+
+  db
+    .prepare(`
+      UPDATE app_preferences
+      SET country_code = ?
+      WHERE country_code IS NULL OR TRIM(country_code) = ''
+    `)
+    .run(DEFAULT_COUNTRY_CODE)
+}
+
+migrateCalendarEventsFoundation()
+migrateAppPreferencesFoundation()
+
+const todayIsoDate = getTodayIsoDate()
+
 const seedMembers = [
   { id: 'family-1', firstName: 'Alex', color: '#2850ad' },
   { id: 'family-2', firstName: 'Bianca', color: '#b933ad' },
@@ -459,61 +931,79 @@ const seedWidgets = [
     },
     placementZones: [{ zoneId: 'a2', order: 1 }],
   },
-  {
-    id: 'bulletins',
-    title: 'Bulletins',
-    subwayLetter: 'B',
-    subwayColor: '#8b78ff',
-    sourceLocation: 'bulletins',
-    userScope: { mode: 'members', memberIds: ['family-2', 'family-3', 'family-4'] },
-    placementZones: [{ zoneId: 'b2', order: 1 }],
-  },
 ]
 
 const allowedWidgetSourceLocations = new Set(
   seedWidgets.map((widget) => widget.sourceLocation),
 )
 
+const allowedWidgetIds = new Set(seedWidgets.map((widget) => widget.id))
+
 const seedCalendarEvents = [
   {
     id: 'calendar-household-sync',
+    date: todayIsoDate,
     timeLabel: '06:45',
     title: 'Morning status sync',
-    location: 'Entry kiosk',
+    locationCity: 'Berlin',
+    locationCountry: 'DE',
     note: 'Shared display refresh, weather pull, and door lock review.',
-    memberIds: ['*'],
+    memberIds: [LEGACY_HOUSEHOLD_MEMBER_ID],
+    recurrence: {
+      frequency: 'daily',
+      interval: 1,
+      count: 7,
+    },
   },
   {
     id: 'calendar-alex-breakfast',
+    date: todayIsoDate,
     timeLabel: '07:30',
     title: 'Breakfast transfer window',
-    location: 'Kitchen platform',
+    locationCity: 'Berlin',
+    locationCountry: 'DE',
     note: 'School bags staged and departure lane opens in 20 min.',
     memberIds: ['family-1'],
+    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
   },
   {
     id: 'calendar-bianca-studio',
+    date: addDaysToIsoDate(todayIsoDate, 1),
     timeLabel: '09:15',
     title: 'Studio work block',
-    location: 'Home office',
+    locationCity: 'Paris',
+    locationCountry: 'FR',
     note: 'Editing queue, exports, and video call setup.',
     memberIds: ['family-2'],
+    recurrence: {
+      frequency: 'weekly',
+      interval: 1,
+      byWeekdays: [parseIsoDate(addDaysToIsoDate(todayIsoDate, 1))?.date.getUTCDay() ?? 0],
+      count: 6,
+      until: null,
+    },
   },
   {
     id: 'calendar-chris-package',
+    date: addDaysToIsoDate(todayIsoDate, 2),
     timeLabel: '14:30',
     title: 'Package pickup window',
-    location: 'Lobby west desk',
+    locationCity: 'Zurich',
+    locationCountry: 'CH',
     note: 'Replacement smart sensor reaches the building today.',
     memberIds: ['family-3'],
+    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
   },
   {
     id: 'calendar-dana-dinner',
+    date: addDaysToIsoDate(todayIsoDate, 3),
     timeLabel: '18:45',
     title: 'Dinner arrival',
-    location: 'Dining room',
+    locationCity: 'Hamburg',
+    locationCountry: 'DE',
     note: 'Table reset and final prep before guests land.',
     memberIds: ['family-4'],
+    recurrence: { frequency: 'none', interval: 1, count: null, until: null },
   },
 ]
 
@@ -636,33 +1126,96 @@ const insertWidget = (ownerUserId, widget, createdAt, updatedAt) =>
       updatedAt,
     )
 
-const insertCalendarEvent = (ownerUserId, calendarEvent, createdAt, updatedAt) =>
-  db
+const insertCalendarEvent = (ownerUserId, calendarEvent, createdAt, updatedAt) => {
+  const eventDate = normalizeIsoDate(calendarEvent.date)
+  const locationCity = sanitizeCalendarText(
+    calendarEvent.locationCity,
+    sanitizeCalendarText(calendarEvent.location, 'Unknown location'),
+  )
+  const locationCountry = normalizeCountryCode(calendarEvent.locationCountry)
+  const recurrenceRuleJson = JSON.stringify(
+    normalizeRecurrenceRule(calendarEvent.recurrence, eventDate),
+  )
+
+  return db
     .prepare(`
       INSERT INTO calendar_events (
         owner_user_id,
         id,
         time_label,
+        event_date,
         title,
         location,
+        location_city,
+        location_country,
         note,
         member_ids,
+        recurrence_rule_json,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       ownerUserId,
       calendarEvent.id,
-      calendarEvent.timeLabel,
+      normalizeTimeLabel(calendarEvent.timeLabel),
+      eventDate,
       calendarEvent.title,
-      calendarEvent.location,
+      buildCalendarDisplayLocation(locationCity, locationCountry),
+      locationCity,
+      locationCountry,
       calendarEvent.note,
       JSON.stringify(calendarEvent.memberIds),
+      recurrenceRuleJson,
       createdAt,
       updatedAt,
     )
+}
+
+const updateCalendarEventRecord = (ownerUserId, calendarEventId, calendarEvent, updatedAt) => {
+  const eventDate = normalizeIsoDate(calendarEvent.date)
+  const locationCity = sanitizeCalendarText(calendarEvent.locationCity, 'Unknown location')
+  const locationCountry = normalizeCountryCode(calendarEvent.locationCountry)
+  const recurrenceRuleJson = JSON.stringify(
+    normalizeRecurrenceRule(calendarEvent.recurrence, eventDate),
+  )
+
+  return db
+    .prepare(`
+      UPDATE calendar_events
+      SET time_label = ?,
+          event_date = ?,
+          title = ?,
+          location = ?,
+          location_city = ?,
+          location_country = ?,
+          note = ?,
+          member_ids = ?,
+          recurrence_rule_json = ?,
+          updated_at = ?
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(
+      normalizeTimeLabel(calendarEvent.timeLabel),
+      eventDate,
+      calendarEvent.title,
+      buildCalendarDisplayLocation(locationCity, locationCountry),
+      locationCity,
+      locationCountry,
+      calendarEvent.note,
+      JSON.stringify(calendarEvent.memberIds),
+      recurrenceRuleJson,
+      updatedAt,
+      ownerUserId,
+      calendarEventId,
+    )
+}
+
+const deleteCalendarEventById = (ownerUserId, calendarEventId) =>
+  db
+    .prepare('DELETE FROM calendar_events WHERE owner_user_id = ? AND id = ?')
+    .run(ownerUserId, calendarEventId)
 
 const insertTodoItem = (ownerUserId, todoItem, createdAt, updatedAt) =>
   db
@@ -726,6 +1279,40 @@ const upsertWidgetSettings = (ownerUserId, widgetId, settingsJson, timestamp) =>
     `)
     .run(ownerUserId, widgetId, settingsJson, timestamp, timestamp)
 
+const selectAppPreferences = (ownerUserId) => {
+  const row = db
+    .prepare(`
+      SELECT language_code, country_code, updated_at
+      FROM app_preferences
+      WHERE owner_user_id = ?
+    `)
+    .get(ownerUserId)
+
+  return {
+    languageCode: normalizeLanguageCode(row?.language_code),
+    countryCode: normalizeCountryCode(row?.country_code),
+    updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
+  }
+}
+
+const upsertAppPreferences = (ownerUserId, languageCode, countryCode, timestamp) =>
+  db
+    .prepare(`
+      INSERT INTO app_preferences (
+        owner_user_id,
+        language_code,
+        country_code,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(owner_user_id) DO UPDATE SET
+        language_code = excluded.language_code,
+        country_code = excluded.country_code,
+        updated_at = excluded.updated_at
+    `)
+    .run(ownerUserId, languageCode, countryCode, timestamp, timestamp)
+
 const deleteWidgetById = (ownerUserId, widgetId) =>
   db.prepare('DELETE FROM widgets WHERE owner_user_id = ? AND id = ?').run(ownerUserId, widgetId)
 
@@ -748,6 +1335,19 @@ const deleteUnsupportedWidgets = () => {
       deleteWidgetById(widget.owner_user_id, widget.id)
     }
   }
+
+  const widgetSettings = db
+    .prepare(`
+      SELECT owner_user_id, widget_id
+      FROM widget_settings
+    `)
+    .all()
+
+  for (const widgetSetting of widgetSettings) {
+    if (!allowedWidgetIds.has(widgetSetting.widget_id)) {
+      deleteWidgetSettingsById(widgetSetting.owner_user_id, widgetSetting.widget_id)
+    }
+  }
 }
 
 const selectAllFamilyMembers = (ownerUserId) =>
@@ -760,6 +1360,9 @@ const selectAllFamilyMembers = (ownerUserId) =>
     `)
     .all(ownerUserId)
 
+const buildFamilyMemberIdSet = (ownerUserId) =>
+  new Set(selectAllFamilyMembers(ownerUserId).map((member) => member.id))
+
 const parseJsonArray = (value) => {
   try {
     const parsedValue = JSON.parse(value)
@@ -768,6 +1371,221 @@ const parseJsonArray = (value) => {
   } catch {
     return []
   }
+}
+
+const buildCalendarScope = (memberIds) =>
+  memberIds.includes(LEGACY_HOUSEHOLD_MEMBER_ID)
+    ? { mode: 'all', memberIds: [] }
+    : { mode: 'members', memberIds }
+
+const normalizeCalendarEventRow = (row) => {
+  const date = normalizeIsoDate(row.event_date)
+  const members = parseJsonArray(row.member_ids).filter(
+    (memberId) => typeof memberId === 'string',
+  )
+  const normalizedMembers = members.length > 0 ? members : [LEGACY_HOUSEHOLD_MEMBER_ID]
+  const locationCity = sanitizeCalendarText(
+    row.location_city,
+    sanitizeCalendarText(row.location, 'Unknown location'),
+  )
+  const locationCountry = normalizeCountryCode(row.location_country)
+
+  return {
+    id: row.id,
+    date,
+    time: normalizeTimeLabel(row.time_label),
+    title: sanitizeCalendarText(row.title, 'Untitled event'),
+    description: typeof row.note === 'string' ? row.note : '',
+    locationCity,
+    locationCountry,
+    location: buildCalendarDisplayLocation(locationCity, locationCountry),
+    members: normalizedMembers,
+    scope: buildCalendarScope(normalizedMembers),
+    recurrence: parseRecurrenceRuleJson(row.recurrence_rule_json, date),
+    createdAt: typeof row.created_at === 'string' ? row.created_at : null,
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
+  }
+}
+
+const buildCalendarEventPayload = (event, occurrenceDate = event.date) => ({
+  id: occurrenceDate === event.date ? event.id : `${event.id}__${occurrenceDate}`,
+  seriesId: event.id,
+  date: occurrenceDate,
+  occurrenceDate,
+  seriesStartDate: event.date,
+  time: event.time,
+  title: event.title,
+  description: event.description,
+  location: event.location,
+  locationCity: event.locationCity,
+  locationCountry: event.locationCountry,
+  note: event.description,
+  members: event.members,
+  scope: event.scope,
+  recurrence: event.recurrence,
+  createdAt: event.createdAt,
+  updatedAt: event.updatedAt,
+})
+
+const getIsoDateDayDifference = (startDate, endDate) => {
+  const parsedStartDate = parseIsoDate(startDate)
+  const parsedEndDate = parseIsoDate(endDate)
+
+  if (!parsedStartDate || !parsedEndDate) {
+    return 0
+  }
+
+  return Math.round((parsedEndDate.date.getTime() - parsedStartDate.date.getTime()) / 86400000)
+}
+
+const getIsoDateMonthDifference = (startDate, endDate) => {
+  const parsedStartDate = parseIsoDate(startDate)
+  const parsedEndDate = parseIsoDate(endDate)
+
+  if (!parsedStartDate || !parsedEndDate) {
+    return 0
+  }
+
+  return (parsedEndDate.year - parsedStartDate.year) * 12 + (parsedEndDate.month - parsedStartDate.month)
+}
+
+const getIsoDateYearDifference = (startDate, endDate) => {
+  const parsedStartDate = parseIsoDate(startDate)
+  const parsedEndDate = parseIsoDate(endDate)
+
+  if (!parsedStartDate || !parsedEndDate) {
+    return 0
+  }
+
+  return parsedEndDate.year - parsedStartDate.year
+}
+
+const matchesCalendarRecurrenceOnDate = (event, candidateDate) => {
+  const candidateDateParts = parseIsoDate(candidateDate)
+  const startDateParts = parseIsoDate(event.date)
+
+  if (!candidateDateParts || !startDateParts || compareIsoDates(candidateDate, event.date) < 0) {
+    return false
+  }
+
+  const { recurrence } = event
+
+  if (recurrence.until && compareIsoDates(candidateDate, recurrence.until) > 0) {
+    return false
+  }
+
+  if (recurrence.frequency === 'none') {
+    return candidateDate === event.date
+  }
+
+  if (recurrence.frequency === 'daily') {
+    return getIsoDateDayDifference(event.date, candidateDate) % recurrence.interval === 0
+  }
+
+  if (recurrence.frequency === 'weekly') {
+    const dayDifference = getIsoDateDayDifference(event.date, candidateDate)
+    const weekDifference = Math.floor(dayDifference / 7)
+
+    return (
+      weekDifference % recurrence.interval === 0 &&
+      recurrence.byWeekdays.includes(candidateDateParts.date.getUTCDay())
+    )
+  }
+
+  if (recurrence.frequency === 'monthly') {
+    return (
+      startDateParts.day === candidateDateParts.day &&
+      getIsoDateMonthDifference(event.date, candidateDate) % recurrence.interval === 0
+    )
+  }
+
+  if (recurrence.frequency === 'yearly') {
+    return (
+      startDateParts.month === candidateDateParts.month &&
+      startDateParts.day === candidateDateParts.day &&
+      getIsoDateYearDifference(event.date, candidateDate) % recurrence.interval === 0
+    )
+  }
+
+  return false
+}
+
+const expandCalendarEventOccurrences = (event, rangeStart, rangeEnd) => {
+  const occurrences = []
+  let occurrenceCount = 0
+  let cursorDate = event.date
+
+  while (compareIsoDates(cursorDate, rangeEnd) <= 0) {
+    if (matchesCalendarRecurrenceOnDate(event, cursorDate)) {
+      occurrenceCount += 1
+
+      if (event.recurrence.count && occurrenceCount > event.recurrence.count) {
+        break
+      }
+
+      if (compareIsoDates(cursorDate, rangeStart) >= 0) {
+        occurrences.push(buildCalendarEventPayload(event, cursorDate))
+      }
+
+      if (event.recurrence.frequency === 'none') {
+        break
+      }
+    }
+
+    cursorDate = addDaysToIsoDate(cursorDate, 1)
+  }
+
+  return occurrences
+}
+
+const selectCalendarEventRows = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        time_label,
+        event_date,
+        title,
+        location,
+        location_city,
+        location_country,
+        note,
+        member_ids,
+        recurrence_rule_json,
+        created_at,
+        updated_at
+      FROM calendar_events
+      WHERE owner_user_id = ?
+      ORDER BY event_date ASC, time_label ASC, created_at ASC, id ASC
+    `)
+    .all(ownerUserId)
+    .map(normalizeCalendarEventRow)
+
+const selectCalendarEventById = (ownerUserId, calendarEventId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        time_label,
+        event_date,
+        title,
+        location,
+        location_city,
+        location_country,
+        note,
+        member_ids,
+        recurrence_rule_json,
+        created_at,
+        updated_at
+      FROM calendar_events
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .get(ownerUserId, calendarEventId)
+
+const selectNormalizedCalendarEventById = (ownerUserId, calendarEventId) => {
+  const row = selectCalendarEventById(ownerUserId, calendarEventId)
+
+  return row ? normalizeCalendarEventRow(row) : null
 }
 
 const normalizeWidgetRow = (row) => ({
@@ -809,30 +1627,17 @@ const selectAllWidgets = (ownerUserId) =>
     .filter((widget) => allowedWidgetSourceLocations.has(widget.sourceLocation))
 
 const selectAllCalendarEvents = (ownerUserId) =>
-  db
-    .prepare(`
-      SELECT
-        id,
-        time_label AS time,
-        title,
-        location,
-        note,
-        member_ids
-      FROM calendar_events
-      WHERE owner_user_id = ?
-      ORDER BY time_label ASC, created_at ASC, id ASC
-    `)
-    .all(ownerUserId)
-    .map((row) => ({
-      id: row.id,
-      time: row.time,
-      title: row.title,
-      location: row.location,
-      note: row.note,
-      members: parseJsonArray(row.member_ids).filter(
-        (memberId) => typeof memberId === 'string',
-      ),
-    }))
+  selectCalendarEventRows(ownerUserId).map((event) => buildCalendarEventPayload(event))
+
+const selectCalendarEventsByRange = (ownerUserId, rangeStart, rangeEnd) =>
+  selectCalendarEventRows(ownerUserId)
+    .flatMap((event) => expandCalendarEventOccurrences(event, rangeStart, rangeEnd))
+    .sort(
+      (left, right) =>
+        left.date.localeCompare(right.date) ||
+        left.time.localeCompare(right.time) ||
+        left.seriesId.localeCompare(right.seriesId),
+    )
 
 const formatWeatherCondition = (weatherCode) =>
   weatherCodeMap.get(weatherCode) ?? 'Unknown'
@@ -1183,7 +1988,7 @@ if (todoItemSeedCount === 0) {
 const sendJson = (response, statusCode, payload, extraHeaders = {}) => {
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Content-Type': 'application/json; charset=utf-8',
     ...extraHeaders,
@@ -1465,7 +2270,48 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/app-preferences') {
+    sendJson(response, 200, { appPreferences: selectAppPreferences(ownerUserId) })
+    return
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/calendar-events') {
+    const rangeStart = requestUrl.searchParams.get('rangeStart')
+    const rangeEnd = requestUrl.searchParams.get('rangeEnd')
+
+    if (rangeStart !== null || rangeEnd !== null) {
+      if (!rangeStart || !rangeEnd) {
+        sendJson(response, 400, {
+          error: 'rangeStart and rangeEnd must both be provided as YYYY-MM-DD.',
+        })
+        return
+      }
+
+      const normalizedRangeStart = parseIsoDate(rangeStart)?.isoDate
+      const normalizedRangeEnd = parseIsoDate(rangeEnd)?.isoDate
+
+      if (!normalizedRangeStart || !normalizedRangeEnd) {
+        sendJson(response, 400, {
+          error: 'rangeStart and rangeEnd must be valid ISO dates in YYYY-MM-DD format.',
+        })
+        return
+      }
+
+      if (compareIsoDates(normalizedRangeStart, normalizedRangeEnd) > 0) {
+        sendJson(response, 400, { error: 'rangeStart must be on or before rangeEnd.' })
+        return
+      }
+
+      sendJson(response, 200, {
+        calendarEvents: selectCalendarEventsByRange(
+          ownerUserId,
+          normalizedRangeStart,
+          normalizedRangeEnd,
+        ),
+      })
+      return
+    }
+
     sendJson(response, 200, { calendarEvents: selectAllCalendarEvents(ownerUserId) })
     return
   }
@@ -1512,6 +2358,107 @@ const server = createServer(async (request, response) => {
 
       sendJson(response, 201, {
         familyMember: { id, firstName, color },
+      })
+      return
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/calendar-events') {
+    try {
+      const body = await readRequestBody(request)
+      const validMemberIds = buildFamilyMemberIdSet(ownerUserId)
+      const result = buildCalendarEventFromInput({
+        value: body,
+        validMemberIds,
+      })
+
+      if (result.error) {
+        sendJson(response, 400, { error: result.error })
+        return
+      }
+
+      const calendarEventId = `calendar-${randomUUID()}`
+      const timestamp = new Date().toISOString()
+
+      insertCalendarEvent(
+        ownerUserId,
+        {
+          id: calendarEventId,
+          ...result.calendarEvent,
+        },
+        timestamp,
+        timestamp,
+      )
+
+      const createdCalendarEvent = selectNormalizedCalendarEventById(
+        ownerUserId,
+        calendarEventId,
+      )
+
+      sendJson(response, 201, {
+        calendarEvent: buildCalendarEventPayload(createdCalendarEvent),
+      })
+      return
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    requestUrl.pathname.startsWith('/api/calendar-events/')
+  ) {
+    const calendarEventId = requestUrl.pathname.replace('/api/calendar-events/', '')
+
+    if (!calendarEventId) {
+      sendJson(response, 400, { error: 'Missing calendar event id.' })
+      return
+    }
+
+    try {
+      const body = await readRequestBody(request)
+      const currentCalendarEvent = selectNormalizedCalendarEventById(
+        ownerUserId,
+        calendarEventId,
+      )
+
+      if (!currentCalendarEvent) {
+        sendJson(response, 404, { error: 'Calendar event not found.' })
+        return
+      }
+
+      const validMemberIds = buildFamilyMemberIdSet(ownerUserId)
+      const result = buildCalendarEventFromInput({
+        value: body,
+        validMemberIds,
+        currentEvent: currentCalendarEvent,
+      })
+
+      if (result.error) {
+        sendJson(response, 400, { error: result.error })
+        return
+      }
+
+      const timestamp = new Date().toISOString()
+
+      updateCalendarEventRecord(
+        ownerUserId,
+        calendarEventId,
+        result.calendarEvent,
+        timestamp,
+      )
+
+      const updatedCalendarEvent = selectNormalizedCalendarEventById(
+        ownerUserId,
+        calendarEventId,
+      )
+
+      sendJson(response, 200, {
+        calendarEvent: buildCalendarEventPayload(updatedCalendarEvent),
       })
       return
     } catch {
@@ -1724,6 +2671,97 @@ const server = createServer(async (request, response) => {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
       return
     }
+  }
+
+  if (request.method === 'PATCH' && requestUrl.pathname === '/api/app-preferences') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const payload = body && typeof body === 'object' && !Array.isArray(body) ? body : {}
+      const hasLanguageCode = Object.prototype.hasOwnProperty.call(payload, 'languageCode')
+      const hasCountryCode = Object.prototype.hasOwnProperty.call(payload, 'countryCode')
+
+      if (!hasLanguageCode && !hasCountryCode) {
+        sendJson(response, 400, {
+          error: 'At least one of languageCode or countryCode is required.',
+        })
+        return
+      }
+
+      const currentPreferences = selectAppPreferences(ownerUserId)
+      let languageCode = currentPreferences.languageCode
+      let countryCode = currentPreferences.countryCode
+
+      if (hasLanguageCode && !isSupportedLanguageCode(payload.languageCode)) {
+        sendJson(response, 400, { error: 'languageCode must be one of en, de, fr, es.' })
+        return
+      }
+
+      if (hasCountryCode && !isSupportedCountryCode(payload.countryCode)) {
+        sendJson(response, 400, {
+          error: 'countryCode must be a two-letter ISO country code.',
+        })
+        return
+      }
+
+      if (hasLanguageCode) {
+        languageCode = normalizeLanguageCode(payload.languageCode)
+      }
+
+      if (hasCountryCode) {
+        countryCode = normalizeCountryCode(payload.countryCode)
+      }
+
+      const timestamp = new Date().toISOString()
+
+      upsertAppPreferences(ownerUserId, languageCode, countryCode, timestamp)
+
+      sendJson(response, 200, {
+        appPreferences: {
+          languageCode,
+          countryCode,
+          updatedAt: timestamp,
+        },
+      })
+      return
+    } catch (error) {
+      console.error('Failed to update app preferences.', error)
+      sendJson(response, 500, { error: 'Failed to update app preferences.' })
+      return
+    }
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    requestUrl.pathname.startsWith('/api/calendar-events/')
+  ) {
+    const calendarEventId = requestUrl.pathname.replace('/api/calendar-events/', '')
+
+    if (!calendarEventId) {
+      sendJson(response, 400, { error: 'Missing calendar event id.' })
+      return
+    }
+
+    const currentCalendarEvent = selectNormalizedCalendarEventById(ownerUserId, calendarEventId)
+
+    if (!currentCalendarEvent) {
+      sendJson(response, 404, { error: 'Calendar event not found.' })
+      return
+    }
+
+    deleteCalendarEventById(ownerUserId, calendarEventId)
+    sendJson(response, 200, {
+      calendarEvent: buildCalendarEventPayload(currentCalendarEvent),
+      deleted: true,
+    })
+    return
   }
 
   sendJson(response, 404, { error: 'Route not found.' })

@@ -7,6 +7,12 @@ import {
   type AuthUser,
 } from './api/auth'
 import {
+  DEFAULT_COUNTRY_CODE,
+  fetchAppPreferences,
+  normalizeCountryCode,
+  updateAppPreferences,
+} from './api/appPreferences'
+import {
   currentFrontendBuildId,
   fetchBackendRuntimeInfo,
   fetchFrontendRuntimeInfo,
@@ -22,6 +28,15 @@ import {
   updateWidgetSettings,
 } from './api/widgetSettings'
 import { fetchWidgetEntities, updateWidgetEntity } from './api/widgets'
+import { appTextCatalog, type AppTextBundle } from './i18n/appText'
+import {
+  DEFAULT_LANGUAGE_CODE,
+  formatLocalizedText,
+  getLocalizedBundle,
+  normalizeLanguageCode,
+  supportedLanguageOptions,
+  type SupportedLanguageCode,
+} from './i18n/localization'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import { WidgetDebugOverlay } from './widgets/WidgetDebugOverlay'
@@ -29,11 +44,24 @@ import {
   defaultArrivalBoardSettings,
   normalizeArrivalBoardSettings,
 } from './widgets/arrival-board'
-import { fetchCalendarEvents } from './widgets/calendar/calendarApi'
-import { filterCalendarAgendaItems } from './widgets/calendar'
+import {
+  fetchCalendarEventRecords,
+  mapCalendarEventRecordToAgendaItem,
+} from './widgets/calendar/calendarApi'
+import {
+  filterCalendarAgendaItems,
+  getCalendarWidgetTranslation,
+  type CalendarWidgetTranslation,
+} from './widgets/calendar'
 import { fetchTodoItems } from './widgets/todo/todoApi'
-import { filterTodoItemsForView } from './widgets/todo'
-import { normalizeWeatherSettings } from './widgets/weather'
+import {
+  filterTodoItemsForView,
+} from './widgets/todo'
+import {
+  getWeatherWidgetTranslation,
+  normalizeWeatherSettings,
+  type WeatherWidgetTranslation,
+} from './widgets/weather'
 import {
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
@@ -64,9 +92,42 @@ const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
 const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
 const LOCAL_APP_SHELL_STORAGE_KEY_PREFIX = 'subway-app-shell'
 
+const formatLocalIsoDate = (value: Date) => {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getDate()}`.padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const addLocalDays = (value: Date, dayCount: number) => {
+  const nextDate = new Date(value)
+  nextDate.setDate(nextDate.getDate() + dayCount)
+
+  return nextDate
+}
+
 type ViewMode = 'board' | 'settings'
 type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
+type AppPreferencesErrorKey = 'load-failed' | 'save-failed'
+type AppTextMessageKey = keyof AppTextBundle['messages']
 type MemberId = string
+
+const resolveAppMessage = (
+  messageKey: AppTextMessageKey | null,
+  appText: AppTextBundle,
+) => (messageKey ? appText.messages[messageKey] : null)
+
+const resolveLoginErrorKey = (error: unknown): AppTextMessageKey => {
+  if (
+    error instanceof Error &&
+    error.message === 'Invalid username or password.'
+  ) {
+    return 'authInvalidCredentials'
+  }
+
+  return 'authSignInFailed'
+}
 
 interface AppShellPersistedState {
   activeFilter: FilterId
@@ -115,24 +176,19 @@ const arrivals: Arrival[] = [
   },
 ]
 
-const emptyAgendaItem: AgendaItem = {
+const buildEmptyAgendaItem = (
+  calendarWidgetText: CalendarWidgetTranslation,
+): AgendaItem => ({
   line: 'calendar-empty',
+  date: '',
   time: '--:--',
-  title: 'No calendar events',
-  location: 'Calendar widget',
-  note: 'Calendar data will appear here when events are available for the active scope.',
+  title: calendarWidgetText.copy.emptyItemTitle,
+  location: calendarWidgetText.copy.emptyItemLocation,
+  locationCountry: '',
+  note: calendarWidgetText.copy.emptyItemNote,
+  isForeign: false,
   members: [ALL_MEMBERS_AUDIENCE],
-}
-
-const emptyTodoItem: TodoItem = {
-  id: 'todo-empty',
-  line: 'todo-empty',
-  task: 'No open todo items',
-  due: 'No due date',
-  lane: 'Todo widget',
-  done: false,
-  members: [ALL_MEMBERS_AUDIENCE],
-}
+})
 
 const newsItems: NewsItem[] = [
   {
@@ -176,24 +232,32 @@ const fallbackWeatherForecast: ForecastDay[] = [
   { day: 'THU', high: 70, low: 58, condition: 'Windy PM', visualState: 'wind' },
 ]
 
-const fallbackWeatherLocation: WeatherLocationData = {
-  id: 'location-1',
-  location: 'Berlin',
-  source: 'Open-Meteo',
-  stale: true,
-  updatedAt: new Date(0).toISOString(),
-  currentTemperature: '--°',
-  condition: 'Weather unavailable',
-  visualState: 'fallback',
-  rangeSummary: 'No live weather data available',
-  forecast: fallbackWeatherForecast,
+const buildFallbackWeatherData = (
+  weatherWidgetText: WeatherWidgetTranslation,
+): WeatherWidgetData => {
+  const fallbackWeatherLocation: WeatherLocationData = {
+    id: 'location-1',
+    location: 'Berlin',
+    source: 'Open-Meteo',
+    stale: true,
+    updatedAt: new Date(0).toISOString(),
+    currentTemperature: '--°',
+    condition: weatherWidgetText.copy.unavailableCondition,
+    visualState: 'fallback',
+    rangeSummary: weatherWidgetText.copy.noLiveDataSummary,
+    forecast: fallbackWeatherForecast,
+  }
+
+  return {
+    ...fallbackWeatherLocation,
+    focusLocationId: fallbackWeatherLocation.id,
+    locations: [fallbackWeatherLocation],
+  }
 }
 
-const fallbackWeatherData: WeatherWidgetData = {
-  ...fallbackWeatherLocation,
-  focusLocationId: fallbackWeatherLocation.id,
-  locations: [fallbackWeatherLocation],
-}
+const defaultFallbackWeatherData = buildFallbackWeatherData(
+  getWeatherWidgetTranslation(DEFAULT_LANGUAGE_CODE),
+)
 
 const commuteNotes: Record<string, string> = {
   [ALL_FILTER_ID]:
@@ -308,8 +372,12 @@ function App() {
   const [now, setNow] = useState(() => new Date())
   const [authStatus, setAuthStatus] = useState<AuthStatus>('bootstrapping')
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthUser | null>(null)
-  const [authError, setAuthError] = useState<string | null>(null)
+  const [authErrorKey, setAuthErrorKey] = useState<AppTextMessageKey | null>(null)
   const [authPending, setAuthPending] = useState(false)
+  const [selectedLanguageCode, setSelectedLanguageCode] =
+    useState<SupportedLanguageCode>(DEFAULT_LANGUAGE_CODE)
+  const [selectedCountryCode, setSelectedCountryCode] = useState(DEFAULT_COUNTRY_CODE)
+  const [countryCodeDraft, setCountryCodeDraft] = useState(DEFAULT_COUNTRY_CODE)
   const [loginUsername, setLoginUsername] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
@@ -319,58 +387,99 @@ function App() {
   const [calendarEvents, setCalendarEvents] = useState<AgendaItem[]>([])
   const [todoWidgetItems, setTodoWidgetItems] = useState<TodoItem[]>([])
   const [weatherWidgetData, setWeatherWidgetData] =
-    useState<WeatherWidgetData>(fallbackWeatherData)
+    useState<WeatherWidgetData>(defaultFallbackWeatherData)
   const [weatherRefreshToken, setWeatherRefreshToken] = useState(0)
   const [nextWeatherRefreshAt, setNextWeatherRefreshAt] = useState<number | null>(null)
   const [activeFilter, setActiveFilter] = useState<FilterId>(ALL_FILTER_ID)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberColor, setNewMemberColor] = useState(DEFAULT_NEW_MEMBER_COLOR)
-  const [familyMembersError, setFamilyMembersError] = useState<string | null>(null)
-  const [widgetMetadataError, setWidgetMetadataError] = useState<string | null>(null)
-  const [widgetMetadataAdminError, setWidgetMetadataAdminError] = useState<string | null>(null)
-  const [widgetSettingsError, setWidgetSettingsError] = useState<string | null>(null)
-  const [calendarEventsError, setCalendarEventsError] = useState<string | null>(null)
-  const [todoItemsError, setTodoItemsError] = useState<string | null>(null)
-  const [weatherError, setWeatherError] = useState<string | null>(null)
+  const [familyMembersErrorKey, setFamilyMembersErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [widgetMetadataErrorKey, setWidgetMetadataErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [widgetMetadataAdminErrorKey, setWidgetMetadataAdminErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [widgetSettingsErrorKey, setWidgetSettingsErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [appPreferencesPending, setAppPreferencesPending] = useState(false)
+  const [appPreferencesErrorKey, setAppPreferencesErrorKey] =
+    useState<AppPreferencesErrorKey | null>(null)
+  const [calendarEventsErrorKey, setCalendarEventsErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [todoItemsErrorKey, setTodoItemsErrorKey] =
+    useState<AppTextMessageKey | null>(null)
+  const [weatherErrorKey, setWeatherErrorKey] = useState<AppTextMessageKey | null>(null)
   const [debugModeEnabled, setDebugModeEnabled] = useState(false)
+  const [calendarRefreshToken, setCalendarRefreshToken] = useState(0)
   const [todoRefreshToken, setTodoRefreshToken] = useState(0)
   const [widgetSettingsMap, setWidgetSettingsMap] = useState<
     Record<string, WidgetSettingsValues>
   >({})
   const [widgetHealthMap, setWidgetHealthMap] = useState<Record<string, WidgetHealthState>>({})
   const [, setDebugTapTimestamps] = useState<number[]>([])
+  const [appPreferencesLoaded, setAppPreferencesLoaded] = useState(false)
   const [familyMembersLoaded, setFamilyMembersLoaded] = useState(false)
   const [widgetMetadataLoaded, setWidgetMetadataLoaded] = useState(false)
   const [, setWidgetSettingsLoaded] = useState(false)
   const [, setWidgetSettingsAvailable] = useState(false)
   const [appShellStateHydrated, setAppShellStateHydrated] = useState(false)
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
+  const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
+  const calendarWidgetText = getCalendarWidgetTranslation(selectedLanguageCode)
+  const weatherWidgetText = getWeatherWidgetTranslation(selectedLanguageCode)
+  const emptyAgendaItem = buildEmptyAgendaItem(calendarWidgetText)
+  const fallbackWeatherData = buildFallbackWeatherData(weatherWidgetText)
+  const normalizedCountryCodeDraft = countryCodeDraft.trim().toUpperCase()
+  const isCountryCodeDraftValid = /^[A-Z]{2}$/.test(normalizedCountryCodeDraft)
+  const appPreferencesError =
+    appPreferencesErrorKey === 'load-failed'
+      ? appText.settings.languageLoadFailed
+      : appPreferencesErrorKey === 'save-failed'
+        ? appText.settings.languageSaveFailed
+        : null
+  const authError = resolveAppMessage(authErrorKey, appText)
+  const familyMembersError = resolveAppMessage(familyMembersErrorKey, appText)
+  const widgetMetadataError = resolveAppMessage(widgetMetadataErrorKey, appText)
+  const widgetMetadataAdminError = resolveAppMessage(widgetMetadataAdminErrorKey, appText)
+  const widgetSettingsError = resolveAppMessage(widgetSettingsErrorKey, appText)
+  const calendarEventsError = resolveAppMessage(calendarEventsErrorKey, appText)
+  const todoItemsError = resolveAppMessage(todoItemsErrorKey, appText)
+  const weatherError = resolveAppMessage(weatherErrorKey, appText)
+  const calendarRangeStart = formatLocalIsoDate(now)
+  const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 6))
 
   const resetProtectedState = () => {
     setViewMode('board')
     setExpandedWidgetId(null)
+    setSelectedLanguageCode(DEFAULT_LANGUAGE_CODE)
+    setSelectedCountryCode(DEFAULT_COUNTRY_CODE)
+    setCountryCodeDraft(DEFAULT_COUNTRY_CODE)
     setRegisteredWidgets([])
     setFamilyMembers([])
     setCalendarEvents([])
     setTodoWidgetItems([])
-    setWeatherWidgetData(fallbackWeatherData)
+    setWeatherWidgetData(defaultFallbackWeatherData)
     setWeatherRefreshToken(0)
     setNextWeatherRefreshAt(null)
     setActiveFilter(ALL_FILTER_ID)
     setNewMemberName('')
     setNewMemberColor(DEFAULT_NEW_MEMBER_COLOR)
-    setFamilyMembersError(null)
-    setWidgetMetadataError(null)
-    setWidgetMetadataAdminError(null)
-    setWidgetSettingsError(null)
-    setCalendarEventsError(null)
-    setTodoItemsError(null)
-    setWeatherError(null)
+    setFamilyMembersErrorKey(null)
+    setWidgetMetadataErrorKey(null)
+    setWidgetMetadataAdminErrorKey(null)
+    setWidgetSettingsErrorKey(null)
+    setAppPreferencesPending(false)
+    setAppPreferencesErrorKey(null)
+    setCalendarEventsErrorKey(null)
+    setTodoItemsErrorKey(null)
+    setWeatherErrorKey(null)
     setDebugModeEnabled(false)
+    setCalendarRefreshToken(0)
     setTodoRefreshToken(0)
     setWidgetSettingsMap({})
     setWidgetHealthMap({})
     setDebugTapTimestamps([])
+    setAppPreferencesLoaded(false)
     setFamilyMembersLoaded(false)
     setWidgetMetadataLoaded(false)
     setWidgetSettingsLoaded(false)
@@ -378,29 +487,41 @@ function App() {
     setAppShellStateHydrated(false)
   }
 
-  const enterUnauthenticatedState = (message: string | null = null) => {
+  const enterUnauthenticatedState = (
+    messageKey: AppTextMessageKey | null = null,
+  ) => {
     resetProtectedState()
     setAuthenticatedUser(null)
     setLoginUsername('')
     setLoginPassword('')
     setAuthStatus('unauthenticated')
     setAuthPending(false)
-    setAuthError(message)
+    setAuthErrorKey(messageKey)
   }
 
-  const enterAuthenticatedState = (user: AuthUser) => {
+  const enterAuthenticatedState = (
+    user: AuthUser,
+    languageCode: SupportedLanguageCode,
+    countryCode: string,
+    nextAppPreferencesErrorKey: AppPreferencesErrorKey | null = null,
+  ) => {
     resetProtectedState()
+    setSelectedLanguageCode(languageCode)
+    setSelectedCountryCode(countryCode)
+    setCountryCodeDraft(countryCode)
+    setAppPreferencesLoaded(true)
+    setAppPreferencesErrorKey(nextAppPreferencesErrorKey)
     setAuthenticatedUser(user)
     setLoginUsername('')
     setLoginPassword('')
     setAuthStatus('authenticated')
     setAuthPending(false)
-    setAuthError(null)
+    setAuthErrorKey(null)
   }
 
   const handleAuthRequired = () => {
     setLoginPassword('')
-    enterUnauthenticatedState('Your session expired. Please sign in again.')
+    enterUnauthenticatedState('authSessionExpired')
   }
 
   useEffect(() => {
@@ -433,26 +554,54 @@ function App() {
   useEffect(() => {
     let cancelled = false
 
-    fetchCurrentSession()
-      .then((sessionState) => {
+    const bootstrapSession = async () => {
+      try {
+        const sessionState = await fetchCurrentSession()
+
         if (cancelled) {
           return
         }
 
-        if (sessionState.authenticated && sessionState.user) {
-          enterAuthenticatedState(sessionState.user)
+        if (!sessionState.authenticated || !sessionState.user) {
+          enterUnauthenticatedState()
           return
         }
 
-        enterUnauthenticatedState()
-      })
-      .catch(() => {
-        if (!cancelled) {
-          enterUnauthenticatedState(
-            'Failed to verify the current session. Please sign in again.',
+        try {
+          const appPreferences = await fetchAppPreferences()
+
+          if (!cancelled) {
+            enterAuthenticatedState(
+              sessionState.user,
+              appPreferences.languageCode,
+              appPreferences.countryCode,
+            )
+          }
+        } catch (error) {
+          if (cancelled) {
+            return
+          }
+
+          if (isAuthRequiredError(error)) {
+            enterUnauthenticatedState()
+            return
+          }
+
+          enterAuthenticatedState(
+            sessionState.user,
+            DEFAULT_LANGUAGE_CODE,
+            DEFAULT_COUNTRY_CODE,
+            'load-failed',
           )
         }
-      })
+      } catch {
+        if (!cancelled) {
+          enterUnauthenticatedState('authVerifySessionFailed')
+        }
+      }
+    }
+
+    void bootstrapSession()
 
     return () => {
       cancelled = true
@@ -549,7 +698,7 @@ function App() {
           )
           setWidgetSettingsLoaded(true)
           setWidgetSettingsAvailable(true)
-          setWidgetSettingsError(null)
+          setWidgetSettingsErrorKey(null)
         }
       })
       .catch((error) => {
@@ -561,9 +710,7 @@ function App() {
 
           setWidgetSettingsLoaded(true)
           setWidgetSettingsAvailable(false)
-          setWidgetSettingsError(
-            'Backend widget settings unavailable. Default widget settings are being used.',
-          )
+          setWidgetSettingsErrorKey('widgetSettingsUnavailable')
         }
       })
 
@@ -584,7 +731,7 @@ function App() {
         if (!cancelled) {
           setFamilyMembers(loadedMembers)
           setFamilyMembersLoaded(true)
-          setFamilyMembersError(null)
+          setFamilyMembersErrorKey(null)
           setActiveFilter((currentFilter) =>
             currentFilter === ALL_FILTER_ID ||
             loadedMembers.some((member) => member.id === currentFilter)
@@ -602,9 +749,7 @@ function App() {
 
           setFamilyMembers([])
           setFamilyMembersLoaded(true)
-          setFamilyMembersError(
-            'Backend sync unavailable. Family members shown below may not be current.',
-          )
+          setFamilyMembersErrorKey('familyMembersSyncUnavailable')
         }
       })
 
@@ -625,7 +770,7 @@ function App() {
         if (!cancelled) {
           setRegisteredWidgets(buildWidgetRegistry(widgetEntities))
           setWidgetMetadataLoaded(true)
-          setWidgetMetadataError(null)
+          setWidgetMetadataErrorKey(null)
         }
       })
       .catch((error) => {
@@ -637,9 +782,7 @@ function App() {
 
           setRegisteredWidgets([])
           setWidgetMetadataLoaded(true)
-          setWidgetMetadataError(
-            'Backend widget metadata unavailable. Widget board contents may be incomplete until the connection returns.',
-          )
+          setWidgetMetadataErrorKey('widgetMetadataUnavailable')
         }
       })
 
@@ -685,7 +828,7 @@ function App() {
           setNextWeatherRefreshAt(
             Date.now() + weatherSettings.refreshIntervalMinutes * 60 * 1000,
           )
-          setWeatherError(null)
+          setWeatherErrorKey(null)
           const weatherResult = result as WeatherWidgetData
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
@@ -707,13 +850,13 @@ function App() {
 
           setWeatherWidgetData(fallbackWeatherData)
           setNextWeatherRefreshAt(Date.now() + 60 * 1000)
-          setWeatherError('Failed to load live weather data from the backend weather widget path.')
+          setWeatherErrorKey('weatherLoadFailed')
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
             weather: {
               widgetId: 'weather',
               refreshStatus: 'error',
-              failureState: 'Failed to load live weather data from the backend weather widget path.',
+              failureState: 'weatherLoadFailed',
             },
           }))
         }
@@ -744,11 +887,20 @@ function App() {
 
     let cancelled = false
 
-    fetchCalendarEvents()
-      .then((agendaItems) => {
+    fetchCalendarEventRecords({
+      rangeStart: calendarRangeStart,
+      rangeEnd: calendarRangeEnd,
+    })
+      .then((calendarRecords) => {
+        const agendaItems = calendarRecords.map((calendarRecord) =>
+          mapCalendarEventRecordToAgendaItem(calendarRecord, {
+            homeCountryCode: selectedCountryCode,
+          }),
+        )
+
         if (!cancelled) {
           setCalendarEvents(agendaItems)
-          setCalendarEventsError(null)
+          setCalendarEventsErrorKey(null)
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
             calendar: {
@@ -768,15 +920,13 @@ function App() {
           }
 
           setCalendarEvents([])
-          setCalendarEventsError(
-            'Failed to load calendar events from the backend calendar widget path.',
-          )
+          setCalendarEventsErrorKey('calendarLoadFailed')
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
             calendar: {
               widgetId: 'calendar',
               refreshStatus: 'error',
-              failureState: 'Failed to load calendar events from the backend calendar widget path.',
+              failureState: 'calendarLoadFailed',
             },
           }))
         }
@@ -785,7 +935,11 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authStatus])
+  }, [authStatus, calendarRangeEnd, calendarRangeStart, calendarRefreshToken, selectedCountryCode])
+
+  const handleCalendarDataChanged = () => {
+    setCalendarRefreshToken((currentValue) => currentValue + 1)
+  }
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -798,7 +952,7 @@ function App() {
       .then((todoItems) => {
         if (!cancelled) {
           setTodoWidgetItems(todoItems)
-          setTodoItemsError(null)
+          setTodoItemsErrorKey(null)
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
             todo: {
@@ -818,15 +972,13 @@ function App() {
           }
 
           setTodoWidgetItems([])
-          setTodoItemsError(
-            'Failed to load todo items from the backend todo widget path.',
-          )
+          setTodoItemsErrorKey('todoLoadFailed')
           setWidgetHealthMap((currentValues) => ({
             ...currentValues,
             todo: {
               widgetId: 'todo',
               refreshStatus: 'error',
-              failureState: 'Failed to load todo items from the backend todo widget path.',
+              failureState: 'todoLoadFailed',
             },
           }))
         }
@@ -841,15 +993,15 @@ function App() {
   const filterOptions: FilterOption[] = [
     {
       id: ALL_FILTER_ID,
-      label: 'All',
-      caption: 'Household view',
+      label: appText.filters.allLabel,
+      caption: appText.filters.householdViewCaption,
       badgeText: 'HM',
       style: householdBadgeStyle,
     },
     ...familyMembers.map((member) => ({
       id: member.id,
       label: getMemberLabel(member),
-      caption: 'Member focus',
+      caption: appText.filters.memberFocusCaption,
       badgeText: getInitial(member.firstName),
       style: badgeStyle(member.color),
     })),
@@ -871,13 +1023,13 @@ function App() {
   const visibleNews = newsItems.filter((item) =>
     matchesFilter(item.members, activeFilter),
   )
-  const boardTime = new Intl.DateTimeFormat('en-US', {
+  const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
   }).format(now)
-  const boardDate = new Intl.DateTimeFormat('en-US', {
+  const boardDate = new Intl.DateTimeFormat(selectedLanguageCode, {
     weekday: 'short',
     month: 'short',
     day: '2-digit',
@@ -887,7 +1039,6 @@ function App() {
     .toUpperCase()
   const currentAgenda = visibleAgenda[0] ?? emptyAgendaItem
   const currentAlert = visibleNews[0] ?? newsItems[0]
-  const nextTodo = visibleTodos.find((item) => !item.done) ?? visibleTodos[0] ?? emptyTodoItem
   const arrivalBoardChromeSettings = normalizeArrivalBoardSettings(
     widgetSettingsMap['arrival-board'],
   )
@@ -901,7 +1052,7 @@ function App() {
       : defaultArrivalBoardSettings.boardSubheading
   const weatherRefreshCountdownLabel =
     nextWeatherRefreshAt === null
-      ? 'Scheduling next update'
+      ? weatherWidgetText.copy.schedulingNextUpdate
       : (() => {
           const millisecondsUntilRefresh = Math.max(
             nextWeatherRefreshAt - now.getTime(),
@@ -912,8 +1063,10 @@ function App() {
           const seconds = totalSeconds % 60
 
           return totalSeconds <= 0
-            ? 'Refreshing now'
-            : `Next update in ${minutes}:${seconds.toString().padStart(2, '0')}`
+            ? weatherWidgetText.copy.refreshingNow
+            : formatLocalizedText(weatherWidgetText.copy.nextUpdateIn, {
+                time: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+              })
         })()
   const commuteNote =
     commuteNotes[activeFilter] ??
@@ -952,7 +1105,7 @@ function App() {
                 member.id === persistedMember.id ? persistedMember : member,
               ),
             )
-            setFamilyMembersError(null)
+            setFamilyMembersErrorKey(null)
           })
           .catch((error) => {
             if (isAuthRequiredError(error)) {
@@ -960,9 +1113,7 @@ function App() {
               return
             }
 
-            setFamilyMembersError(
-              'Failed to persist family-member changes to the backend.',
-            )
+            setFamilyMembersErrorKey('familyMemberPersistFailed')
           })
       }
 
@@ -988,7 +1139,7 @@ function App() {
         setNewMemberName('')
         setNewMemberColor(DEFAULT_NEW_MEMBER_COLOR)
         setActiveFilter(persistedMember.id)
-        setFamilyMembersError(null)
+        setFamilyMembersErrorKey(null)
       })
       .catch((error) => {
         if (isAuthRequiredError(error)) {
@@ -996,7 +1147,7 @@ function App() {
           return
         }
 
-        setFamilyMembersError('Failed to create the family member in the backend.')
+        setFamilyMembersErrorKey('familyMemberCreateFailed')
       })
   }
 
@@ -1007,17 +1158,38 @@ function App() {
     const password = loginPassword
 
     if (!username || !password) {
-      setAuthError('Username and password are required.')
+      setAuthErrorKey('authCredentialsRequired')
       return
     }
 
     setAuthPending(true)
-    setAuthError(null)
+    setAuthErrorKey(null)
 
     loginWithPassword(username, password)
-      .then((user) => {
+      .then(async (user) => {
         setLoginPassword('')
-        enterAuthenticatedState(user)
+
+        try {
+          const appPreferences = await fetchAppPreferences()
+
+          enterAuthenticatedState(
+            user,
+            appPreferences.languageCode,
+            appPreferences.countryCode,
+          )
+        } catch (error) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          enterAuthenticatedState(
+            user,
+            DEFAULT_LANGUAGE_CODE,
+            DEFAULT_COUNTRY_CODE,
+            'load-failed',
+          )
+        }
       })
       .catch((error) => {
         if (isAuthRequiredError(error)) {
@@ -1025,18 +1197,90 @@ function App() {
           return
         }
 
-        setAuthError(
-          error instanceof Error ? error.message : 'Failed to sign in to the backend.',
-        )
+        setAuthErrorKey(resolveLoginErrorKey(error))
       })
       .finally(() => {
         setAuthPending(false)
       })
   }
 
+  const handleLanguagePreferenceChange = async (
+    nextLanguageCode: SupportedLanguageCode,
+  ) => {
+    if (nextLanguageCode === selectedLanguageCode) {
+      return
+    }
+
+    const previousLanguageCode = selectedLanguageCode
+
+    setSelectedLanguageCode(nextLanguageCode)
+    setAppPreferencesPending(true)
+    setAppPreferencesErrorKey(null)
+
+    try {
+      const persistedPreferences = await updateAppPreferences({
+        languageCode: nextLanguageCode,
+      })
+
+      setSelectedLanguageCode(persistedPreferences.languageCode)
+      setSelectedCountryCode(persistedPreferences.countryCode)
+      setCountryCodeDraft(persistedPreferences.countryCode)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      setSelectedLanguageCode(previousLanguageCode)
+      setAppPreferencesErrorKey('save-failed')
+    } finally {
+      setAppPreferencesPending(false)
+    }
+  }
+
+  const handleCountryPreferenceSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (
+      !isCountryCodeDraftValid ||
+      normalizedCountryCodeDraft === selectedCountryCode
+    ) {
+      return
+    }
+
+    const previousCountryCode = selectedCountryCode
+    const nextCountryCode = normalizeCountryCode(normalizedCountryCodeDraft)
+
+    setSelectedCountryCode(nextCountryCode)
+    setCountryCodeDraft(nextCountryCode)
+    setAppPreferencesPending(true)
+    setAppPreferencesErrorKey(null)
+
+    try {
+      const persistedPreferences = await updateAppPreferences({
+        countryCode: nextCountryCode,
+      })
+
+      setSelectedLanguageCode(persistedPreferences.languageCode)
+      setSelectedCountryCode(persistedPreferences.countryCode)
+      setCountryCodeDraft(persistedPreferences.countryCode)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      setSelectedCountryCode(previousCountryCode)
+      setCountryCodeDraft(previousCountryCode)
+      setAppPreferencesErrorKey('save-failed')
+    } finally {
+      setAppPreferencesPending(false)
+    }
+  }
+
   const handleLogout = () => {
     setAuthPending(true)
-    setAuthError(null)
+    setAuthErrorKey(null)
 
     logoutCurrentSession()
       .then(() => {
@@ -1049,7 +1293,7 @@ function App() {
           return
         }
 
-        setAuthError('Failed to sign out from the backend. Try again.')
+        setAuthErrorKey('authSignOutFailed')
       })
       .finally(() => {
         setAuthPending(false)
@@ -1104,7 +1348,7 @@ function App() {
     )
       .then(() => {
         setTodoRefreshToken((currentValue) => currentValue + 1)
-        setTodoItemsError(null)
+        setTodoItemsErrorKey(null)
       })
       .catch((error) => {
         if (isAuthRequiredError(error)) {
@@ -1114,13 +1358,13 @@ function App() {
 
         setTodoWidgetItems(previousTodoItems)
 
-        setTodoItemsError('Failed to update todo item state in the backend.')
+        setTodoItemsErrorKey('todoUpdateFailed')
         setWidgetHealthMap((currentValues) => ({
           ...currentValues,
           todo: {
             widgetId: 'todo',
             refreshStatus: 'error',
-            failureState: 'Failed to update todo item state in the backend.',
+            failureState: 'todoUpdateFailed',
             lastRefreshAt: currentValues.todo?.lastRefreshAt,
             itemCount: currentValues.todo?.itemCount,
           },
@@ -1162,7 +1406,7 @@ function App() {
         ...currentValues,
         [widgetId]: persistedSettings.settings,
       }))
-      setWidgetSettingsError(null)
+      setWidgetSettingsErrorKey(null)
     } catch (error) {
       if (isAuthRequiredError(error)) {
         handleAuthRequired()
@@ -1205,7 +1449,7 @@ function App() {
       const refreshedWidgetEntities = await fetchWidgetEntities()
 
       setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
-      setWidgetMetadataAdminError(null)
+      setWidgetMetadataAdminErrorKey(null)
     } catch (error) {
       if (isAuthRequiredError(error)) {
         handleAuthRequired()
@@ -1218,6 +1462,7 @@ function App() {
 
   const isProtectedShellReady =
     authStatus === 'authenticated' &&
+    appPreferencesLoaded &&
     familyMembersLoaded &&
     widgetMetadataLoaded &&
     appShellStateHydrated
@@ -1228,11 +1473,9 @@ function App() {
         <section className="screen auth-screen">
           <div className="hero-layout hero-layout--loading">
             <article className="hero-card hero-card--brand hero-card--loading">
-              <p className="terminal-location">Session bootstrap</p>
-              <h1 className="terminal-title">Restoring access</h1>
-              <p className="hero-copy">
-                Checking for an existing session before loading the protected board.
-              </p>
+              <p className="terminal-location">{appText.auth.sessionBootstrapKicker}</p>
+              <h1 className="terminal-title">{appText.auth.sessionBootstrapTitle}</h1>
+              <p className="hero-copy">{appText.auth.sessionBootstrapCopy}</p>
             </article>
           </div>
         </section>
@@ -1259,29 +1502,21 @@ function App() {
                   </span>
                 </div>
                 <div className="hero-subway-copy">
-                  <p className="terminal-location">NYC subway-style access</p>
+                  <p className="terminal-location">{appText.auth.heroKicker}</p>
                   <h1 className="terminal-title">{boardTitleDisplay}</h1>
-                  <p className="hero-copy">
-                    The subway is a rapid transit system built to move large numbers of people through one connected city network.
-                  </p>
-                  <p className="hero-copy">
-                    Its route bullets, colors, and signs make a complicated map readable in just a few seconds.
-                  </p>
-                  <p className="hero-copy">
-                    This board borrows that design language so household information feels as clear as a station platform.
-                  </p>
+                  <p className="hero-copy">{appText.auth.introParagraphOne}</p>
+                  <p className="hero-copy">{appText.auth.introParagraphTwo}</p>
+                  <p className="hero-copy">{appText.auth.introParagraphThree}</p>
                 </div>
               </div>
 
               <div className="hero-login-block">
                 <div className="settings-card-head">
-                  <p className="widget-kicker">Sign in</p>
-                  <h2>Enter the board</h2>
+                  <p className="widget-kicker">{appText.auth.signInKicker}</p>
+                  <h2>{appText.auth.signInTitle}</h2>
                 </div>
 
-                <p className="settings-copy">
-                  Login is required before personal subway data and settings are shown.
-                </p>
+                <p className="settings-copy">{appText.auth.signInCopy}</p>
 
                 {authError ? (
                   <p className="settings-note settings-note--warning">{authError}</p>
@@ -1289,31 +1524,31 @@ function App() {
 
                 <form className="settings-form auth-form" onSubmit={handleLogin}>
                   <label className="settings-label">
-                    <span>Username</span>
+                    <span>{appText.auth.usernameLabel}</span>
                     <input
                       autoComplete="username"
                       className="settings-input"
                       type="text"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
-                      placeholder="Username"
+                      placeholder={appText.auth.usernamePlaceholder}
                     />
                   </label>
 
                   <label className="settings-label">
-                    <span>Password</span>
+                    <span>{appText.auth.passwordLabel}</span>
                     <input
                       autoComplete="current-password"
                       className="settings-input"
                       type="password"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
-                      placeholder="Password"
+                      placeholder={appText.auth.passwordPlaceholder}
                     />
                   </label>
 
                   <button className="settings-submit" type="submit" disabled={authPending}>
-                    {authPending ? 'Signing in…' : 'Sign in'}
+                    {authPending ? appText.auth.signingInAction : appText.auth.signInAction}
                   </button>
                 </form>
               </div>
@@ -1330,11 +1565,13 @@ function App() {
         <section className="screen auth-screen">
           <div className="hero-layout hero-layout--loading">
             <article className="hero-card hero-card--brand hero-card--loading">
-              <p className="terminal-location">Authenticated session</p>
-              <h1 className="terminal-title">Loading {authenticatedUser?.username}</h1>
-              <p className="hero-copy">
-                Restoring widgets, members, and saved settings for this account.
-              </p>
+              <p className="terminal-location">{appText.auth.authenticatedSessionKicker}</p>
+              <h1 className="terminal-title">
+                {formatLocalizedText(appText.auth.authenticatedSessionTitle, {
+                  username: authenticatedUser?.username ?? '',
+                })}
+              </h1>
+              <p className="hero-copy">{appText.auth.authenticatedSessionCopy}</p>
             </article>
           </div>
         </section>
@@ -1352,27 +1589,26 @@ function App() {
               <h1 className="terminal-title">
                 {viewMode === 'board'
                   ? boardTitleDisplay
-                  : 'Family settings'}
+                  : appText.shell.familySettingsTitle}
               </h1>
             </div>
           </div>
 
           <div className="terminal-right">
             <div className="terminal-actions">
-              <span className="session-chip">{authenticatedUser?.username}</span>
               <button
                 type="button"
                 className={`terminal-button${viewMode === 'board' ? ' is-active' : ''}`}
                 onClick={() => setViewMode('board')}
               >
-                Board
+                {appText.shell.boardTab}
               </button>
               <button
                 type="button"
                 className={`terminal-button${viewMode === 'settings' ? ' is-active' : ''}`}
                 onClick={() => setViewMode('settings')}
               >
-                Settings
+                {appText.shell.settingsTab}
               </button>
               <button
                 type="button"
@@ -1380,12 +1616,13 @@ function App() {
                 onClick={handleLogout}
                 disabled={authPending}
               >
-                {authPending ? 'Signing out…' : 'Log out'}
+                {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
               </button>
             </div>
             <div className="clock-stack">
-              <p className="board-date">{boardDate}</p>
-              <p className="board-clock">{boardTime}</p>
+              <p className="board-datetime">
+                {boardDate} {boardTime}
+              </p>
             </div>
           </div>
         </header>
@@ -1399,6 +1636,8 @@ function App() {
 
           {viewMode === 'board' ? (
             <WidgetBoardHost
+              appText={appText}
+              languageCode={selectedLanguageCode}
               registeredWidgets={registeredWidgets}
               activeFilter={activeFilter}
               activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
@@ -1409,15 +1648,17 @@ function App() {
               visibleArrivals={visibleArrivals}
               visibleAgenda={visibleAgenda}
               visibleTodos={visibleTodos}
-              visibleNews={visibleNews}
+              familyMembers={familyMembers}
+              homeCountryCode={selectedCountryCode}
+              calendarSettings={widgetSettingsMap.calendar ?? {}}
               weatherData={weatherWidgetData}
               weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
               currentAgenda={currentAgenda}
               currentAlert={currentAlert}
-              nextTodo={nextTodo}
               commuteNote={commuteNote}
               renderAudienceBadge={renderAudienceBadge}
               onToggleTodoDone={handleToggleTodoDone}
+              onCalendarDataChanged={handleCalendarDataChanged}
             />
           ) : (
             <section className="settings-page">
@@ -1431,21 +1672,25 @@ function App() {
                     7
                   </span>
                   <div>
-                    <p className="widget-kicker">Settings</p>
-                    <h2>Family members</h2>
+                    <p className="widget-kicker">{appText.settings.panelKicker}</p>
+                    <h2>{appText.settings.familyMembersTitle}</h2>
                   </div>
                 </div>
-                <p className="widget-meta">{familyMembers.length} active members</p>
+                <p className="widget-meta">
+                  {formatLocalizedText(appText.settings.familyMembersMeta, {
+                    count: familyMembers.length,
+                  })}
+                </p>
               </div>
 
-              <p className="settings-copy">
-                Add family members, choose a color for each person, and use the
-                first letter of the forename as the circle badge across the kiosk.
-                Widget headers use their configured badge letter and color.
-              </p>
+              <p className="settings-copy">{appText.settings.familyMembersCopy}</p>
 
               {familyMembersError ? (
                 <p className="settings-note settings-note--warning">{familyMembersError}</p>
+              ) : null}
+
+              {appPreferencesError ? (
+                <p className="settings-note settings-note--warning">{appPreferencesError}</p>
               ) : null}
 
               {widgetMetadataError ? (
@@ -1485,15 +1730,13 @@ function App() {
                         </span>
                         <div>
                           <h3>{getMemberLabel(member)}</h3>
-                          <p>
-                            This initial and color are used in filters and member badges.
-                          </p>
+                          <p>{appText.settings.memberEditorCopy}</p>
                         </div>
                       </div>
 
                       <div className="member-form-fields">
                         <label className="settings-label">
-                          <span>Forename</span>
+                          <span>{appText.settings.firstNameLabel}</span>
                           <input
                             className="settings-input"
                             type="text"
@@ -1501,12 +1744,12 @@ function App() {
                             onChange={(event) =>
                               updateMember(member.id, 'firstName', event.target.value)
                             }
-                            placeholder="Forename"
+                            placeholder={appText.settings.firstNamePlaceholder}
                           />
                         </label>
 
                         <label className="settings-label settings-label--color">
-                          <span>Color</span>
+                          <span>{appText.settings.colorLabel}</span>
                           <input
                             className="settings-color"
                             type="color"
@@ -1522,25 +1765,108 @@ function App() {
                 </div>
 
                 <div className="settings-side">
+                  <article className="settings-card">
+                    <div className="settings-card-head">
+                      <p className="widget-kicker">{appText.settings.languageKicker}</p>
+                      <h3>{appText.settings.languageTitle}</h3>
+                    </div>
+
+                    <p className="settings-copy">{appText.settings.languageDescription}</p>
+
+                    <label className="settings-label">
+                      <span>{appText.settings.languageLabel}</span>
+                      <select
+                        className="settings-input settings-select"
+                        value={selectedLanguageCode}
+                        onChange={(event) => {
+                          void handleLanguagePreferenceChange(
+                            normalizeLanguageCode(event.target.value),
+                          )
+                        }}
+                        disabled={appPreferencesPending}
+                      >
+                        {supportedLanguageOptions.map((language) => (
+                          <option key={language.code} value={language.code}>
+                            {language.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <p className="settings-note">
+                      {appPreferencesPending
+                        ? appText.settings.languageSavingNote
+                        : appText.settings.languagePersistenceNote}
+                    </p>
+                  </article>
+
+                  <form className="settings-card settings-form" onSubmit={handleCountryPreferenceSubmit}>
+                    <div className="settings-card-head">
+                      <p className="widget-kicker">{appText.settings.countryKicker}</p>
+                      <h3>{appText.settings.countryTitle}</h3>
+                    </div>
+
+                    <p className="settings-copy">{appText.settings.countryDescription}</p>
+
+                    <label className="settings-label">
+                      <span>{appText.settings.countryLabel}</span>
+                      <input
+                        className="settings-input"
+                        type="text"
+                        inputMode="text"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        maxLength={2}
+                        value={countryCodeDraft}
+                        onChange={(event) =>
+                          setCountryCodeDraft(
+                            event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
+                          )
+                        }
+                        placeholder={appText.settings.countryPlaceholder}
+                        disabled={appPreferencesPending}
+                      />
+                    </label>
+
+                    <p className="settings-note">{appText.settings.countryFormatNote}</p>
+
+                    <button
+                      className="settings-submit"
+                      type="submit"
+                      disabled={
+                        appPreferencesPending ||
+                        !isCountryCodeDraftValid ||
+                        normalizedCountryCodeDraft === selectedCountryCode
+                      }
+                    >
+                      {appPreferencesPending
+                        ? appText.settings.countrySavingNote
+                        : appText.settings.countrySaveAction}
+                    </button>
+
+                    <p className="settings-note">{appText.settings.countryPersistenceNote}</p>
+                  </form>
+
                   <form className="settings-card settings-form" onSubmit={handleAddMember}>
                     <div className="settings-card-head">
-                      <p className="widget-kicker">Add member</p>
-                      <h3>New roster entry</h3>
+                      <p className="widget-kicker">{appText.settings.addMemberKicker}</p>
+                      <h3>{appText.settings.addMemberTitle}</h3>
                     </div>
 
                     <label className="settings-label">
-                      <span>Forename</span>
+                      <span>{appText.settings.firstNameLabel}</span>
                       <input
                         className="settings-input"
                         type="text"
                         value={newMemberName}
                         onChange={(event) => setNewMemberName(event.target.value)}
-                        placeholder="Forename"
+                        placeholder={appText.settings.firstNamePlaceholder}
                       />
                     </label>
 
                     <label className="settings-label settings-label--color">
-                      <span>Color</span>
+                      <span>{appText.settings.colorLabel}</span>
                       <input
                         className="settings-color"
                         type="color"
@@ -1550,13 +1876,15 @@ function App() {
                     </label>
 
                     <button className="settings-submit" type="submit">
-                      Add family member
+                      {appText.settings.addMemberAction}
                     </button>
                   </form>
                 </div>
               </div>
 
               <WidgetMetadataAdminHost
+                appText={appText}
+                languageCode={selectedLanguageCode}
                 registeredWidgets={registeredWidgets}
                 familyMembers={familyMembers}
                 availableSourceLocations={registeredWidgets.map(
@@ -1565,17 +1893,13 @@ function App() {
                 widgetSettingsMap={widgetSettingsMap}
                 onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
                   handleSaveWidgetSettings(widgetId, settings).catch(() => {
-                    setWidgetSettingsError(
-                      'Failed to persist widget settings to the backend.',
-                    )
+                    setWidgetSettingsErrorKey('widgetSettingsSaveFailed')
                     throw new Error('widget settings save failed')
                   })
                 }
                 onSaveWidgetMetadata={(widgetId: string, draft: WidgetMetadataDraft) =>
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
-                    setWidgetMetadataAdminError(
-                      'Failed to persist widget metadata to the backend.',
-                    )
+                    setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
                     throw new Error('widget metadata save failed')
                   })
                 }
@@ -1587,6 +1911,8 @@ function App() {
 
         {viewMode === 'board' && debugModeEnabled ? (
           <WidgetDebugOverlay
+            appText={appText}
+            languageCode={selectedLanguageCode}
             registeredWidgets={registeredWidgets}
             activeFilter={activeFilter}
             widgetHealthMap={widgetHealthMap}

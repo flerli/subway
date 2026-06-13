@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { SupportedLanguageCode } from '../i18n/localization'
 
 export type WidgetId = string
 export type WidgetCapability = 'read' | 'write'
@@ -51,6 +52,25 @@ export interface WidgetMutationContext {
 export interface WidgetDetailViewContext {
   widget: RegisteredWidget
   data: unknown
+  languageCode: SupportedLanguageCode
+}
+
+export interface WidgetSettingsFieldTextDefinition {
+  label: string
+  placeholder?: string
+}
+
+export interface WidgetSettingsTextDefinition {
+  title: string
+  description: string
+  fields: Record<string, WidgetSettingsFieldTextDefinition>
+}
+
+export interface WidgetTranslationDefinition {
+  title: string
+  boardKicker: string
+  copy: Record<string, string>
+  settings?: WidgetSettingsTextDefinition
 }
 
 export interface WidgetSettingFieldDefinition {
@@ -78,6 +98,8 @@ export interface WidgetMicroAppContract {
   capabilities: WidgetCapability[]
   hasSettingsPanel: boolean
   settingsDefinition?: WidgetSettingsDefinition
+  getTranslation: (languageCode: SupportedLanguageCode) => WidgetTranslationDefinition
+  matchesDefaultTitle?: (title: string) => boolean
   loadData: (context: WidgetLoadContext) => unknown | Promise<unknown>
   mutateData?: (context: WidgetMutationContext) => void | Promise<void>
   renderDetailView?: (context: WidgetDetailViewContext) => ReactNode
@@ -85,7 +107,6 @@ export interface WidgetMicroAppContract {
 
 export interface WidgetPresentation {
   widgetNumber: number
-  boardKicker: string
 }
 
 export interface WidgetHealthState {

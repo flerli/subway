@@ -1,28 +1,42 @@
 import { useEffect, type ReactNode } from 'react'
+import type { AppTextBundle } from '../i18n/appText'
+import {
+  formatLocalizedText,
+  type SupportedLanguageCode,
+} from '../i18n/localization'
 import { buildBadgeStyle } from './widgetAppearance'
+import type { ArrivalBoardWidgetTranslation } from './arrival-board/translations'
+import type { CalendarWidgetTranslation } from './calendar/translations'
 import type {
   AgendaItem,
   Arrival,
   AudienceBadgeRenderer,
+  FamilyMember,
   FilterId,
   FilterOption,
   NewsItem,
   TodoItem,
   WeatherWidgetData,
 } from './widgetHostModels'
-import {
-  widgetGridPlacementZones,
-  widgetPlacementZones,
-} from './widgetPlacementZones'
+import { widgetGridPlacementZones } from './widgetPlacementZones'
 import { WeatherIcon } from './weather/WeatherIcon'
 import type {
   RegisteredWidget,
   WidgetPlacementAssignment,
   WidgetPlacementZoneId,
+  WidgetSettingsValues,
 } from './widgetTypes'
+import {
+  getWidgetBoardKicker,
+  resolveWidgetTitle,
+} from './widgetLocalization'
+import type { TodoWidgetTranslation } from './todo/translations'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
+import type { WeatherWidgetTranslation } from './weather/translations'
 
 interface WidgetBoardHostProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   activeProfileLabel?: string
@@ -30,18 +44,21 @@ interface WidgetBoardHostProps {
   filterOptions: FilterOption[]
   onFilterChange: (filterId: FilterId) => void
   onExpandedWidgetChange: (widgetId: string | null) => void
+
   visibleArrivals: Arrival[]
   visibleAgenda: AgendaItem[]
   visibleTodos: TodoItem[]
-  visibleNews: NewsItem[]
+  familyMembers: FamilyMember[]
+  homeCountryCode: string
+  calendarSettings: WidgetSettingsValues
   weatherData: WeatherWidgetData
   weatherRefreshCountdownLabel: string
   currentAgenda: AgendaItem
   currentAlert: NewsItem
-  nextTodo: TodoItem
   commuteNote: string
   renderAudienceBadge: AudienceBadgeRenderer
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
+  onCalendarDataChanged: () => void
 }
 
 interface WidgetZoneEntry {
@@ -65,6 +82,8 @@ const hasMetaContent = (meta: ReactNode) =>
   meta !== null && meta !== undefined && meta !== false && meta !== ''
 
 export function WidgetBoardHost({
+  appText,
+  languageCode,
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
@@ -75,19 +94,57 @@ export function WidgetBoardHost({
   visibleArrivals,
   visibleAgenda,
   visibleTodos,
-  visibleNews,
+  familyMembers,
+  homeCountryCode,
+  calendarSettings,
   weatherData,
   weatherRefreshCountdownLabel,
   currentAgenda,
   currentAlert,
-  nextTodo,
   commuteNote,
   renderAudienceBadge,
   onToggleTodoDone,
+  onCalendarDataChanged,
 }: WidgetBoardHostProps) {
   const visibleWidgets = registeredWidgets.filter((widget) =>
     isWidgetVisibleForFilter(widget.entity, activeFilter),
   )
+
+  const buildCountryFlag = (countryCode: string) => {
+    const normalizedCountryCode = countryCode.trim().toUpperCase()
+
+    if (!/^[A-Z]{2}$/.test(normalizedCountryCode)) {
+      return ''
+    }
+
+    return Array.from(normalizedCountryCode)
+      .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+      .join('')
+  }
+
+  const formatCalendarDayLabel = (date: string) =>
+    new Intl.DateTimeFormat(languageCode, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    })
+      .format(new Date(`${date}T00:00:00`))
+      .replace(',', '')
+
+  const groupAgendaItemsByDate = (agendaItems: AgendaItem[]) => {
+    const dayGroups = new Map<string, AgendaItem[]>()
+
+    for (const agendaItem of agendaItems) {
+      const existingItems = dayGroups.get(agendaItem.date) ?? []
+      existingItems.push(agendaItem)
+      dayGroups.set(agendaItem.date, existingItems)
+    }
+
+    return Array.from(dayGroups.entries()).map(([date, items]) => ({
+      date,
+      items,
+    }))
+  }
 
   useEffect(() => {
     if (
@@ -121,8 +178,12 @@ export function WidgetBoardHost({
         className={`widget-action-button${isExpanded ? ' is-active' : ''}`}
         aria-label={
           isExpanded
-            ? `Collapse ${widget.entity.title} expanded view`
-            : `Expand ${widget.entity.title} into the lower panel`
+            ? formatLocalizedText(appText.boardHost.collapseAriaLabel, {
+                title: resolveWidgetTitle(widget, languageCode),
+              })
+            : formatLocalizedText(appText.boardHost.expandAriaLabel, {
+                title: resolveWidgetTitle(widget, languageCode),
+              })
         }
         aria-pressed={isExpanded}
         onClick={() => toggleExpandedWidget(widget.entity.id)}
@@ -137,7 +198,11 @@ export function WidgetBoardHost({
             strokeWidth="1.5"
           />
         </svg>
-        <span>{isExpanded ? 'Close' : 'Expand'}</span>
+        <span>
+          {isExpanded
+            ? appText.boardHost.collapseAction
+            : appText.boardHost.expandAction}
+        </span>
       </button>
     )
   }
@@ -167,7 +232,7 @@ export function WidgetBoardHost({
             {widget.entity.subwayLetter}
           </span>
           <div className="widget-title-stack">
-            <h2>{widget.entity.title}</h2>
+            <h2>{resolveWidgetTitle(widget, languageCode)}</h2>
             {hasMetaContent(meta) ? <p className="widget-meta">{meta}</p> : null}
           </div>
         </div>
@@ -185,7 +250,11 @@ export function WidgetBoardHost({
     const badgeStyle = buildWidgetBadgeStyle(widget)
 
     switch (widget.entity.id) {
-      case 'arrival-board':
+      case 'arrival-board': {
+        const arrivalBoardWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as ArrivalBoardWidgetTranslation
+
         return (
           <article
             className={`widget widget--board${mode === 'expanded' ? ' widget--expanded' : ''}${
@@ -199,18 +268,18 @@ export function WidgetBoardHost({
                   {widget.entity.subwayLetter}
                 </span>
                 <div>
-                  <p className="widget-kicker">{widget.presentation.boardKicker}</p>
+                  <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
                   <h2>
                     {activeProfileLabel
-                      ? `${activeProfileLabel} arrivals`
-                      : 'All household arrivals'}
+                      ? formatLocalizedText(
+                          arrivalBoardWidgetText.copy.focusedArrivalsTitle,
+                          { name: activeProfileLabel },
+                        )
+                      : arrivalBoardWidgetText.copy.allArrivalsTitle}
                   </h2>
                 </div>
               </div>
-              <div className="board-head-side">
-                <p className="board-side-label">Ready next</p>
-                <p className="board-side-value">{nextTodo.task}</p>
-                <p className="board-side-detail">{nextTodo.due}</p>
+              <div className="widget-head-side">
                 {renderExpandControl(widget)}
               </div>
             </div>
@@ -238,15 +307,15 @@ export function WidgetBoardHost({
                     </article>
                   ))
                 : renderEmptyState(
-                    'No personal arrivals yet',
-                    'Add household data sources or switch back to the All filter.',
+                    arrivalBoardWidgetText.copy.noArrivalsTitle,
+                    arrivalBoardWidgetText.copy.noArrivalsCopy,
                     'empty-state--board',
                   )}
             </div>
 
             <div className="board-footer">
               <div className="happening-now">
-                <p className="board-side-label">Happening now</p>
+                <p className="board-side-label">{arrivalBoardWidgetText.copy.happeningNowLabel}</p>
                 <p className="happening-copy">
                   {currentAgenda.time} · {currentAgenda.title} · {currentAgenda.location}
                 </p>
@@ -259,12 +328,19 @@ export function WidgetBoardHost({
             </div>
           </article>
         )
-      case 'weather':
+      }
+      case 'weather': {
+        const weatherWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as WeatherWidgetTranslation
+
         return renderWidgetFrame({
           widget,
           badgeStyle,
           meta: `${weatherData.source} · ${weatherData.location} · ${
-            weatherData.stale ? 'cached' : 'live'
+            weatherData.stale
+              ? weatherWidgetText.copy.statusCached
+              : weatherWidgetText.copy.statusLive
           }`,
           mode,
           children: (
@@ -280,11 +356,11 @@ export function WidgetBoardHost({
                   <p className="weather-note">{commuteNote}</p>
                   <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
                   <p className="weather-updated">
-                    Updated{' '}
-                    {new Date(weatherData.updatedAt).toLocaleTimeString([], {
+                    {weatherWidgetText.copy.updatedPrefix}{' '}
+                    {new Intl.DateTimeFormat(languageCode, {
                       hour: '2-digit',
                       minute: '2-digit',
-                    })}
+                    }).format(new Date(weatherData.updatedAt))}
                   </p>
                 </div>
               </div>
@@ -314,40 +390,75 @@ export function WidgetBoardHost({
             </>
           ),
         })
-      case 'calendar':
+      }
+      case 'calendar': {
+        const calendarWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as CalendarWidgetTranslation
+        const groupedAgendaItems = groupAgendaItemsByDate(visibleAgenda)
+
         return renderWidgetFrame({
           widget,
           badgeStyle,
-          meta: `${visibleAgenda.length} active stops`,
+          meta: formatLocalizedText(
+            calendarWidgetText.copy.upcomingEventsMeta,
+            {
+            count: visibleAgenda.length,
+            },
+          ),
           mode,
           children: (
-            <ul className="agenda-list">
-              {visibleAgenda.length > 0
-                ? visibleAgenda.map((item) => (
-                    <li className="agenda-row" key={`${item.time}-${item.title}`}>
-                      <p className="agenda-time">{item.time}</p>
-                      <div className="agenda-copy">
-                        <p className="agenda-title">{item.title}</p>
-                        <p className="agenda-location">{item.location}</p>
-                        <p className="agenda-note">{item.note}</p>
-                      </div>
-                      {renderAudienceBadge(item.members)}
-                    </li>
+            <div className="calendar-mini-week">
+              {groupedAgendaItems.length > 0
+                ? groupedAgendaItems.map((dayGroup) => (
+                    <section className="calendar-day-group" key={dayGroup.date}>
+                      <p className="calendar-day-heading">{formatCalendarDayLabel(dayGroup.date)}</p>
+
+                      <ul className="agenda-list agenda-list--grouped">
+                        {dayGroup.items.map((item) => (
+                          <li className="agenda-row" key={`${item.date}-${item.time}-${item.title}`}>
+                            <p className="agenda-time">{item.time}</p>
+                            <div className="agenda-copy">
+                              <p className="agenda-title">{item.title}</p>
+                              <p className="agenda-location">
+                                {item.isForeign ? (
+                                  <span className="agenda-flag" aria-hidden="true">
+                                    {buildCountryFlag(item.locationCountry)}
+                                  </span>
+                                ) : null}
+                                <span>{item.location}</span>
+                              </p>
+                              <p className="agenda-note">{item.note}</p>
+                            </div>
+                            {renderAudienceBadge(item.members)}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
                   ))
                 : renderEmptyState(
-                    'No calendar items',
-                    'This widget is hidden until its scope matches the active focused member.',
+                    calendarWidgetText.copy.emptyTitle,
+                    calendarWidgetText.copy.emptyCopy,
                   )}
-            </ul>
+            </div>
           ),
         })
-      case 'todo':
+      }
+      case 'todo': {
+        const todoWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as TodoWidgetTranslation
         const openTodoCount = visibleTodos.filter((todoItem) => !todoItem.done).length
 
         return renderWidgetFrame({
           widget,
           badgeStyle,
-          meta: `${openTodoCount} open items`,
+          meta: formatLocalizedText(
+            todoWidgetText.copy.openItemsMeta,
+            {
+              count: openTodoCount,
+            },
+          ),
           mode,
           children: (
             <ul className="todo-list">
@@ -374,70 +485,81 @@ export function WidgetBoardHost({
                           className="todo-action"
                           onClick={() => onToggleTodoDone(item.id, !item.done)}
                         >
-                          {item.done ? 'Reopen' : 'Done'}
+                          {item.done
+                            ? todoWidgetText.copy.reopenAction
+                            : todoWidgetText.copy.doneAction}
                         </button>
                         <p className="todo-due">{item.due}</p>
                       </div>
                     </li>
                   ))
                 : renderEmptyState(
-                    'No tasks in scope',
-                    'This widget is assigned to another focused member in the current sample setup.',
+                    todoWidgetText.copy.emptyTitle,
+                    todoWidgetText.copy.emptyCopy,
                   )}
             </ul>
           ),
         })
-      case 'bulletins':
-        return renderWidgetFrame({
-          widget,
-          badgeStyle,
-          meta: 'Filtered by member color and initial',
-          mode,
-          children: (
-            <div className="news-list">
-              {visibleNews.length > 0
-                ? visibleNews.map((item) => (
-                    <article className="news-card" key={`${item.source}-${item.headline}`}>
-                      <div className="news-meta">
-                        {renderAudienceBadge(item.members)}
-                        <p>{item.source}</p>
-                        <p>{item.eta}</p>
-                      </div>
-                      <h3>{item.headline}</h3>
-                      <p>{item.summary}</p>
-                    </article>
-                  ))
-                : renderEmptyState(
-                    'No bulletins in scope',
-                    'This zone hides widgets whose configured member scope does not include the active focus.',
-                  )}
-            </div>
-          ),
-        })
+      }
       default:
         return null
     }
   }
 
   const renderExpandedWidget = (widget: RegisteredWidget) => {
-    if (widget.entity.id === 'weather' && widget.module.renderDetailView) {
+    if (widget.module.renderDetailView) {
       const badgeStyle = buildWidgetBadgeStyle(widget)
+      const detailData =
+        widget.entity.id === 'weather'
+          ? {
+              weatherData,
+              commuteNote,
+              weatherRefreshCountdownLabel,
+            }
+          : widget.entity.id === 'calendar'
+            ? {
+                focusedMemberId: activeFilter === 'all' ? null : activeFilter,
+                familyMembers,
+                homeCountryCode,
+                includeHouseholdEvents: Boolean(calendarSettings.includeHouseholdEvents ?? true),
+                onCalendarDataChanged,
+              }
+            : null
+
+      if (!detailData) {
+        return renderWidget(widget, 'expanded')
+      }
+
       const detailContent = widget.module.renderDetailView({
         widget,
-        data: {
-          weatherData,
-          commuteNote,
-          weatherRefreshCountdownLabel,
-        },
+        data: detailData,
+        languageCode,
       })
 
       if (detailContent) {
+        const weatherWidgetText = widget.module.getTranslation?.(
+          languageCode,
+        ) as WeatherWidgetTranslation | undefined
+        const calendarWidgetText = widget.module.getTranslation?.(
+          languageCode,
+        ) as CalendarWidgetTranslation | undefined
+
         return renderWidgetFrame({
           widget,
           badgeStyle,
-          meta: `${weatherData.source} · ${weatherData.location} · ${
-            weatherData.stale ? 'cached' : 'live'
-          }`,
+          meta:
+            widget.entity.id === 'weather'
+              ? `${weatherData.source} · ${weatherData.location} · ${
+                  weatherData.stale
+                    ? weatherWidgetText?.copy.statusCached ?? 'cached'
+                    : weatherWidgetText?.copy.statusLive ?? 'live'
+                }`
+              : widget.entity.id === 'calendar'
+                ? formatLocalizedText(
+                    calendarWidgetText?.detail.rangeEventCountMeta ?? '{count} events in range',
+                    { count: visibleAgenda.length },
+                  )
+                : null,
           mode: 'expanded',
           children: detailContent,
         })
@@ -466,8 +588,15 @@ export function WidgetBoardHost({
 
   return (
     <section className="dashboard-grid">
-      <section className="widget-zone widget-zone--filters" aria-label="Household filters">
-        <div className="filter-row filter-row--board" role="group" aria-label="Household filters">
+      <section
+        className="widget-zone widget-zone--filters"
+        aria-label={appText.boardHost.filtersAriaLabel}
+      >
+        <div
+          className="filter-row filter-row--board"
+          role="group"
+          aria-label={appText.boardHost.filtersAriaLabel}
+        >
           {filterOptions.map((option) => (
             <button
               key={option.id}
@@ -489,40 +618,42 @@ export function WidgetBoardHost({
 
       <section
         className="widget-zone widget-zone--service-board"
-        aria-label={widgetPlacementZones[0].label}
+        aria-label={appText.boardHost.serviceBoardZoneLabel}
       >
         {serviceBoardEntries.length > 0
           ? serviceBoardEntries.map((entry) => renderWidget(entry.widget))
           : renderEmptyState(
-              'Family service board is empty',
-              'Assign the arrival board to the Family service board zone in settings.',
+              appText.boardHost.serviceBoardEmptyTitle,
+              appText.boardHost.serviceBoardEmptyCopy,
               'empty-state--board',
             )}
       </section>
 
       {populatedGridZones.length > 0 ? (
-        <section className="widget-grid" aria-label="Two-column widget grid">
+        <section className="widget-grid" aria-label={appText.boardHost.widgetGridAriaLabel}>
           {populatedGridZones.map(({ zone, widgetsInZone }) => (
-            <section className={zone.className} key={zone.id} aria-label={zone.label}>
+            <section
+              className={zone.className}
+              key={zone.id}
+              aria-label={formatLocalizedText(appText.boardHost.cellZoneLabel, {
+                cellId: zone.id.toUpperCase(),
+              })}
+            >
               {widgetsInZone.map((entry) => renderWidget(entry.widget))}
             </section>
           ))}
         </section>
       ) : null}
 
-      <section className="widget-zone widget-zone--expanded-stage" aria-label="Expanded widget view">
-        <div className="widget-stage-head">
-          <div>
-            <p className="widget-kicker">Extended view</p>
-            <h2>{expandedWidget ? expandedWidget.entity.title : 'Lower focus stage'}</h2>
-          </div>
-        </div>
-
+      <section
+        className="widget-zone widget-zone--expanded-stage"
+        aria-label={appText.boardHost.expandedWidgetViewAriaLabel}
+      >
         {expandedWidget
           ? renderExpandedWidget(expandedWidget)
           : renderEmptyState(
-              'No widget selected',
-              'The lower section stays reserved for an expanded widget view.',
+              appText.boardHost.noExpandedWidgetTitle,
+              appText.boardHost.noExpandedWidgetCopy,
               'empty-state--expanded',
             )}
       </section>

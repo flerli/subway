@@ -1,5 +1,7 @@
+import type { SupportedLanguageCode } from '../../i18n/localization'
 import { WeatherIcon } from './WeatherIcon'
 import type { WeatherWidgetData } from '../widgetHostModels'
+import type { WeatherWidgetTranslation } from './translations'
 
 interface WeatherDetailViewData {
   weatherData: WeatherWidgetData
@@ -26,8 +28,12 @@ const isWeatherDetailViewData = (
 
 export function WeatherDetailView({
   data,
+  languageCode,
+  widgetText,
 }: {
   data: unknown
+  languageCode: SupportedLanguageCode
+  widgetText: WeatherWidgetTranslation
 }) {
   if (!isWeatherDetailViewData(data)) {
     return null
@@ -55,16 +61,16 @@ export function WeatherDetailView({
               <p className="weather-condition">{focusLocation.condition}</p>
               <p className="weather-range">{focusLocation.rangeSummary}</p>
               <p className="weather-detail-location">
-                {focusLocation.source} · {focusLocation.stale ? 'cached' : 'live'}
+                {focusLocation.source} · {focusLocation.stale ? widgetText.copy.statusCached : widgetText.copy.statusLive}
               </p>
               <p className="weather-note">{commuteNote}</p>
               <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
               <p className="weather-updated">
-                Updated{' '}
-                {new Date(focusLocation.updatedAt).toLocaleTimeString([], {
+                {widgetText.copy.updatedPrefix}{' '}
+                {new Intl.DateTimeFormat(languageCode, {
                   hour: '2-digit',
                   minute: '2-digit',
-                })}
+                }).format(new Date(focusLocation.updatedAt))}
               </p>
             </div>
           </div>
@@ -103,11 +109,11 @@ export function WeatherDetailView({
                       <p className="weather-condition">{location.condition}</p>
                       <p className="weather-range">{location.rangeSummary}</p>
                       <p className="weather-updated">
-                        Updated{' '}
-                        {new Date(location.updatedAt).toLocaleTimeString([], {
+                        {widgetText.copy.updatedPrefix}{' '}
+                        {new Intl.DateTimeFormat(languageCode, {
                           hour: '2-digit',
                           minute: '2-digit',
-                        })}
+                        }).format(new Date(location.updatedAt))}
                       </p>
                     </div>
                   </div>
