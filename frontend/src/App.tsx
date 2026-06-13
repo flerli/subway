@@ -1026,7 +1026,6 @@ function App() {
   const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
   }).format(now)
   const boardDate = new Intl.DateTimeFormat(selectedLanguageCode, {
@@ -1594,31 +1593,35 @@ function App() {
             </div>
           </div>
 
-          <div className="terminal-right">
-            <div className="terminal-actions">
-              <button
-                type="button"
-                className={`terminal-button${viewMode === 'board' ? ' is-active' : ''}`}
-                onClick={() => setViewMode('board')}
-              >
-                {appText.shell.boardTab}
-              </button>
-              <button
-                type="button"
-                className={`terminal-button${viewMode === 'settings' ? ' is-active' : ''}`}
-                onClick={() => setViewMode('settings')}
-              >
-                {appText.shell.settingsTab}
-              </button>
-              <button
-                type="button"
-                className="terminal-button terminal-button--quiet"
-                onClick={handleLogout}
-                disabled={authPending}
-              >
-                {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
-              </button>
-            </div>
+          <div
+            className={`terminal-right${viewMode === 'board' ? ' terminal-right--clock-only' : ''}`}
+          >
+            {viewMode === 'settings' ? (
+              <div className="terminal-actions">
+                <button
+                  type="button"
+                  className="terminal-button"
+                  onClick={() => setViewMode('board')}
+                >
+                  {appText.shell.boardTab}
+                </button>
+                <button
+                  type="button"
+                  className="terminal-button is-active"
+                  onClick={() => setViewMode('settings')}
+                >
+                  {appText.shell.settingsTab}
+                </button>
+                <button
+                  type="button"
+                  className="terminal-button terminal-button--quiet"
+                  onClick={handleLogout}
+                  disabled={authPending}
+                >
+                  {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
+                </button>
+              </div>
+            ) : null}
             <div className="clock-stack">
               <p className="board-datetime">
                 {boardDate} {boardTime}
@@ -1643,8 +1646,12 @@ function App() {
               activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
               expandedWidgetId={expandedWidgetId}
               filterOptions={filterOptions}
+              activeViewMode={viewMode}
               onFilterChange={setActiveFilter}
+              onViewModeChange={setViewMode}
               onExpandedWidgetChange={setExpandedWidgetId}
+              onLogout={handleLogout}
+              authPending={authPending}
               visibleArrivals={visibleArrivals}
               visibleAgenda={visibleAgenda}
               visibleTodos={visibleTodos}

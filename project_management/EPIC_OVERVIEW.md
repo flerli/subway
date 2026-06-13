@@ -57,7 +57,7 @@ Issues:
 | --- | --- | --- |
 | 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__001_SHARED_LOCALIZATION_FOUNDATION_AND_LANGUAGE_SETTING.md | Define the shared localization contract, supported languages, fallback behavior, and per-user global language persistence. | implemented |
 | 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__002_APPLICATION_SHELL_AND_SHARED_TEXT_LOCALIZATION.md | Complete localization coverage for the remaining shared application shell, auth flow, settings page, and shared host copy. | implemented |
-| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__003_WIDGET_TRANSLATION_STANDARD_AND_EXISTING_WIDGET_MIGRATION.md | Standardize widget-local translation files and translate the existing arrival-board, weather, calendar, todo, and bulletins widgets. | implemented |
+| 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__003_WIDGET_TRANSLATION_STANDARD_AND_EXISTING_WIDGET_MIGRATION.md | Standardize widget-local translation files and translate the existing arrival-board, weather, calendar, and todo widgets. | implemented |
 | 004_MULTI_LANGUAGE_SUPPORT__ISSUE_DEFINITION__004_WIDGET_LOCALIZATION_GUIDELINES_AND_ISSUE_GUIDE_EXTENSION.md | Extend the development workflow so every new widget issue requires a standardized four-language translation file. | implemented |
 
 ## 005 CALENDAR

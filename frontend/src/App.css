@@ -226,6 +226,11 @@
   min-width: 0;
 }
 
+.terminal-right--clock-only {
+  grid-template-columns: auto;
+  justify-items: end;
+}
+
 .terminal-actions {
   display: flex;
   align-items: center;
@@ -238,6 +243,7 @@
 .clock-stack {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   align-self: stretch;
   padding: 0 12px;
   border-radius: 12px;
@@ -249,10 +255,10 @@
   margin: 0;
   color: var(--text);
   font-family: var(--mono);
-  font-size: clamp(0.82rem, 1.1cqw, 0.98rem);
+  font-size: clamp(1.45rem, 2.8cqw, 2.5rem);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -637,6 +643,13 @@
   gap: 10px;
 }
 
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
 .filter-row--board {
   display: flex;
   gap: 10px;
@@ -644,6 +657,22 @@
   overflow-x: auto;
   scrollbar-width: none;
   padding: 4px 2px 2px;
+  min-width: 0;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex: none;
+  padding: 4px 0 2px;
+}
+
+.filter-actions .terminal-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .filter-pill {
@@ -2187,6 +2216,10 @@
     font-size: 1.5rem;
   }
 
+  .board-datetime {
+    font-size: 1.5rem;
+  }
+
   .board-head h2,
   .widget h2,
   .settings-panel h2 {
@@ -2244,7 +2277,15 @@
     grid-template-columns: 1fr;
   }
 
-  .calendar-detail-view,
+  .calendar-year-matrix,
+  .calendar-detail-info-grid,
+  .calendar-detail-side-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container (max-width: 760px) {
+  .calendar-detail-view--with-side-panel,
   .calendar-year-matrix,
   .calendar-detail-info-grid,
   .calendar-detail-side-actions {

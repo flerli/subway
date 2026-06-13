@@ -40,10 +40,14 @@ interface WidgetBoardHostProps {
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   activeProfileLabel?: string
+  activeViewMode: 'board' | 'settings'
   expandedWidgetId: string | null
   filterOptions: FilterOption[]
   onFilterChange: (filterId: FilterId) => void
+  onViewModeChange: (viewMode: 'board' | 'settings') => void
   onExpandedWidgetChange: (widgetId: string | null) => void
+  onLogout: () => void
+  authPending: boolean
 
   visibleArrivals: Arrival[]
   visibleAgenda: AgendaItem[]
@@ -87,10 +91,14 @@ export function WidgetBoardHost({
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
+  activeViewMode,
   expandedWidgetId,
   filterOptions,
   onFilterChange,
+  onViewModeChange,
   onExpandedWidgetChange,
+  onLogout,
+  authPending,
   visibleArrivals,
   visibleAgenda,
   visibleTodos,
@@ -592,27 +600,54 @@ export function WidgetBoardHost({
         className="widget-zone widget-zone--filters"
         aria-label={appText.boardHost.filtersAriaLabel}
       >
-        <div
-          className="filter-row filter-row--board"
-          role="group"
-          aria-label={appText.boardHost.filtersAriaLabel}
-        >
-          {filterOptions.map((option) => (
+        <div className="filter-bar">
+          <div
+            className="filter-row filter-row--board"
+            role="group"
+            aria-label={appText.boardHost.filtersAriaLabel}
+          >
+            {filterOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
+                aria-pressed={option.id === activeFilter}
+                onClick={() => onFilterChange(option.id)}
+              >
+                <span className="route-bullet" style={option.style}>
+                  {option.badgeText}
+                </span>
+                <span className="filter-copy">
+                  <span className="filter-label">{option.label}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="filter-actions">
             <button
-              key={option.id}
               type="button"
-              className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
-              aria-pressed={option.id === activeFilter}
-              onClick={() => onFilterChange(option.id)}
+              className={`terminal-button${activeViewMode === 'board' ? ' is-active' : ''}`}
+              onClick={() => onViewModeChange('board')}
             >
-              <span className="route-bullet" style={option.style}>
-                {option.badgeText}
-              </span>
-              <span className="filter-copy">
-                <span className="filter-label">{option.label}</span>
-              </span>
+              {appText.shell.boardTab}
             </button>
-          ))}
+            <button
+              type="button"
+              className={`terminal-button${activeViewMode === 'settings' ? ' is-active' : ''}`}
+              onClick={() => onViewModeChange('settings')}
+            >
+              {appText.shell.settingsTab}
+            </button>
+            <button
+              type="button"
+              className="terminal-button terminal-button--quiet"
+              onClick={onLogout}
+              disabled={authPending}
+            >
+              {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
+            </button>
+          </div>
         </div>
       </section>
 

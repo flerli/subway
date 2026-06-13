@@ -21,7 +21,6 @@ Implemented foundation work:
   - `weather`
   - `calendar`
   - `todo`
-  - `bulletins`
 
 Implemented widget-contract changes:
 
@@ -35,7 +34,10 @@ Implemented widget migration work:
 - `weather` now resolves widget title ownership, forecast kicker ownership, settings fields, status labels such as `live` and `cached`, `Updated` labels, refresh countdown text, and fallback weather copy through its widget-local translation file
 - `calendar` now resolves its widget title, upcoming-events meta copy, empty state copy, fallback agenda item copy, and settings labels through its widget-local translation file
 - `todo` now resolves its widget title, open-items meta copy, `Done` and `Reopen` action labels, empty state copy, fallback todo item copy, and settings labels through its widget-local translation file
-- `bulletins` now resolves its widget title, board meta copy, and empty state copy through its widget-local translation file
+
+Widget scope note:
+
+- the `bulletins` widget had already been removed from the active frontend by the time this issue was finalized, so it is not part of the final migration surface
 
 Shared host integration delivered in this issue:
 
@@ -66,12 +68,12 @@ Validated with:
 
 The browser validation confirmed this concrete language-switch behavior:
 
-- English board view showed widget titles `Weather`, `Calendar`, `Todo`, and `Bulletins`
+- English board view showed widget titles `Weather`, `Calendar`, and `Todo`
 - English arrival-board copy showed `All household arrivals`
 - English todo action copy showed `Done`
 - after switching to German, the metadata host showed localized widget titles `Ankunftstafel`, `Wetter`, `Kalender`, `Aufgaben`, and `Meldungen`
 - after switching to German, weather settings fields showed localized labels such as `Bezeichnung fuer Ort 1`, `Laengengrad von Ort 1`, and `Breitengrad von Ort 1`
-- after switching to German, the board view showed localized widget titles `Wetter`, `Kalender`, `Aufgaben`, and `Meldungen`
+- after switching to German, the board view showed localized widget titles `Wetter`, `Kalender`, and `Aufgaben`
 - after switching to German, arrival-board copy showed `Alle Haushaltsankuenfte`
 - after switching to German, todo action copy showed `Erledigt`
 - switching back to English restored the shared shell to `Settings`
