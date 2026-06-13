@@ -564,6 +564,12 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.arrival-board-column {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
 .arrival-strip,
 .forecast-card,
 .agenda-row,

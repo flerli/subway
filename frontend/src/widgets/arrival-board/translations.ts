@@ -25,7 +25,7 @@ export interface ArrivalBoardWidgetTranslation extends WidgetTranslationDefiniti
 const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<ArrivalBoardWidgetTranslation>({
   en: {
     title: 'Arrival Board',
-    boardKicker: 'Family service board',
+    boardKicker: 'Arrival',
     copy: {
       allArrivalsTitle: 'Arrival',
       focusedArrivalsTitle: '{name} arrival',
@@ -56,7 +56,7 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
   },
   de: {
     title: 'Ankunftstafel',
-    boardKicker: 'Familien-Service-Board',
+    boardKicker: 'Ankunft',
     copy: {
       allArrivalsTitle: 'Ankunft',
       focusedArrivalsTitle: '{name} Ankunft',
@@ -87,7 +87,7 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
   },
   fr: {
     title: 'Tableau des arrivees',
-    boardKicker: 'Tableau de service familial',
+    boardKicker: 'Arrivee',
     copy: {
       allArrivalsTitle: 'Arrivee',
       focusedArrivalsTitle: 'Arrivee de {name}',
@@ -118,7 +118,7 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
   },
   es: {
     title: 'Panel de llegadas',
-    boardKicker: 'Panel de servicio familiar',
+    boardKicker: 'Llegada',
     copy: {
       allArrivalsTitle: 'Llegada',
       focusedArrivalsTitle: 'Llegada de {name}',

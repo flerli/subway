@@ -4,15 +4,16 @@ Portrait-first family smart home kiosk UI with a dark transit-inspired visual la
 
 ## Overview
 
-The app in `frontend/` is a fullscreen home information board designed for a 27 inch 4K display in portrait mode. It combines a family arrival board, weather, calendar, a todo list, a calibration panel, and a settings page where family members can be added and customized.
+The app in `frontend/` is a fullscreen authenticated household information board designed for a 27 inch 4K display in portrait mode. The current board combines a family arrival board, weather, calendar, and todo widgets with a fixed lower expanded-detail stage plus a settings surface for family members, widget metadata, widget settings, and calendar management.
 
 Current highlights:
 
-- Family members can be added from settings
-- Every member can choose an individual color
-- The first letter of the forename becomes the circular member badge
-- Widgets use numbered badges so people and modules stay visually distinct
-- The board keeps a 5 x 5 cm calibration square for the target panel
+- Cookie-based authentication gates the app and keeps data isolated per user
+- Board copy is localized for English, German, French, and Spanish
+- Weather conditions are localized in the frontend and the compact forecast now shows eight days in a 2 x 4 layout
+- The active household filter and selected expanded widget survive reloads per user in local app-shell storage
+- Family members, widget metadata, widget settings, app preferences, calendar events, and todo items persist in SQLite
+- The board layout uses a service board, a two-column widget grid, and a reserved lower expanded stage for detail views
 
 ## Screenshots
 
@@ -37,17 +38,22 @@ See the Epic 001 exploration guide for hands-on GUI tasks:
 ## Run it
 
 ```bash
-cd backend
-npm start
+npm --prefix frontend install
+npm --prefix backend run dev
 ```
 
 In a second terminal:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+npm --prefix frontend run dev
 ```
+
+Local development access:
+
+- Frontend dev server: `http://localhost:5173`
+- Backend API: `http://127.0.0.1:8787`
+
+The app bootstraps through `GET /api/auth/session`. All non-auth `/api/*` routes require a valid session cookie.
 
 ## Run it with Docker
 
@@ -58,7 +64,7 @@ docker compose up --build -d
 Local access:
 
 - App: `http://localhost:8081`
-- API: `http://localhost:8081/api/family-members`
+- Auth/session probe: `http://localhost:8081/api/auth/session`
 
 Useful commands:
 
@@ -78,16 +84,14 @@ On the VPS, the same compose file stores the database at:
 ## Production check
 
 ```bash
-cd backend
-npm start
+npm --prefix backend start
 ```
 
 In a second terminal:
 
 ```bash
-cd frontend
-npm run build
-npm run preview
+npm --prefix frontend run build
+npm --prefix frontend run preview
 ```
 
 ## GitHub Actions deployment
@@ -121,11 +125,12 @@ The backend readiness checks use `/api/auth/session`, which remains publicly rea
 
 ## Backend persistence
 
-- Family members are now stored in the backend persistence layer, not browser `localStorage`.
-- Widget metadata is also stored in the backend persistence layer.
 - The backend uses a local SQLite database at `backend/data/subway.sqlite`.
-- The frontend talks to the backend through `/api/family-members`.
-- The frontend also loads widget metadata through `/api/widgets`.
+- Cookie-based auth stores users and sessions on the backend; `GET /api/auth/session` stays public and the remaining `/api/*` routes require authentication.
+- Family members, widget metadata, widget settings, app preferences, calendar events, and todo items are stored in backend persistence.
+- The frontend loads authenticated data through `/api/family-members`, `/api/widgets`, `/api/widget-settings`, `/api/app-preferences`, `/api/calendar-events`, `/api/todo-items`, and `/api/weather`.
+- The active household filter and selected expanded widget are also persisted locally in browser storage per user for reload continuity.
+- Retired widgets are pruned on backend startup when their source location and widget id are no longer supported by the seed list.
 - For local development, Vite proxies `/api` to `http://127.0.0.1:8787`.
 
 ## Display notes
@@ -133,4 +138,3 @@ The backend readiness checks use `/api/auth/session`, which remains publicly rea
 - Target resolution: `2160 x 3840 px`
 - Target orientation: portrait
 - Target panel size: 27 inch, 16:9
-- Reference square: `5 x 5 cm`, rendered from the panel geometry for on-device calibration

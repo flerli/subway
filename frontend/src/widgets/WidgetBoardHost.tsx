@@ -271,6 +271,11 @@ export function WidgetBoardHost({
         const arrivalBoardWidgetText = widget.module.getTranslation(
           languageCode,
         ) as ArrivalBoardWidgetTranslation
+        const arrivalColumnRowCount = Math.ceil(visibleArrivals.length / 2)
+        const arrivalColumns = [
+          visibleArrivals.slice(0, arrivalColumnRowCount),
+          visibleArrivals.slice(arrivalColumnRowCount),
+        ].filter((column) => column.length > 0)
 
         return (
           <article
@@ -302,23 +307,27 @@ export function WidgetBoardHost({
 
             <div className="arrival-board">
               {visibleArrivals.length > 0
-                ? visibleArrivals.map((item) => (
-                    <article
-                      className="arrival-strip"
-                      key={`${item.line}-${item.destination}`}
-                    >
-                      <div className="arrival-route">
-                        {renderAudienceBadge(item.members, 'route-bullet--large')}
-                        <div className="arrival-destination">
-                          <h3>{item.destination}</h3>
-                          <p>{`${item.direction} ${item.platform}`.trim()}</p>
-                        </div>
-                      </div>
-                      <div className="arrival-minute-stack">
-                        <p className="arrival-count">{item.value}</p>
-                        <p className="arrival-unit">{item.unit}</p>
-                      </div>
-                    </article>
+                ? arrivalColumns.map((column, columnIndex) => (
+                    <div className="arrival-board-column" key={`arrival-column-${columnIndex}`}>
+                      {column.map((item) => (
+                        <article
+                          className="arrival-strip"
+                          key={`${item.line}-${item.destination}`}
+                        >
+                          <div className="arrival-route">
+                            {renderAudienceBadge(item.members, 'route-bullet--large')}
+                            <div className="arrival-destination">
+                              <h3>{item.destination}</h3>
+                              <p>{`${item.direction} ${item.platform}`.trim()}</p>
+                            </div>
+                          </div>
+                          <div className="arrival-minute-stack">
+                            <p className="arrival-count">{item.value}</p>
+                            <p className="arrival-unit">{item.unit}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
                   ))
                 : renderEmptyState(
                     arrivalBoardWidgetText.copy.noArrivalsTitle,
