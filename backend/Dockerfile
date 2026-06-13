@@ -6,7 +6,6 @@ COPY package.json ./package.json
 RUN npm install --omit=dev
 
 COPY server.mjs ./server.mjs
-COPY calendarSeedEvents.json ./calendarSeedEvents.json
 
 ENV HOST=0.0.0.0
 ENV PORT=8787

@@ -1,0 +1,4 @@
+backend/calendarSeedEvents.json
+backend/data/*
+!backend/data/.gitkeep
+/-

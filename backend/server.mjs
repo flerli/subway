@@ -6,7 +6,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDirectory = join(__dirname, 'data')
 const databasePath = join(dataDirectory, 'subway.sqlite')
-const calendarSeedEventsPath = join(__dirname, 'calendarSeedEvents.json')
+const localCalendarSeedEventsPath = join(dataDirectory, 'calendarSeedEvents.local.json')
 const HOST = process.env.HOST ?? '0.0.0.0'
 const PORT = Number.parseInt(process.env.PORT ?? '8787', 10)
 const WEATHER_LATITUDE = Number.parseFloat(process.env.WEATHER_LATITUDE ?? '52.52')
@@ -948,9 +948,21 @@ const LEGACY_MOCK_CALENDAR_EVENT_IDS = new Set([
   'calendar-dana-dinner',
 ])
 
-const seedCalendarEvents = JSON.parse(
-  readFileSync(calendarSeedEventsPath, 'utf8'),
-)
+const loadLocalCalendarSeedEvents = () => {
+  if (!existsSync(localCalendarSeedEventsPath)) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(readFileSync(localCalendarSeedEventsPath, 'utf8'))
+
+    return Array.isArray(parsedValue) ? parsedValue : []
+  } catch {
+    return []
+  }
+}
+
+const seedCalendarEvents = loadLocalCalendarSeedEvents()
 
 const seedTodoItems = [
   {
@@ -1913,7 +1925,13 @@ const migrateLegacyMockCalendarEvents = (ownerUserId) => {
     row.id.startsWith('calendar-real-'),
   )
 
-  if (hasRealSeedEvents) {
+  const shouldInsertLocalSeedEvents = seedCalendarEvents.length > 0 && !hasRealSeedEvents
+
+  if (hasRealSeedEvents && !legacyMockIds.length) {
+    return
+  }
+
+  if (hasRealSeedEvents && !shouldInsertLocalSeedEvents) {
     db.exec('BEGIN')
 
     try {
@@ -1939,8 +1957,10 @@ const migrateLegacyMockCalendarEvents = (ownerUserId) => {
       deleteCalendarEventById(ownerUserId, legacyMockId)
     }
 
-    for (const calendarEvent of seedCalendarEvents) {
-      insertCalendarEvent(ownerUserId, calendarEvent, now, now)
+    if (shouldInsertLocalSeedEvents) {
+      for (const calendarEvent of seedCalendarEvents) {
+        insertCalendarEvent(ownerUserId, calendarEvent, now, now)
+      }
     }
 
     db.exec('COMMIT')
