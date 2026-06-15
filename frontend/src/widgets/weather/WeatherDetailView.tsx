@@ -6,7 +6,6 @@ import type { WeatherWidgetTranslation } from './translations'
 interface WeatherDetailViewData {
   weatherData: WeatherWidgetData
   commuteNote: string
-  weatherRefreshCountdownLabel: string
 }
 
 const isWeatherDetailViewData = (
@@ -15,14 +14,12 @@ const isWeatherDetailViewData = (
   const candidate = value as {
     weatherData?: WeatherWidgetData
     commuteNote?: unknown
-    weatherRefreshCountdownLabel?: unknown
   }
 
   return (
     Boolean(candidate?.weatherData) &&
     Array.isArray(candidate.weatherData?.forecast) &&
-    typeof candidate?.commuteNote === 'string' &&
-    typeof candidate?.weatherRefreshCountdownLabel === 'string'
+    typeof candidate?.commuteNote === 'string'
   )
 }
 
@@ -54,7 +51,7 @@ export function WeatherDetailView({
     return null
   }
 
-  const { weatherData, commuteNote, weatherRefreshCountdownLabel } = data
+  const { weatherData, commuteNote } = data
   const focusLocation =
     weatherData.locations.find((location) => location.id === weatherData.focusLocationId) ??
     weatherData
@@ -77,7 +74,6 @@ export function WeatherDetailView({
                 {focusLocation.source} · {focusLocation.stale ? widgetText.copy.statusCached : widgetText.copy.statusLive}
               </p>
               <p className="weather-note">{commuteNote}</p>
-              <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
               <p className="weather-updated">
                 {widgetText.copy.updatedPrefix}{' '}
                 {new Intl.DateTimeFormat(languageCode, {

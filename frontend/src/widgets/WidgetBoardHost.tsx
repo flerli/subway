@@ -54,7 +54,6 @@ interface WidgetBoardHostProps {
   homeCountryCode: string
   calendarSettings: WidgetSettingsValues
   weatherData: WeatherWidgetData
-  weatherRefreshCountdownLabel: string
   commuteNote: string
   renderAudienceBadge: AudienceBadgeRenderer
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
@@ -117,7 +116,6 @@ export function WidgetBoardHost({
   homeCountryCode,
   calendarSettings,
   weatherData,
-  weatherRefreshCountdownLabel,
   commuteNote,
   renderAudienceBadge,
   onToggleTodoDone,
@@ -311,7 +309,7 @@ export function WidgetBoardHost({
                     <div className="arrival-board-column" key={`arrival-column-${columnIndex}`}>
                       {column.map((item) => (
                         <article
-                          className="arrival-strip"
+                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}`}
                           key={`${item.line}-${item.destination}`}
                         >
                           <div className="arrival-route">
@@ -361,7 +359,6 @@ export function WidgetBoardHost({
                 </div>
                 <div className="weather-copy">
                   <p className="weather-note">{commuteNote}</p>
-                  <p className="weather-refresh-countdown">{weatherRefreshCountdownLabel}</p>
                   <p className="weather-updated">
                     {weatherWidgetText.copy.updatedPrefix}{' '}
                     {new Intl.DateTimeFormat(languageCode, {
@@ -522,7 +519,6 @@ export function WidgetBoardHost({
           ? {
               weatherData,
               commuteNote,
-              weatherRefreshCountdownLabel,
             }
           : widget.entity.id === 'calendar'
             ? {

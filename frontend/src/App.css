@@ -582,6 +582,8 @@
 }
 
 .arrival-strip {
+  position: relative;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -590,6 +592,24 @@
   border-radius: 6px;
   background: linear-gradient(180deg, rgba(87, 114, 153, 0.86) 0%, rgba(58, 81, 112, 0.92) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.arrival-strip--same-day {
+  border-color: rgba(252, 204, 10, 0.44);
+  background:
+    linear-gradient(180deg, rgba(131, 101, 31, 0.34) 0%, rgba(73, 84, 109, 0.94) 100%),
+    linear-gradient(180deg, rgba(87, 114, 153, 0.86) 0%, rgba(58, 81, 112, 0.92) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(252, 204, 10, 0.16);
+}
+
+.arrival-strip--same-day::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0.4rem;
+  background: linear-gradient(180deg, #fccc0a 0%, #ff9f1c 100%);
 }
 
 .arrival-route {
@@ -845,7 +865,6 @@
 
 .weather-icon__sun-rays {
   transform-origin: center;
-  animation: weather-sun-rotate 38s linear infinite;
 }
 
 .weather-icon__ray {
@@ -855,7 +874,6 @@
 
 .weather-icon__cloud {
   transform-origin: center;
-  animation: weather-cloud-drift 18s ease-in-out infinite;
 }
 
 .weather-icon__cloud-fill {
@@ -865,11 +883,6 @@
 }
 
 .weather-icon__rainfall {
-  animation: weather-rain-fall 10s ease-in-out infinite;
-}
-
-.weather-icon__rainfall--storm {
-  animation-duration: 12s;
 }
 
 .weather-icon__drop {
@@ -881,12 +894,10 @@
   fill: #ffb347;
   stroke: rgba(255, 228, 179, 0.9);
   stroke-width: 2;
-  animation: weather-bolt-flicker 14s ease-in-out infinite;
 }
 
 .weather-icon__wind-lines {
   transform-origin: center;
-  animation: weather-wind-drift 16s ease-in-out infinite;
 }
 
 .weather-icon__wind-line {
@@ -936,7 +947,6 @@
 .weather-range,
 .weather-note,
 .weather-updated,
-.weather-refresh-countdown,
 .weather-detail-location,
 .weather-location-meta,
 .agenda-location,
@@ -946,7 +956,6 @@
   margin: 0;
 }
 
-.weather-refresh-countdown,
 .weather-detail-location,
 .weather-location-meta {
   color: var(--muted-soft);

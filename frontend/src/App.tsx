@@ -90,6 +90,7 @@ import type {
 
 const ALL_FILTER_ID = 'all'
 const ALL_MEMBERS_AUDIENCE = '*'
+const HOUSEHOLD_BADGE_TEXT = 'ALL'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
 const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
 const LOCAL_APP_SHELL_STORAGE_KEY_PREFIX = 'subway-app-shell'
@@ -153,6 +154,9 @@ const buildArrivalBoardEvents = (
   },
 ): Arrival[] => {
   const nowTime = referenceTime.getTime()
+  const referenceYear = referenceTime.getFullYear()
+  const referenceMonth = referenceTime.getMonth()
+  const referenceDay = referenceTime.getDate()
 
   return agendaItems
     .map((agendaItem) => {
@@ -174,6 +178,10 @@ const buildArrivalBoardEvents = (
       const value = useHours
         ? Math.max(1, Math.ceil(totalHours))
         : Math.max(1, Math.ceil(totalHours / 24))
+      const isSameDay =
+        eventDateTime.getFullYear() === referenceYear &&
+        eventDateTime.getMonth() === referenceMonth &&
+        eventDateTime.getDate() === referenceDay
 
       return {
         line: `arrival-${agendaItem.line}`,
@@ -181,6 +189,7 @@ const buildArrivalBoardEvents = (
         direction: arrivalLabel,
         platform: agendaItem.location,
         value: `${value}`,
+        isSameDay,
         unit: useHours
           ? value === 1
             ? units.hourSingular
@@ -277,6 +286,17 @@ const getInitial = (value: string) => {
 const badgeStyle = (color: string) => buildBadgeStyle(color)
 
 const householdBadgeStyle = badgeStyle('#7f8a98')
+
+const householdBadgeStyleBySize = (sizeClassName = 'route-bullet') => ({
+  ...householdBadgeStyle,
+  fontSize:
+    sizeClassName === 'route-bullet--small'
+      ? '0.58rem'
+      : sizeClassName === 'route-bullet--large'
+        ? '0.9rem'
+        : '0.68rem',
+  letterSpacing: '0.04em',
+})
 
 const getLocalAppShellStorageKey = (userId: string) =>
   `${LOCAL_APP_SHELL_STORAGE_KEY_PREFIX}:${userId}`
@@ -1095,8 +1115,8 @@ function App() {
       id: ALL_FILTER_ID,
       label: appText.filters.allLabel,
       caption: appText.filters.householdViewCaption,
-      badgeText: 'HM',
-      style: householdBadgeStyle,
+      badgeText: HOUSEHOLD_BADGE_TEXT,
+      style: householdBadgeStyleBySize(),
     },
     ...familyMembers.map((member) => ({
       id: member.id,
@@ -1152,24 +1172,6 @@ function App() {
     arrivalBoardChromeSettings.boardSubheading.trim().length > 0
       ? arrivalBoardChromeSettings.boardSubheading
       : defaultArrivalBoardSettings.boardSubheading
-  const weatherRefreshCountdownLabel =
-    nextWeatherRefreshAt === null
-      ? weatherWidgetText.copy.schedulingNextUpdate
-      : (() => {
-          const millisecondsUntilRefresh = Math.max(
-            nextWeatherRefreshAt - now.getTime(),
-            0,
-          )
-          const totalSeconds = Math.ceil(millisecondsUntilRefresh / 1000)
-          const minutes = Math.floor(totalSeconds / 60)
-          const seconds = totalSeconds % 60
-
-          return totalSeconds <= 0
-            ? weatherWidgetText.copy.refreshingNow
-            : formatLocalizedText(weatherWidgetText.copy.nextUpdateIn, {
-                time: `${minutes}:${seconds.toString().padStart(2, '0')}`,
-              })
-        })()
   const commuteNote =
     commuteNotes[activeFilter] ??
     `${activeProfile ? getMemberLabel(activeProfile) : 'This view'}: color and badge are ready. Personal items can be assigned next.`
@@ -1410,8 +1412,11 @@ function App() {
 
     if (!member) {
       return (
-        <span className={`route-bullet ${sizeClassName}`} style={householdBadgeStyle}>
-          HM
+        <span
+          className={`route-bullet ${sizeClassName}`}
+          style={householdBadgeStyleBySize(sizeClassName)}
+        >
+          {HOUSEHOLD_BADGE_TEXT}
         </span>
       )
     }
@@ -1764,7 +1769,6 @@ function App() {
               homeCountryCode={selectedCountryCode}
               calendarSettings={widgetSettingsMap.calendar ?? {}}
               weatherData={weatherWidgetData}
-              weatherRefreshCountdownLabel={weatherRefreshCountdownLabel}
               commuteNote={commuteNote}
               renderAudienceBadge={renderAudienceBadge}
               onToggleTodoDone={handleToggleTodoDone}
