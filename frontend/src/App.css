@@ -63,6 +63,28 @@
   display: flex;
 }
 
+.terminal-marquee,
+.terminal-marquee *,
+.screen-content--board,
+.screen-content--board * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.screen-content--settings,
+.screen-content--settings *,
+.settings-input,
+.settings-color,
+.settings-select,
+input,
+textarea,
+select {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 .hero-layout {
   position: relative;
   z-index: 1;
@@ -2096,10 +2118,27 @@
 
 .agenda-item.is-cancelled .agenda-item-title,
 .agenda-item.is-cancelled .agenda-item-time,
+.agenda-row.is-cancelled .agenda-time,
+.agenda-row.is-cancelled .agenda-title,
+.agenda-row.is-cancelled .agenda-location,
+.agenda-row.is-cancelled .agenda-note,
 .arrival-row.is-cancelled .arrival-row-destination,
 .arrival-row.is-cancelled .arrival-row-value {
   text-decoration: line-through;
   opacity: 0.6;
+}
+
+.agenda-row.is-cancelled {
+  opacity: 0.6;
+}
+
+.arrival-strip.is-cancelled {
+  opacity: 0.6;
+}
+
+.arrival-strip.is-cancelled .arrival-destination h3,
+.arrival-strip.is-cancelled .arrival-count {
+  text-decoration: line-through;
 }
 
 .calendar-year-matrix {

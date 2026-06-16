@@ -480,7 +480,7 @@ export function WidgetBoardHost({
                     <div className="arrival-board-column" key={`arrival-column-${columnIndex}`}>
                       {column.map((item) => (
                         <article
-                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}`}
+                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
                           key={`${item.line}-${item.destination}`}
                           role="button"
                           tabIndex={0}
@@ -590,21 +590,46 @@ export function WidgetBoardHost({
         const groupedAgendaItems = groupAgendaItemsByDate(visibleAgenda)
         const familyMembersById = new Map(familyMembers.map((member) => [member.id, member]))
         
-        const getMemberColorStyle = (members: readonly string[]): React.CSSProperties => {
-          const memberId = members.find((m) => m !== '*' && familyMembersById.has(m))
-          if (!memberId) return {}
+        const getMemberColorStyle = (memberIds: readonly string[]): React.CSSProperties => {
+          const validMembers = memberIds.filter(
+            (m) => m !== '*' && familyMembersById.has(m),
+          )
           
-          const member = familyMembersById.get(memberId)
-          if (!member) return {}
-          
-          // Create a lighter shade of the member's color
-          const hex = member.color.slice(1)
-          const r = parseInt(hex.slice(0, 2), 16)
-          const g = parseInt(hex.slice(2, 4), 16)
-          const b = parseInt(hex.slice(4, 6), 16)
-          const lighter = `rgba(${r}, ${g}, ${b}, 0.15)`
-          
-          return { backgroundColor: lighter }
+          if (validMembers.length === 0) return {}
+          if (validMembers.length === 1) {
+            const member = familyMembersById.get(validMembers[0])
+            if (!member) return {}
+            const hex = member.color.slice(1)
+            const r = parseInt(hex.slice(0, 2), 16)
+            const g = parseInt(hex.slice(2, 4), 16)
+            const b = parseInt(hex.slice(4, 6), 16)
+            return { backgroundColor: `rgba(${r}, ${g}, ${b}, 0.15)` }
+          }
+
+          // Multiple members: create gradient
+          const colors = validMembers
+            .slice(0, 3)
+            .map((memberId) => {
+              const member = familyMembersById.get(memberId)
+              if (!member) return null
+              return member.color
+            })
+            .filter((color): color is string => color !== null)
+
+          if (colors.length === 0) return {}
+
+          const gradientStops = colors
+            .map((color, index) => {
+              const hex = color.slice(1)
+              const r = parseInt(hex.slice(0, 2), 16)
+              const g = parseInt(hex.slice(2, 4), 16)
+              const b = parseInt(hex.slice(4, 6), 16)
+              const percentage = (index / (colors.length - 1)) * 100
+              return `rgba(${r}, ${g}, ${b}, 0.15) ${percentage}%`
+            })
+            .join(', ')
+
+          return { background: `linear-gradient(135deg, ${gradientStops})` }
         }
 
         return renderWidgetFrame({
@@ -627,7 +652,7 @@ export function WidgetBoardHost({
                       <ul className="agenda-list agenda-list--grouped">
                         {dayGroup.items.map((item) => (
                           <li 
-                            className="agenda-row agenda-row--clickable" 
+                            className={`agenda-row agenda-row--clickable${item.cancelled ? ' is-cancelled' : ''}`}
                             key={`${item.date}-${item.time}-${item.title}`}
                             style={getMemberColorStyle(item.members)}
                             role="button"

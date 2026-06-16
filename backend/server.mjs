@@ -439,6 +439,12 @@ const buildCalendarEventFromInput = ({
   const memberIds =
     scopeMode === 'all' ? [LEGACY_HOUSEHOLD_MEMBER_ID] : scopeMemberIds
 
+  const excludedDates = Array.isArray(value.excludedDates)
+    ? value.excludedDates.filter((date) => typeof date === 'string' && validateCalendarIsoDate(date))
+    : currentEvent?.excludedDates ?? []
+
+  const cancelled = typeof value.cancelled === 'boolean' ? value.cancelled : currentEvent?.cancelled ?? false
+
   return {
     calendarEvent: {
       title,
@@ -449,6 +455,8 @@ const buildCalendarEventFromInput = ({
       note: description,
       memberIds,
       recurrence: recurrenceResult.recurrence,
+      excludedDates,
+      cancelled,
     },
   }
 }
@@ -866,6 +874,16 @@ const migrateCalendarEventsFoundation = () => {
   }
 }
 
+const migrateCalendarEventsExcludedDatesAndCancelled = () => {
+  if (!hasColumn('calendar_events', 'excluded_dates_json')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN excluded_dates_json TEXT DEFAULT \'[]\'')
+  }
+
+  if (!hasColumn('calendar_events', 'cancelled')) {
+    db.exec('ALTER TABLE calendar_events ADD COLUMN cancelled INTEGER DEFAULT 0')
+  }
+}
+
 const migrateAppPreferencesFoundation = () => {
   if (!hasColumn('app_preferences', 'country_code')) {
     db.exec('ALTER TABLE app_preferences ADD COLUMN country_code TEXT')
@@ -881,6 +899,7 @@ const migrateAppPreferencesFoundation = () => {
 }
 
 migrateCalendarEventsFoundation()
+migrateCalendarEventsExcludedDatesAndCancelled()
 migrateAppPreferencesFoundation()
 
 const todayIsoDate = getTodayIsoDate()
@@ -1102,6 +1121,8 @@ const insertCalendarEvent = (ownerUserId, calendarEvent, createdAt, updatedAt) =
   const recurrenceRuleJson = JSON.stringify(
     normalizeRecurrenceRule(calendarEvent.recurrence, eventDate),
   )
+  const excludedDatesJson = JSON.stringify(Array.isArray(calendarEvent.excludedDates) ? calendarEvent.excludedDates : [])
+  const cancelled = calendarEvent.cancelled ? 1 : 0
 
   return db
     .prepare(`
@@ -1117,10 +1138,12 @@ const insertCalendarEvent = (ownerUserId, calendarEvent, createdAt, updatedAt) =
         note,
         member_ids,
         recurrence_rule_json,
+        excluded_dates_json,
+        cancelled,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       ownerUserId,
@@ -1134,6 +1157,8 @@ const insertCalendarEvent = (ownerUserId, calendarEvent, createdAt, updatedAt) =
       calendarEvent.note,
       JSON.stringify(calendarEvent.memberIds),
       recurrenceRuleJson,
+      excludedDatesJson,
+      cancelled,
       createdAt,
       updatedAt,
     )
@@ -1146,6 +1171,8 @@ const updateCalendarEventRecord = (ownerUserId, calendarEventId, calendarEvent, 
   const recurrenceRuleJson = JSON.stringify(
     normalizeRecurrenceRule(calendarEvent.recurrence, eventDate),
   )
+  const excludedDatesJson = JSON.stringify(Array.isArray(calendarEvent.excludedDates) ? calendarEvent.excludedDates : [])
+  const cancelled = calendarEvent.cancelled ? 1 : 0
 
   return db
     .prepare(`
@@ -1159,6 +1186,8 @@ const updateCalendarEventRecord = (ownerUserId, calendarEventId, calendarEvent, 
           note = ?,
           member_ids = ?,
           recurrence_rule_json = ?,
+          excluded_dates_json = ?,
+          cancelled = ?,
           updated_at = ?
       WHERE owner_user_id = ? AND id = ?
     `)
@@ -1172,6 +1201,8 @@ const updateCalendarEventRecord = (ownerUserId, calendarEventId, calendarEvent, 
       calendarEvent.note,
       JSON.stringify(calendarEvent.memberIds),
       recurrenceRuleJson,
+      excludedDatesJson,
+      cancelled,
       updatedAt,
       ownerUserId,
       calendarEventId,
@@ -1391,6 +1422,8 @@ const normalizeCalendarEventRow = (row) => {
     members: normalizedMembers,
     scope: buildCalendarScope(normalizedMembers),
     recurrence: parseRecurrenceRuleJson(row.recurrence_rule_json, date),
+    excludedDates: parseJsonArray(row.excluded_dates_json).filter((date) => typeof date === 'string'),
+    cancelled: row.cancelled === 1,
     createdAt: typeof row.created_at === 'string' ? row.created_at : null,
     updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
   }
@@ -1412,6 +1445,8 @@ const buildCalendarEventPayload = (event, occurrenceDate = event.date) => ({
   members: event.members,
   scope: event.scope,
   recurrence: event.recurrence,
+  excludedDates: event.excludedDates ?? [],
+  cancelled: event.cancelled ?? false,
   createdAt: event.createdAt,
   updatedAt: event.updatedAt,
 })
@@ -1541,6 +1576,8 @@ const selectCalendarEventRows = (ownerUserId) =>
         note,
         member_ids,
         recurrence_rule_json,
+        excluded_dates_json,
+        cancelled,
         created_at,
         updated_at
       FROM calendar_events
@@ -1564,6 +1601,8 @@ const selectCalendarEventById = (ownerUserId, calendarEventId) =>
         note,
         member_ids,
         recurrence_rule_json,
+        excluded_dates_json,
+        cancelled,
         created_at,
         updated_at
       FROM calendar_events
@@ -2561,11 +2600,6 @@ const server = createServer(async (request, response) => {
       const placementZones = normalizeWidgetPlacementZones(
         body.placementZones ?? parseJsonArray(currentWidget.placement_zones),
       )
-
-      if (placementZones.length === 0) {
-        sendJson(response, 400, { error: 'At least one placement zone is required.' })
-        return
-      }
 
       const userScope = normalizeWidgetScope(
         body.userScope ?? {

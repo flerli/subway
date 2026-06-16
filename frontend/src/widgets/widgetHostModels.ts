@@ -32,6 +32,7 @@ export interface Arrival extends ScopedItem {
   value: string
   unit: string
   isSameDay: boolean
+  cancelled: boolean
 }
 
 export interface AgendaItem extends ScopedItem {

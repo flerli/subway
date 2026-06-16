@@ -394,7 +394,7 @@ export function CalendarDetailView({
   languageCode: SupportedLanguageCode
   widgetText: CalendarWidgetTranslation
 }) {
-  const [viewMode, setViewMode] = useState<CalendarDetailViewMode>('week')
+  const [viewMode, setViewMode] = useState<CalendarDetailViewMode>('month')
   const [anchorDate, setAnchorDate] = useState(() => getTodayIsoDate())
   const [rangeEvents, setRangeEvents] = useState<CalendarEventRecord[]>([])
   const [loading, setLoading] = useState(true)

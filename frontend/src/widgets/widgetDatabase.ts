@@ -48,7 +48,7 @@ const normalizeWidgetEntity = (
   ),
   userScope: entity.userScope ?? createScope('all'),
   placementZones:
-    entity.placementZones && entity.placementZones.length > 0
+    entity.placementZones !== undefined
       ? entity.placementZones
       : [createPlacement('a1', 1)],
 })
@@ -95,7 +95,7 @@ export const mergeWidgetEntitiesWithSeed = (
 
   for (const entity of entities) {
     const seededEntity = mergedById.get(entity.id)
-    const hasExplicitPlacements = Boolean(entity.placementZones?.length)
+    const hasExplicitPlacements = entity.placementZones !== undefined
 
     mergedById.set(
       entity.id,

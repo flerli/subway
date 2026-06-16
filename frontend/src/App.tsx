@@ -204,6 +204,7 @@ const buildArrivalBoardEvents = (
             ? units.daySingular
             : units.dayPlural,
         members: agendaItem.members,
+        cancelled: agendaItem.cancelled,
       }
     })
 }

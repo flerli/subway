@@ -354,17 +354,6 @@ function WidgetMetadataCard({
 
   const togglePlacement = (zoneId: WidgetPlacementZoneId) => {
     updateMetadataDraft((currentDraft) => {
-      const enabledPlacements = currentDraft.placementZones.filter(
-        (placement) => placement.enabled,
-      )
-      const targetPlacement = currentDraft.placementZones.find(
-        (placement) => placement.zoneId === zoneId,
-      )
-
-      if (targetPlacement?.enabled && enabledPlacements.length === 1) {
-        return currentDraft
-      }
-
       return {
         ...currentDraft,
         placementZones: currentDraft.placementZones.map((placement, index) =>
