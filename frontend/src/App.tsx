@@ -89,7 +89,6 @@ import type {
 } from './widgets/widgetTypes'
 
 const ALL_FILTER_ID = 'all'
-const ALL_MEMBERS_AUDIENCE = '*'
 const HOUSEHOLD_BADGE_TEXT = 'ALL'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
 const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
@@ -142,6 +141,11 @@ interface AppShellPersistedState {
   expandedWidgetId: string | null
 }
 
+interface CalendarFocusSelection {
+  eventId: string
+  eventDate: string
+}
+
 const buildArrivalBoardEvents = (
   agendaItems: AgendaItem[],
   referenceTime: Date,
@@ -185,6 +189,8 @@ const buildArrivalBoardEvents = (
 
       return {
         line: `arrival-${agendaItem.line}`,
+        eventId: agendaItem.eventId,
+        eventDate: agendaItem.date,
         destination: agendaItem.title,
         direction: arrivalLabel,
         platform: agendaItem.location,
@@ -352,30 +358,6 @@ const persistLocalAppShellState = (userId: string, state: AppShellPersistedState
   }
 }
 
-const pickDisplayMember = (
-  audience: readonly AudienceId[],
-  activeFilter: FilterId,
-  membersById: Map<string, FamilyMember>,
-) => {
-  if (activeFilter !== ALL_FILTER_ID && audience.includes(activeFilter)) {
-    return membersById.get(activeFilter)
-  }
-
-  for (const memberId of audience) {
-    if (memberId === ALL_MEMBERS_AUDIENCE) {
-      continue
-    }
-
-    const member = membersById.get(memberId)
-
-    if (member) {
-      return member
-    }
-  }
-
-  return undefined
-}
-
 function App() {
   const [now, setNow] = useState(() => new Date())
   const [authStatus, setAuthStatus] = useState<AuthStatus>('bootstrapping')
@@ -390,6 +372,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
   const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+  const [calendarFocusSelection, setCalendarFocusSelection] = useState<CalendarFocusSelection | null>(null)
   const [registeredWidgets, setRegisteredWidgets] = useState<RegisteredWidget[]>([])
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [calendarEvents, setCalendarEvents] = useState<AgendaItem[]>([])
@@ -466,7 +449,7 @@ function App() {
   const todoItemsError = resolveAppMessage(todoItemsErrorKey, appText)
   const weatherError = resolveAppMessage(weatherErrorKey, appText)
   const calendarRangeStart = formatLocalIsoDate(now)
-  const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 6))
+  const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 30))
 
   const resetProtectedState = () => {
     setViewMode('board')
@@ -660,6 +643,16 @@ function App() {
   const handleExpandedWidgetChange = (widgetId: string | null) => {
     beginInteractionMeasurement(widgetId ? `expand:${widgetId}` : 'expand:close')
     setExpandedWidgetId(widgetId)
+
+    if (widgetId !== 'calendar') {
+      setCalendarFocusSelection(null)
+    }
+  }
+
+  const handleOpenCalendarEvent = (selection: CalendarFocusSelection) => {
+    beginInteractionMeasurement(`calendar:event:${selection.eventId}`)
+    setExpandedWidgetId('calendar')
+    setCalendarFocusSelection(selection)
   }
 
   useEffect(() => {
@@ -1408,9 +1401,12 @@ function App() {
     audience: readonly AudienceId[],
     sizeClassName = 'route-bullet--small',
   ) => {
-    const member = pickDisplayMember(audience, activeFilter, membersById)
+    const nonHouseholdMembers = audience.filter(
+      (memberId) => memberId !== '*' && membersById.has(memberId),
+    )
+    const hasHouseholdOnly = audience.includes('*') || nonHouseholdMembers.length === 0
 
-    if (!member) {
+    if (hasHouseholdOnly && nonHouseholdMembers.length === 0) {
       return (
         <span
           className={`route-bullet ${sizeClassName}`}
@@ -1421,13 +1417,42 @@ function App() {
       )
     }
 
+    // If only one non-household member, show single badge
+    if (nonHouseholdMembers.length === 1) {
+      const member = membersById.get(nonHouseholdMembers[0])
+      if (member) {
+        return (
+          <span
+            className={`route-bullet ${sizeClassName}`}
+            style={badgeStyle(member.color)}
+          >
+            {getInitial(member.firstName)}
+          </span>
+        )
+      }
+    }
+
+    // Multiple members: render stacked badges
     return (
-      <span
-        className={`route-bullet ${sizeClassName}`}
-        style={badgeStyle(member.color)}
-      >
-        {getInitial(member.firstName)}
-      </span>
+      <div className={`stacked-badges stacked-badges--${sizeClassName}`}>
+        {nonHouseholdMembers.map((memberId, index) => {
+          const member = membersById.get(memberId)
+          if (!member) return null
+          return (
+            <span
+              key={memberId}
+              className={`route-bullet route-bullet--stacked ${sizeClassName}`}
+              style={{
+                ...badgeStyle(member.color),
+                zIndex: nonHouseholdMembers.length - index,
+              }}
+              title={member.firstName}
+            >
+              {getInitial(member.firstName)}
+            </span>
+          )
+        })}
+      </div>
     )
   }
 
@@ -1770,9 +1795,12 @@ function App() {
               calendarSettings={widgetSettingsMap.calendar ?? {}}
               weatherData={weatherWidgetData}
               commuteNote={commuteNote}
+              focusedCalendarEventId={calendarFocusSelection?.eventId ?? null}
+              focusedCalendarEventDate={calendarFocusSelection?.eventDate ?? null}
               renderAudienceBadge={renderAudienceBadge}
               onToggleTodoDone={handleToggleTodoDone}
               onCalendarDataChanged={handleCalendarDataChanged}
+              onOpenCalendarEvent={handleOpenCalendarEvent}
             />
           ) : (
             <section className="settings-page">

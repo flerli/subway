@@ -40,6 +40,8 @@ export interface CalendarEventRecord {
   members: string[]
   scope: CalendarEventScope
   recurrence: CalendarEventRecurrenceRule
+  excludedDates: string[]
+  cancelled: boolean
 }
 
 export interface CalendarEventQueryOptions {
@@ -56,6 +58,8 @@ export interface CalendarEventWriteInput {
   locationCountry: string
   scope: CalendarEventScope
   recurrence: CalendarEventRecurrenceRule
+  excludedDates: string[]
+  cancelled: boolean
 }
 
 export interface CalendarAgendaMappingOptions {
@@ -139,6 +143,8 @@ const normalizeCalendarEventRecord = (value: unknown): CalendarEventRecord | nul
     members?: unknown
     scope?: unknown
     recurrence?: unknown
+    excludedDates?: unknown
+    cancelled?: unknown
   }
 
   if (
@@ -169,6 +175,12 @@ const normalizeCalendarEventRecord = (value: unknown): CalendarEventRecord | nul
     (memberId: unknown): memberId is string => typeof memberId === 'string',
   )
 
+  const excludedDates = Array.isArray(candidate?.excludedDates)
+    ? candidate.excludedDates.filter(
+        (date: unknown): date is string => typeof date === 'string' && ISO_DATE_PATTERN.test(date),
+      )
+    : []
+
   return {
     id: candidate.id,
     seriesId: candidate.seriesId,
@@ -185,6 +197,8 @@ const normalizeCalendarEventRecord = (value: unknown): CalendarEventRecord | nul
     members,
     scope: normalizeCalendarEventScope(candidate.scope, members),
     recurrence: normalizeCalendarRecurrenceRule(candidate.recurrence),
+    excludedDates,
+    cancelled: typeof candidate.cancelled === 'boolean' ? candidate.cancelled : false,
   }
 }
 
@@ -199,6 +213,7 @@ export const mapCalendarEventRecordToAgendaItem = (
 
   return {
     line: `calendar-${record.id.toLowerCase().replace(/\s+/g, '-')}`,
+    eventId: record.id,
     date: record.date,
     time: record.time,
     title: record.title,
@@ -207,6 +222,7 @@ export const mapCalendarEventRecordToAgendaItem = (
     note: record.note,
     isForeign,
     members: record.members,
+    cancelled: record.cancelled,
   }
 }
 

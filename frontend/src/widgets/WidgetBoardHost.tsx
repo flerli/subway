@@ -17,7 +17,6 @@ import type {
   TodoItem,
   WeatherWidgetData,
 } from './widgetHostModels'
-import { widgetGridPlacementZones } from './widgetPlacementZones'
 import { WeatherIcon } from './weather/WeatherIcon'
 import type {
   RegisteredWidget,
@@ -28,7 +27,10 @@ import type {
 import {
   resolveWidgetTitle,
 } from './widgetLocalization'
+import { widgetGridPlacementZones } from './widgetPlacementZones'
 import type { TodoWidgetTranslation } from './todo/translations'
+import { UiBenchmarkPanel } from './ui-benchmark/UiBenchmarkPanel'
+import type { UiBenchmarkWidgetTranslation } from './ui-benchmark/translations'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { WeatherWidgetTranslation } from './weather/translations'
 
@@ -55,9 +57,12 @@ interface WidgetBoardHostProps {
   calendarSettings: WidgetSettingsValues
   weatherData: WeatherWidgetData
   commuteNote: string
+  focusedCalendarEventId: string | null
+  focusedCalendarEventDate: string | null
   renderAudienceBadge: AudienceBadgeRenderer
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
   onCalendarDataChanged: () => void
+  onOpenCalendarEvent: (selection: { eventId: string; eventDate: string }) => void
 }
 
 interface WidgetZoneEntry {
@@ -65,7 +70,170 @@ interface WidgetZoneEntry {
   placement: WidgetPlacementAssignment
 }
 
+type GridZoneId = Exclude<WidgetPlacementZoneId, 'service-board'>
+
+interface GridPlacementAssignment extends WidgetPlacementAssignment {
+  zoneId: GridZoneId
+}
+
+interface GridCellPosition {
+  row: number
+  col: number
+}
+
+interface WidgetGridBlock {
+  widget: RegisteredWidget
+  zoneIds: GridZoneId[]
+  rowStart: number
+  rowEnd: number
+  colStart: number
+  colEnd: number
+  order: number
+}
+
 type WidgetRenderMode = 'grid' | 'expanded'
+
+const isGridZoneId = (zoneId: WidgetPlacementZoneId): zoneId is GridZoneId =>
+  zoneId !== 'service-board'
+
+const isGridPlacementAssignment = (
+  placement: WidgetPlacementAssignment,
+): placement is GridPlacementAssignment => isGridZoneId(placement.zoneId)
+
+const getGridCellPosition = (zoneId: GridZoneId): GridCellPosition => ({
+  col: zoneId[0] === 'a' ? 1 : 2,
+  row: Number(zoneId[1]),
+})
+
+const areCellsNeighboring = (leftCell: GridZoneId, rightCell: GridZoneId) => {
+  const leftPosition = getGridCellPosition(leftCell)
+  const rightPosition = getGridCellPosition(rightCell)
+
+  return (
+    Math.abs(leftPosition.row - rightPosition.row) +
+      Math.abs(leftPosition.col - rightPosition.col) ===
+    1
+  )
+}
+
+const toZoneKey = (row: number, col: number) => `${row}:${col}`
+
+const buildMergedGridBlocks = (
+  widget: RegisteredWidget,
+  placements: WidgetPlacementAssignment[],
+): WidgetGridBlock[] => {
+  const sortedGridPlacements = placements
+    .filter(isGridPlacementAssignment)
+    .sort((left, right) => left.order - right.order)
+
+  if (sortedGridPlacements.length === 0) {
+    return []
+  }
+
+  const placementsByZoneId = new Map<GridZoneId, WidgetPlacementAssignment>()
+  for (const placement of sortedGridPlacements) {
+    placementsByZoneId.set(placement.zoneId, placement)
+  }
+
+  const unvisited = new Set<GridZoneId>(
+    sortedGridPlacements.map((placement) => placement.zoneId),
+  )
+  const mergedBlocks: WidgetGridBlock[] = []
+
+  while (unvisited.size > 0) {
+    const [seedZoneId] = unvisited
+
+    if (!seedZoneId) {
+      break
+    }
+
+    const stack: GridZoneId[] = [seedZoneId]
+    const componentZoneIds: GridZoneId[] = []
+    unvisited.delete(seedZoneId)
+
+    while (stack.length > 0) {
+      const currentZoneId = stack.pop()
+
+      if (!currentZoneId) {
+        continue
+      }
+
+      componentZoneIds.push(currentZoneId)
+
+      for (const candidateZoneId of Array.from(unvisited)) {
+        if (areCellsNeighboring(currentZoneId, candidateZoneId)) {
+          unvisited.delete(candidateZoneId)
+          stack.push(candidateZoneId)
+        }
+      }
+    }
+
+    const componentPositions = componentZoneIds.map((zoneId) =>
+      getGridCellPosition(zoneId),
+    )
+    const minRow = Math.min(...componentPositions.map((position) => position.row))
+    const maxRow = Math.max(...componentPositions.map((position) => position.row))
+    const minCol = Math.min(...componentPositions.map((position) => position.col))
+    const maxCol = Math.max(...componentPositions.map((position) => position.col))
+    const componentZoneKeys = new Set(
+      componentPositions.map((position) => toZoneKey(position.row, position.col)),
+    )
+
+    const rectangleZoneIds: GridZoneId[] = []
+    const rectangleZoneKeys: string[] = []
+
+    for (let row = minRow; row <= maxRow; row += 1) {
+      for (let col = minCol; col <= maxCol; col += 1) {
+        rectangleZoneKeys.push(toZoneKey(row, col))
+      }
+    }
+
+    const isPerfectRectangle = rectangleZoneKeys.every((zoneKey) =>
+      componentZoneKeys.has(zoneKey),
+    )
+
+    if (!isPerfectRectangle) {
+      for (const zoneId of componentZoneIds) {
+        const placement = placementsByZoneId.get(zoneId)
+        rectangleZoneIds.push(zoneId)
+        mergedBlocks.push({
+          widget,
+          zoneIds: [zoneId],
+          rowStart: getGridCellPosition(zoneId).row,
+          rowEnd: getGridCellPosition(zoneId).row,
+          colStart: getGridCellPosition(zoneId).col,
+          colEnd: getGridCellPosition(zoneId).col,
+          order: placement?.order ?? 1,
+        })
+      }
+      continue
+    }
+
+    const rectangleComponentZoneIds = [...componentZoneIds].sort((left, right) => {
+      const leftPosition = getGridCellPosition(left)
+      const rightPosition = getGridCellPosition(right)
+      return leftPosition.row - rightPosition.row || leftPosition.col - rightPosition.col
+    })
+
+    const order = Math.min(
+      ...rectangleComponentZoneIds.map(
+        (zoneId) => placementsByZoneId.get(zoneId)?.order ?? 1,
+      ),
+    )
+
+    mergedBlocks.push({
+      widget,
+      zoneIds: rectangleComponentZoneIds,
+      rowStart: minRow,
+      rowEnd: maxRow,
+      colStart: minCol,
+      colEnd: maxCol,
+      order,
+    })
+  }
+
+  return mergedBlocks
+}
 
 const buildWidgetBadgeStyle = (widget: RegisteredWidget) =>
   buildBadgeStyle(widget.entity.subwayColor)
@@ -117,9 +285,12 @@ export function WidgetBoardHost({
   calendarSettings,
   weatherData,
   commuteNote,
+  focusedCalendarEventId,
+  focusedCalendarEventDate,
   renderAudienceBadge,
   onToggleTodoDone,
   onCalendarDataChanged,
+  onOpenCalendarEvent,
 }: WidgetBoardHostProps) {
   const visibleWidgets = registeredWidgets.filter((widget) =>
     isWidgetVisibleForFilter(widget.entity, activeFilter),
@@ -311,12 +482,28 @@ export function WidgetBoardHost({
                         <article
                           className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}`}
                           key={`${item.line}-${item.destination}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            onOpenCalendarEvent({
+                              eventId: item.eventId,
+                              eventDate: item.eventDate,
+                            })
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onOpenCalendarEvent({
+                                eventId: item.eventId,
+                                eventDate: item.eventDate,
+                              })
+                            }
+                          }}
                         >
                           <div className="arrival-route">
                             {renderAudienceBadge(item.members, 'route-bullet--large')}
                             <div className="arrival-destination">
                               <h3>{item.destination}</h3>
-                              <p>{`${item.direction} ${item.platform}`.trim()}</p>
                             </div>
                           </div>
                           <div className="arrival-minute-stack">
@@ -401,6 +588,24 @@ export function WidgetBoardHost({
           languageCode,
         ) as CalendarWidgetTranslation
         const groupedAgendaItems = groupAgendaItemsByDate(visibleAgenda)
+        const familyMembersById = new Map(familyMembers.map((member) => [member.id, member]))
+        
+        const getMemberColorStyle = (members: readonly string[]): React.CSSProperties => {
+          const memberId = members.find((m) => m !== '*' && familyMembersById.has(m))
+          if (!memberId) return {}
+          
+          const member = familyMembersById.get(memberId)
+          if (!member) return {}
+          
+          // Create a lighter shade of the member's color
+          const hex = member.color.slice(1)
+          const r = parseInt(hex.slice(0, 2), 16)
+          const g = parseInt(hex.slice(2, 4), 16)
+          const b = parseInt(hex.slice(4, 6), 16)
+          const lighter = `rgba(${r}, ${g}, ${b}, 0.15)`
+          
+          return { backgroundColor: lighter }
+        }
 
         return renderWidgetFrame({
           widget,
@@ -421,7 +626,28 @@ export function WidgetBoardHost({
 
                       <ul className="agenda-list agenda-list--grouped">
                         {dayGroup.items.map((item) => (
-                          <li className="agenda-row" key={`${item.date}-${item.time}-${item.title}`}>
+                          <li 
+                            className="agenda-row agenda-row--clickable" 
+                            key={`${item.date}-${item.time}-${item.title}`}
+                            style={getMemberColorStyle(item.members)}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              onOpenCalendarEvent({
+                                eventId: item.eventId,
+                                eventDate: item.date,
+                              })
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                onOpenCalendarEvent({
+                                  eventId: item.eventId,
+                                  eventDate: item.date,
+                                })
+                              }
+                            }}
+                          >
                             <p className="agenda-time">{item.time}</p>
                             <div className="agenda-copy">
                               <p className="agenda-title">{item.title}</p>
@@ -506,6 +732,21 @@ export function WidgetBoardHost({
           ),
         })
       }
+      case 'ui-benchmark': {
+        const uiBenchmarkWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as UiBenchmarkWidgetTranslation
+
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: uiBenchmarkWidgetText.copy.benchmarkMeta,
+          mode,
+          children: (
+            <UiBenchmarkPanel mode={mode} widgetText={uiBenchmarkWidgetText} />
+          ),
+        })
+      }
       default:
         return null
     }
@@ -527,6 +768,8 @@ export function WidgetBoardHost({
                 homeCountryCode,
                 includeHouseholdEvents: Boolean(calendarSettings.includeHouseholdEvents ?? true),
                 onCalendarDataChanged,
+                focusedEventId: focusedCalendarEventId,
+                focusedEventDate: focusedCalendarEventDate,
               }
             : null
 
@@ -581,14 +824,25 @@ export function WidgetBoardHost({
     (leftEntry, rightEntry) => leftEntry.placement.order - rightEntry.placement.order,
   )
 
-  const populatedGridZones = widgetGridPlacementZones.flatMap((zone) => {
-    const widgetsInZone = (zoneEntries.get(zone.id) ?? []).sort(
-      (leftEntry, rightEntry) =>
-        leftEntry.placement.order - rightEntry.placement.order,
+  const populatedGridBlocks = visibleWidgets
+    .flatMap((widget) => buildMergedGridBlocks(widget, widget.entity.placementZones))
+    .sort((leftBlock, rightBlock) =>
+      leftBlock.rowStart - rightBlock.rowStart ||
+      leftBlock.colStart - rightBlock.colStart ||
+      leftBlock.order - rightBlock.order,
     )
 
-    return widgetsInZone.length > 0 ? [{ zone, widgetsInZone }] : []
-  })
+  const occupiedGridZoneIds = new Set<GridZoneId>(
+    populatedGridBlocks.flatMap((gridBlock) => gridBlock.zoneIds),
+  )
+
+  const emptyGridZones = widgetGridPlacementZones.filter((zone) => {
+    if (!isGridZoneId(zone.id)) {
+      return false
+    }
+
+    return !occupiedGridZoneIds.has(zone.id)
+  }) as Array<typeof widgetGridPlacementZones[number] & { id: GridZoneId }>
 
   return (
     <section className="dashboard-grid">
@@ -660,21 +914,43 @@ export function WidgetBoardHost({
             )}
       </section>
 
-      {populatedGridZones.length > 0 ? (
-        <section className="widget-grid" aria-label={appText.boardHost.widgetGridAriaLabel}>
-          {populatedGridZones.map(({ zone, widgetsInZone }) => (
+      <section className="widget-grid" aria-label={appText.boardHost.widgetGridAriaLabel}>
+        {populatedGridBlocks.map((gridBlock) => (
+          <section
+            className="widget-zone widget-zone--cell"
+            key={`${gridBlock.widget.entity.id}-${gridBlock.zoneIds.join('-')}`}
+            style={{
+              gridColumn: `${gridBlock.colStart} / ${gridBlock.colEnd + 1}`,
+              gridRow: `${gridBlock.rowStart} / ${gridBlock.rowEnd + 1}`,
+            }}
+            aria-label={formatLocalizedText(appText.boardHost.cellZoneLabel, {
+              cellId: gridBlock.zoneIds
+                .map((zoneId) => zoneId.toUpperCase())
+                .join(' + '),
+            })}
+          >
+            {renderWidget(gridBlock.widget)}
+          </section>
+        ))}
+
+        {emptyGridZones.map((zone) => {
+          const cellPosition = getGridCellPosition(zone.id)
+
+          return (
             <section
-              className={zone.className}
-              key={zone.id}
+              className="widget-zone widget-zone--cell widget-zone--cell-empty"
+              key={`empty-${zone.id}`}
+              style={{
+                gridColumn: `${cellPosition.col} / ${cellPosition.col + 1}`,
+                gridRow: `${cellPosition.row} / ${cellPosition.row + 1}`,
+              }}
               aria-label={formatLocalizedText(appText.boardHost.cellZoneLabel, {
                 cellId: zone.id.toUpperCase(),
               })}
-            >
-              {widgetsInZone.map((entry) => renderWidget(entry.widget))}
-            </section>
-          ))}
-        </section>
-      ) : null}
+            />
+          )
+        })}
+      </section>
 
       <section
         className="widget-zone widget-zone--expanded-stage"

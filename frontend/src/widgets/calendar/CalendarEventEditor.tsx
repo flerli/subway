@@ -44,6 +44,10 @@ const formatRecurrenceSummary = (
   calendarEvent: CalendarEventRecord,
   widgetText: CalendarWidgetTranslation,
 ) => {
+  if (calendarEvent.recurrence.frequency === 'none') {
+    return widgetText.detail.recurrenceOneOffSummary
+  }
+  
   switch (calendarEvent.recurrence.frequency) {
     case 'daily':
       return formatLocalizedText(widgetText.detail.recurrenceDailySummary, {

@@ -75,7 +75,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     title: 'Calendar',
     subwayColor: '#ff6319',
     sourceLocation: 'calendar',
-    userScope: createScope('members', ['family-1', 'family-2']),
+    userScope: createScope('members', ['family-1', 'family-2', 'family-3', 'family-4']),
     placementZones: [createPlacement('b1', 1)],
   }),
   normalizeWidgetEntity({

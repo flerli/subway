@@ -24,6 +24,8 @@ type CalendarDetailViewMode = 'week' | 'month' | 'year'
 
 interface CalendarDetailViewData {
   focusedMemberId?: string | null
+  focusedEventId?: string | null
+  focusedEventDate?: string | null
   familyMembers: FamilyMember[]
   homeCountryCode: string
   includeHouseholdEvents: boolean
@@ -33,6 +35,8 @@ interface CalendarDetailViewData {
 const isCalendarDetailViewData = (value: unknown): value is CalendarDetailViewData => {
   const candidate = value as {
     focusedMemberId?: unknown
+    focusedEventId?: unknown
+    focusedEventDate?: unknown
     familyMembers?: unknown
     homeCountryCode?: unknown
     includeHouseholdEvents?: unknown
@@ -44,6 +48,8 @@ const isCalendarDetailViewData = (value: unknown): value is CalendarDetailViewDa
     typeof candidate?.homeCountryCode === 'string' &&
     typeof candidate?.includeHouseholdEvents === 'boolean' &&
     (candidate?.focusedMemberId == null || typeof candidate.focusedMemberId === 'string') &&
+    (candidate?.focusedEventId == null || typeof candidate.focusedEventId === 'string') &&
+    (candidate?.focusedEventDate == null || typeof candidate.focusedEventDate === 'string') &&
     (candidate?.onCalendarDataChanged == null || typeof candidate.onCalendarDataChanged === 'function')
   )
 }
@@ -297,6 +303,10 @@ const formatRecurrenceSummary = (
   event: CalendarEventRecord,
   widgetText: CalendarWidgetTranslation,
 ) => {
+  if (event.recurrence.frequency === 'none') {
+    return widgetText.detail.recurrenceOneOffSummary
+  }
+  
   switch (event.recurrence.frequency) {
     case 'daily':
       return formatLocalizedText(widgetText.detail.recurrenceDailySummary, {
@@ -314,10 +324,65 @@ const formatRecurrenceSummary = (
       return formatLocalizedText(widgetText.detail.recurrenceYearlySummary, {
         interval: event.recurrence.interval,
       })
-    case 'none':
     default:
       return widgetText.detail.recurrenceOneOffSummary
   }
+}
+
+const generateUpcomingSeriesOccurrences = (
+  draft: CalendarEventDraft,
+  startDateString: string,
+  limitDays: number = 90,
+): string[] => {
+  if (draft.recurrenceFrequency === 'none') {
+    return []
+  }
+
+  const occurrences: string[] = []
+  const startDate = parseIsoDate(draft.date)
+  const limitDate = addDays(parseIsoDate(startDateString), limitDays)
+  let currentDate = new Date(startDate)
+  const interval = Number.parseInt(draft.recurrenceInterval, 10) || 1
+  let count = 0
+  const maxCount = draft.recurrenceCount ? Number.parseInt(draft.recurrenceCount, 10) : Infinity
+  const untilDate = draft.recurrenceUntil ? parseIsoDate(draft.recurrenceUntil) : null
+
+  while (currentDate <= limitDate && count < maxCount) {
+    if (untilDate && currentDate > untilDate) break
+
+    if (currentDate >= startDate) {
+      // Check if this date matches the recurrence pattern
+      const isMatch =
+        draft.recurrenceFrequency === 'daily' ||
+        (draft.recurrenceFrequency === 'weekly' &&
+          draft.recurrenceByWeekdays.includes(currentDate.getDay())) ||
+        (draft.recurrenceFrequency === 'monthly' &&
+          currentDate.getDate() === startDate.getDate()) ||
+        (draft.recurrenceFrequency === 'yearly' &&
+          currentDate.getMonth() === startDate.getMonth() &&
+          currentDate.getDate() === startDate.getDate())
+
+      if (isMatch) {
+        occurrences.push(formatIsoDate(currentDate))
+        count++
+      }
+    }
+
+    // Advance by interval
+    if (draft.recurrenceFrequency === 'daily') {
+      currentDate = addDays(currentDate, interval)
+    } else if (draft.recurrenceFrequency === 'weekly') {
+      currentDate = addDays(currentDate, 7 * interval)
+    } else if (draft.recurrenceFrequency === 'monthly') {
+      currentDate = addMonths(currentDate, interval)
+    } else if (draft.recurrenceFrequency === 'yearly') {
+      currentDate = addYears(currentDate, interval)
+    } else {
+      break
+    }
+  }
+
+  return occurrences.slice(0, 10)
 }
 
 export function CalendarDetailView({
@@ -348,6 +413,8 @@ export function CalendarDetailView({
 
   const {
     focusedMemberId,
+    focusedEventId,
+    focusedEventDate,
     familyMembers,
     homeCountryCode,
     includeHouseholdEvents,
@@ -396,6 +463,26 @@ export function CalendarDetailView({
   })
 
   useEffect(() => {
+    if (!focusedEventId || !focusedEventDate) {
+      return
+    }
+
+    const normalizedAnchorDate =
+      viewMode === 'week'
+        ? formatIsoDate(startOfWeek(parseIsoDate(focusedEventDate)))
+        : focusedEventDate
+
+    setAnchorDate(normalizedAnchorDate)
+    setSelectedEventId(focusedEventId)
+    setEditorMode(null)
+    setSubmitNotice(null)
+  }, [focusedEventDate, focusedEventId, viewMode])
+
+  useEffect(() => {
+    if (loading) {
+      return
+    }
+
     if (!selectedEventId) {
       return
     }
@@ -562,6 +649,48 @@ export function CalendarDetailView({
     }
   }
 
+  const getMemberColorStyle = (memberIds: string[]): React.CSSProperties => {
+    const validMembers = memberIds.filter(
+      (m) => m !== '*' && familyMembersById.has(m),
+    )
+    
+    if (validMembers.length === 0) return {}
+    if (validMembers.length === 1) {
+      const member = familyMembersById.get(validMembers[0])
+      if (!member) return {}
+      const hex = member.color.slice(1)
+      const r = parseInt(hex.slice(0, 2), 16)
+      const g = parseInt(hex.slice(2, 4), 16)
+      const b = parseInt(hex.slice(4, 6), 16)
+      return { backgroundColor: `rgba(${r}, ${g}, ${b}, 0.15)` }
+    }
+
+    // Multiple members: create gradient
+    const colors = validMembers
+      .slice(0, 3)
+      .map((memberId) => {
+        const member = familyMembersById.get(memberId)
+        if (!member) return null
+        return member.color
+      })
+      .filter((color): color is string => color !== null)
+
+    if (colors.length === 0) return {}
+
+    const gradientStops = colors
+      .map((color, index) => {
+        const hex = color.slice(1)
+        const r = parseInt(hex.slice(0, 2), 16)
+        const g = parseInt(hex.slice(2, 4), 16)
+        const b = parseInt(hex.slice(4, 6), 16)
+        const percentage = (index / (colors.length - 1)) * 100
+        return `rgba(${r}, ${g}, ${b}, 0.15) ${percentage}%`
+      })
+      .join(', ')
+
+    return { background: `linear-gradient(135deg, ${gradientStops})` }
+  }
+
   const renderDayCellEventButton = (event: CalendarEventRecord, compact = false) => {
     const isSelected = selectedEventId === event.id
 
@@ -570,7 +699,8 @@ export function CalendarDetailView({
         key={event.id}
         className={`calendar-event-chip${compact ? ' calendar-event-chip--compact' : ''}${
           isSelected ? ' is-active' : ''
-        }`}
+        }${event.cancelled ? ' is-cancelled' : ''}`}
+        style={getMemberColorStyle(event.members)}
         type="button"
         onClick={() => {
           setSelectedEventId((currentValue) =>
@@ -592,8 +722,11 @@ export function CalendarDetailView({
 
     return (
       <button
-        className={`calendar-detail-event-row${isSelected ? ' is-active' : ''}`}
+        className={`calendar-detail-event-row${isSelected ? ' is-active' : ''}${
+          event.cancelled ? ' is-cancelled' : ''
+        }`}
         key={`${event.id}-${event.date}`}
+        style={getMemberColorStyle(event.members)}
         type="button"
         onClick={() => {
           setSelectedEventId((currentValue) =>
@@ -803,39 +936,62 @@ export function CalendarDetailView({
             />
           </label>
 
-          <label className="settings-label">
+          <div className="settings-label">
             <span>{widgetText.detail.scopeLabel}</span>
-            <select
-              className="settings-input settings-select"
-              value={draft.scopeMode}
-              onChange={(inputEvent) =>
-                setDraft((currentDraft) => ({
-                  ...currentDraft,
-                  scopeMode: inputEvent.target.value === 'members' ? 'members' : 'all',
-                }))
-              }
-              disabled={pending}
-            >
-              <option value="all">{widgetText.detail.scopeHouseholdOption}</option>
-              <option value="members">{widgetText.detail.scopeMembersOption}</option>
-            </select>
-          </label>
-
-          {draft.scopeMode === 'members' ? (
             <div className="calendar-chip-grid">
+              <label className="calendar-chip" key="all">
+                <input
+                  type="checkbox"
+                  checked={draft.scopeMode === 'all'}
+                  onChange={() =>
+                    setDraft((currentDraft) => ({
+                      ...currentDraft,
+                      scopeMode: 'all',
+                      scopeMemberIds: [],
+                    }))
+                  }
+                  disabled={pending}
+                />
+                <span>{widgetText.detail.scopeHouseholdOption}</span>
+              </label>
               {familyMembers.map((member) => (
                 <label className="calendar-chip" key={member.id}>
                   <input
                     type="checkbox"
-                    checked={draft.scopeMemberIds.includes(member.id)}
-                    onChange={() => toggleScopeMember(member.id)}
+                    checked={draft.scopeMode === 'members' && draft.scopeMemberIds.includes(member.id)}
+                    onChange={() => {
+                      if (draft.scopeMode !== 'members') {
+                        setDraft((currentDraft) => ({
+                          ...currentDraft,
+                          scopeMode: 'members',
+                          scopeMemberIds: [member.id],
+                        }))
+                      } else {
+                        toggleScopeMember(member.id)
+                      }
+                    }}
                     disabled={pending}
                   />
                   <span>{member.firstName}</span>
                 </label>
               ))}
             </div>
-          ) : null}
+          </div>
+
+          <label className="settings-label calendar-cancelled-label">
+            <input
+              type="checkbox"
+              checked={draft.cancelled}
+              onChange={(inputEvent) =>
+                setDraft((currentDraft) => ({
+                  ...currentDraft,
+                  cancelled: inputEvent.target.checked,
+                }))
+              }
+              disabled={pending}
+            />
+            <span>Cancelled (show with strikethrough)</span>
+          </label>
 
           <label className="settings-label">
             <span>{widgetText.detail.recurrenceLabel}</span>
@@ -929,6 +1085,32 @@ export function CalendarDetailView({
             </div>
           ) : null}
 
+          {draft.recurrenceFrequency !== 'none' ? (
+            <div className="calendar-exclusions-section">
+              <p className="settings-label">Skip dates (holidays, exceptions):</p>
+              <div className="calendar-exclusions-grid">
+                {generateUpcomingSeriesOccurrences(draft, getTodayIsoDate()).map((date) => (
+                  <label className="calendar-chip calendar-exclusion-chip" key={date}>
+                    <input
+                      type="checkbox"
+                      checked={draft.excludedDates.includes(date)}
+                      onChange={() =>
+                        setDraft((currentDraft) => ({
+                          ...currentDraft,
+                          excludedDates: currentDraft.excludedDates.includes(date)
+                            ? currentDraft.excludedDates.filter((d) => d !== date)
+                            : [...currentDraft.excludedDates, date],
+                        }))
+                      }
+                      disabled={pending}
+                    />
+                    <span>{formatDayLabel(date, languageCode)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="calendar-detail-side-actions">
             <button className="settings-submit" type="submit" disabled={pending}>
               {pending
@@ -955,6 +1137,7 @@ export function CalendarDetailView({
 
   const renderDayGroups = (events: CalendarEventRecord[]) => {
     const dayGroups = groupEventsByDate(events)
+    const todayIsoDate = getTodayIsoDate()
 
     if (dayGroups.length === 0) {
       return (
@@ -968,7 +1151,10 @@ export function CalendarDetailView({
     return (
       <div className="calendar-detail-groups">
         {dayGroups.map((dayGroup) => (
-          <section className="calendar-detail-day-group" key={dayGroup.date}>
+          <section
+            className={`calendar-detail-day-group${dayGroup.date === todayIsoDate ? ' is-today' : ''}`}
+            key={dayGroup.date}
+          >
             <p className="calendar-detail-day-heading">{formatDayLabel(dayGroup.date, languageCode)}</p>
             <div className="calendar-detail-event-list">
               {dayGroup.items.map(renderEventRow)}
@@ -989,6 +1175,8 @@ export function CalendarDetailView({
       )
     }
 
+    const todayIsoDate = getTodayIsoDate()
+
     return (
       <div className="calendar-month-matrix-wrap">
         <div className="calendar-month-weekdays">
@@ -1001,12 +1189,13 @@ export function CalendarDetailView({
         <div className="calendar-month-matrix">
           {monthMatrix.map((cell) => {
             const isSelected = cell.events.some((event) => event.id === selectedEventId)
+            const isToday = cell.date === todayIsoDate
 
             return (
               <article
                 className={`calendar-month-cell${cell.isCurrentMonth ? '' : ' calendar-month-cell--outside'}${
                   isSelected ? ' is-selected' : ''
-                }`}
+                }${isToday ? ' is-today' : ''}`}
                 key={cell.date}
               >
                 <p className="calendar-month-cell-day">{cell.dayNumber}</p>
@@ -1034,10 +1223,16 @@ export function CalendarDetailView({
       )
     }
 
+    const todayIsoDate = getTodayIsoDate()
+    const todayMonthKey = todayIsoDate.slice(0, 7)
+
     return (
       <div className="calendar-year-matrix">
         {yearMatrix.map((month) => (
-          <article className="calendar-year-card" key={month.monthKey}>
+          <article
+            className={`calendar-year-card${month.monthKey === todayMonthKey ? ' is-today' : ''}`}
+            key={month.monthKey}
+          >
             <p className="calendar-year-card-title">
               {formatMonthLabel(month.monthKey, languageCode)}
             </p>

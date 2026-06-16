@@ -932,6 +932,15 @@ const seedWidgets = [
     },
     placementZones: [{ zoneId: 'a2', order: 1 }],
   },
+  {
+    id: 'ui-benchmark',
+    title: 'UI Benchmark',
+    subwayLetter: 'B',
+    subwayColor: '#34d399',
+    sourceLocation: 'ui-benchmark',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [{ zoneId: 'b2', order: 1 }],
+  },
 ]
 
 const allowedWidgetSourceLocations = new Set(
@@ -1303,6 +1312,29 @@ const deleteUnsupportedWidgets = () => {
   for (const widgetSetting of widgetSettings) {
     if (!allowedWidgetIds.has(widgetSetting.widget_id)) {
       deleteWidgetSettingsById(widgetSetting.owner_user_id, widgetSetting.widget_id)
+    }
+  }
+}
+
+const ensureSeedWidgetsPresent = (ownerUserId) => {
+  const existingWidgetIds = new Set(
+    db
+      .prepare(
+        `
+          SELECT id
+          FROM widgets
+          WHERE owner_user_id = ?
+        `,
+      )
+      .all(ownerUserId)
+      .map((row) => row.id),
+  )
+
+  const now = new Date().toISOString()
+
+  for (const widget of seedWidgets) {
+    if (!existingWidgetIds.has(widget.id)) {
+      insertWidget(ownerUserId, widget, now, now)
     }
   }
 }
@@ -1985,6 +2017,8 @@ if (widgetSeedCount === 0) {
     insertWidget(defaultAppUserId, widget, now, now)
   }
 }
+
+ensureSeedWidgetsPresent(defaultAppUserId)
 
 deleteUnsupportedWidgets()
 

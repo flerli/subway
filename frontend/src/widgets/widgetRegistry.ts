@@ -33,6 +33,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   todo: {
     widgetNumber: 4,
   },
+  'ui-benchmark': {
+    widgetNumber: 5,
+  },
 }
 
 export const buildWidgetRegistry = (

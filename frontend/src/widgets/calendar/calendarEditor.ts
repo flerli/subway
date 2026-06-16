@@ -24,6 +24,8 @@ export interface CalendarEventDraft {
   recurrenceByWeekdays: number[]
   recurrenceCount: string
   recurrenceUntil: string
+  excludedDates: string[]
+  cancelled: boolean
 }
 
 export const calendarWeekdayOptions = [
@@ -72,6 +74,8 @@ export const createEmptyCalendarEventDraft = (): CalendarEventDraft => ({
   recurrenceByWeekdays: [],
   recurrenceCount: '',
   recurrenceUntil: '',
+  excludedDates: [],
+  cancelled: false,
 })
 
 export const createCalendarEventDraftFromRecord = (
@@ -86,6 +90,8 @@ export const createCalendarEventDraftFromRecord = (
   scopeMode: calendarEvent.scope.mode,
   scopeMemberIds: [...calendarEvent.scope.memberIds],
   ...normalizeRecurrenceRuleDraft(calendarEvent.recurrence),
+  excludedDates: [...calendarEvent.excludedDates],
+  cancelled: calendarEvent.cancelled,
 })
 
 export const validateCalendarEventDraft = (draft: CalendarEventDraft) => {
@@ -170,4 +176,6 @@ export const buildCalendarEventInputFromDraft = (
         : null,
     until: draft.recurrenceUntil.trim().length > 0 ? draft.recurrenceUntil : null,
   },
+  excludedDates: draft.excludedDates,
+  cancelled: draft.cancelled,
 })

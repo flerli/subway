@@ -24,6 +24,8 @@ export interface ScopedItem {
 }
 
 export interface Arrival extends ScopedItem {
+  eventId: string
+  eventDate: string
   destination: string
   direction: string
   platform: string
@@ -33,6 +35,7 @@ export interface Arrival extends ScopedItem {
 }
 
 export interface AgendaItem extends ScopedItem {
+  eventId: string
   date: string
   time: string
   title: string
@@ -40,6 +43,7 @@ export interface AgendaItem extends ScopedItem {
   locationCountry: string
   note: string
   isForeign: boolean
+  cancelled: boolean
 }
 
 export interface TodoItem extends ScopedItem {
