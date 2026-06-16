@@ -41,6 +41,7 @@ export interface AudioVisualWidgetTranslation extends WidgetTranslationDefinitio
     cancelAction: string
     confirmAction: string
     playAction: string
+    pauseAction: string
     closeAction: string
     deleteAction: string
     downloadAction: string
@@ -63,6 +64,19 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
   en: {
     title: 'Audio Visual',
     boardKicker: 'Capture',
+    settings: {
+      title: 'Audio-visual widget settings',
+      description:
+        'Control whether the widget may request camera and microphone access. Chromium site permissions must still allow the devices.',
+      fields: {
+        cameraEnabled: {
+          label: 'Enable camera',
+        },
+        microphoneEnabled: {
+          label: 'Enable microphone',
+        },
+      },
+    },
     copy: {
       permissionTitle: 'Camera or microphone access required',
       permissionCopy: 'Enable device access to preview, record, and replay shared family media.',
@@ -96,7 +110,8 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
       deleteConfirmCopy: 'This cannot be undone.',
       cancelAction: 'Cancel',
       confirmAction: 'Confirm',
-      playAction: 'Open',
+      playAction: 'Play',
+      pauseAction: 'Pause',
       closeAction: 'Close',
       deleteAction: 'Delete',
       downloadAction: 'Download',
@@ -117,6 +132,19 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
   de: {
     title: 'Audio Visual',
     boardKicker: 'Aufnahme',
+    settings: {
+      title: 'Audio-Visual-Widget-Einstellungen',
+      description:
+        'Steuern Sie, ob das Widget Kamera- und Mikrofonzugriff anfragen darf. Chromium-Site-Berechtigungen muessen die Geraete dennoch erlauben.',
+      fields: {
+        cameraEnabled: {
+          label: 'Kamera aktivieren',
+        },
+        microphoneEnabled: {
+          label: 'Mikrofon aktivieren',
+        },
+      },
+    },
     copy: {
       permissionTitle: 'Kamera- oder Mikrofonzugriff erforderlich',
       permissionCopy: 'Aktivieren Sie den Geraetezugriff fuer Vorschau, Aufnahme und Wiedergabe gemeinsamer Familienmedien.',
@@ -150,7 +178,8 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
       deleteConfirmCopy: 'Dies kann nicht rueckgaengig gemacht werden.',
       cancelAction: 'Abbrechen',
       confirmAction: 'Bestaetigen',
-      playAction: 'Oeffnen',
+      playAction: 'Abspielen',
+      pauseAction: 'Pause',
       closeAction: 'Schliessen',
       deleteAction: 'Loeschen',
       downloadAction: 'Herunterladen',
@@ -171,6 +200,19 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
   fr: {
     title: 'Audio Visual',
     boardKicker: 'Capture',
+    settings: {
+      title: 'Parametres du widget audio-visuel',
+      description:
+        'Controlez si le widget peut demander l acces a la camera et au microphone. Les autorisations Chromium du site doivent toujours autoriser les appareils.',
+      fields: {
+        cameraEnabled: {
+          label: 'Activer la camera',
+        },
+        microphoneEnabled: {
+          label: 'Activer le microphone',
+        },
+      },
+    },
     copy: {
       permissionTitle: 'Acces camera ou microphone requis',
       permissionCopy: 'Activez l acces a l appareil pour la previsualisation, l enregistrement et la lecture des medias familiaux partages.',
@@ -204,7 +246,8 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
       deleteConfirmCopy: 'Cette action est irreversible.',
       cancelAction: 'Annuler',
       confirmAction: 'Confirmer',
-      playAction: 'Ouvrir',
+      playAction: 'Lire',
+      pauseAction: 'Pause',
       closeAction: 'Fermer',
       deleteAction: 'Supprimer',
       downloadAction: 'Telecharger',
@@ -225,6 +268,19 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
   es: {
     title: 'Audio Visual',
     boardKicker: 'Captura',
+    settings: {
+      title: 'Configuracion del widget audiovisual',
+      description:
+        'Controle si el widget puede solicitar acceso a la camara y al microfono. Los permisos del sitio en Chromium aun deben permitir los dispositivos.',
+      fields: {
+        cameraEnabled: {
+          label: 'Activar camara',
+        },
+        microphoneEnabled: {
+          label: 'Activar microfono',
+        },
+      },
+    },
     copy: {
       permissionTitle: 'Se requiere acceso a camara o microfono',
       permissionCopy: 'Active el acceso al dispositivo para vista previa, grabacion y reproduccion de medios familiares compartidos.',
@@ -258,7 +314,8 @@ const audioVisualWidgetTranslationCatalog = createWidgetTranslationCatalog<Audio
       deleteConfirmCopy: 'Esto no se puede deshacer.',
       cancelAction: 'Cancelar',
       confirmAction: 'Confirmar',
-      playAction: 'Abrir',
+      playAction: 'Reproducir',
+      pauseAction: 'Pausa',
       closeAction: 'Cerrar',
       deleteAction: 'Eliminar',
       downloadAction: 'Descargar',

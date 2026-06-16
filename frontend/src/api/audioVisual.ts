@@ -145,7 +145,11 @@ export const deleteAudioVisualRecording = async (recordingId: string) => {
   }
 }
 
-export const resolveAudioVisualContentUrl = (contentUrl: string) => getApiUrl(contentUrl)
+const resolveAudioVisualAssetUrl = (path: string) =>
+  path.startsWith('/api/') ? path : getApiUrl(path)
+
+export const resolveAudioVisualContentUrl = (contentUrl: string) =>
+  resolveAudioVisualAssetUrl(contentUrl)
 
 export const resolveAudioVisualDownloadUrl = (downloadUrl: string) =>
-  getApiUrl(downloadUrl)
+  resolveAudioVisualAssetUrl(downloadUrl)

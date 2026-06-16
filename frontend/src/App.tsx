@@ -463,6 +463,9 @@ function App() {
     })
   const [softwareKeyboardTarget, setSoftwareKeyboardTarget] =
     useState<SoftwareKeyboardTarget | null>(null)
+  const [isFullscreenActive, setIsFullscreenActive] = useState(() =>
+    typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false,
+  )
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
   const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
@@ -798,6 +801,22 @@ function App() {
 
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return () => undefined
+    }
+
+    const handleFullscreenChange = () => {
+      setIsFullscreenActive(Boolean(document.fullscreenElement))
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
   }, [])
 
@@ -1495,6 +1514,22 @@ function App() {
       })
   }
 
+  const handleToggleFullscreen = async () => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // Ignore fullscreen errors so the settings panel remains usable.
+    }
+  }
+
   const renderAudienceBadge = (
     audience: readonly AudienceId[],
     sizeClassName = 'route-bullet--small',
@@ -2159,6 +2194,33 @@ function App() {
 
                     <p className="settings-note">{appText.settings.countryPersistenceNote}</p>
                   </form>
+
+                  <article className="settings-card">
+                    <div className="settings-card-head">
+                      <p className="widget-kicker">{appText.settings.displayKicker}</p>
+                      <h3>{appText.settings.displayTitle}</h3>
+                    </div>
+
+                    <p className="settings-copy">{appText.settings.displayDescription}</p>
+
+                    <button
+                      className="settings-submit"
+                      type="button"
+                      onClick={() => {
+                        void handleToggleFullscreen()
+                      }}
+                    >
+                      {isFullscreenActive
+                        ? appText.settings.fullscreenExitAction
+                        : appText.settings.fullscreenEnterAction}
+                    </button>
+
+                    <p className="settings-note">
+                      {isFullscreenActive
+                        ? appText.settings.fullscreenActiveState
+                        : appText.settings.fullscreenInactiveState}
+                    </p>
+                  </article>
 
                   <form className="settings-card settings-form" onSubmit={handleAddMember}>
                     <div className="settings-card-head">

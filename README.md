@@ -73,11 +73,17 @@ docker compose logs -f
 docker compose down
 ```
 
-The Dockerized backend uses the same SQLite file as local non-Docker development:
+The Dockerized backend now stores its runtime SQLite data in Docker-managed persistent storage mounted at `/app/data`.
 
-- `backend/data/subway.sqlite`
+For local development, the backend data is kept in the named Docker volume:
 
-On the VPS, the same compose file stores the database at:
+- `subway_subway-data`
+
+On the VPS, the deployment also uses the named Docker volume:
+
+- `subway_subway-data`
+
+The legacy host-path database location is still used only as a migration source during deploy:
 
 - `/home/swaibian/apps/subway/backend/data/subway.sqlite`
 
@@ -102,7 +108,8 @@ What it does:
 
 - Builds and pushes backend and frontend images to GHCR
 - Uploads `compose.yml`, `compose.vps.yml`, and a generated `deploy.env` file to the VPS
-- Copies `backend/data/subway.sqlite` to the VPS on the first deploy only
+- Creates a timestamped backup of the live VPS database before each deploy when a volume-backed database already exists
+- Migrates the legacy VPS host-path database into the named Docker volume when the volume is empty
 - Verifies the configured public app port is free unless an existing subway deployment already owns it
 - Pulls the tagged images on `client.scaico.com` as user `swaibian`
 - Restarts the stack with `docker compose up -d --no-build --remove-orphans`
@@ -122,6 +129,13 @@ The workflow smoke-tests the app from inside the VPS with `curl http://127.0.0.1
 The intended public route is `https://client.scaico.com/subway/`, which requires a matching reverse-proxy route in the existing Nginx stack.
 
 The backend readiness checks use `/api/auth/session`, which remains publicly readable even after the authenticated data endpoints are locked down.
+
+## Persistence safety
+
+- Local Docker runs use the named volume `subway_subway-data`, so normal rebuilds and restarts do not wipe the database.
+- The VPS deploy workflow now backs up the live database into `${DEPLOY_PATH}/backups/` before replacing containers.
+- The VPS deploy workflow also imports the legacy host-path database into the named volume if the volume is empty, preventing accidental fresh starts during the storage-model transition.
+- Avoid `docker compose down -v` unless you intentionally want to delete the database volume.
 
 ## Backend persistence
 

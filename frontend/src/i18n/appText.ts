@@ -60,6 +60,13 @@ export interface AppTextBundle {
     countryPersistenceNote: string
     countrySavingNote: string
     countrySaveAction: string
+    displayKicker: string
+    displayTitle: string
+    displayDescription: string
+    fullscreenEnterAction: string
+    fullscreenExitAction: string
+    fullscreenActiveState: string
+    fullscreenInactiveState: string
     addMemberKicker: string
     addMemberTitle: string
     addMemberAction: string
@@ -227,6 +234,14 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       countryPersistenceNote: 'This reference country is saved for your account.',
       countrySavingNote: 'Saving country preference...',
       countrySaveAction: 'Save home country',
+      displayKicker: 'Display',
+      displayTitle: 'Fullscreen mode',
+      displayDescription:
+        'Switch the kiosk between browser fullscreen mode and normal window mode on this device.',
+      fullscreenEnterAction: 'Enter fullscreen',
+      fullscreenExitAction: 'Exit fullscreen',
+      fullscreenActiveState: 'Fullscreen is active.',
+      fullscreenInactiveState: 'Fullscreen is inactive.',
       addMemberKicker: 'Add member',
       addMemberTitle: 'New roster entry',
       addMemberAction: 'Add family member',
@@ -402,6 +417,14 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       countryPersistenceNote: 'Dieses Referenzland wird fuer dein Konto gespeichert.',
       countrySavingNote: 'Laenderpraeferenz wird gespeichert...',
       countrySaveAction: 'Heimatland speichern',
+      displayKicker: 'Anzeige',
+      displayTitle: 'Vollbildmodus',
+      displayDescription:
+        'Schalte diesen Kiosk auf diesem Geraet zwischen Browser-Vollbild und normalem Fenstermodus um.',
+      fullscreenEnterAction: 'Vollbild aktivieren',
+      fullscreenExitAction: 'Vollbild verlassen',
+      fullscreenActiveState: 'Vollbild ist aktiv.',
+      fullscreenInactiveState: 'Vollbild ist inaktiv.',
       addMemberKicker: 'Mitglied hinzufuegen',
       addMemberTitle: 'Neuer Eintrag',
       addMemberAction: 'Familienmitglied hinzufuegen',
@@ -584,6 +607,14 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       countryPersistenceNote: 'Ce pays de reference est enregistre pour votre compte.',
       countrySavingNote: 'Enregistrement du pays de reference...',
       countrySaveAction: 'Enregistrer le pays',
+      displayKicker: 'Affichage',
+      displayTitle: 'Mode plein ecran',
+      displayDescription:
+        'Basculez ce kiosque entre le mode plein ecran du navigateur et le mode fenetre standard sur cet appareil.',
+      fullscreenEnterAction: 'Entrer en plein ecran',
+      fullscreenExitAction: 'Quitter le plein ecran',
+      fullscreenActiveState: 'Le plein ecran est actif.',
+      fullscreenInactiveState: 'Le plein ecran est inactif.',
       addMemberKicker: 'Ajouter un membre',
       addMemberTitle: 'Nouvelle entree',
       addMemberAction: 'Ajouter un membre de la famille',
@@ -766,6 +797,14 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       countryPersistenceNote: 'Este pais de referencia se guarda para tu cuenta.',
       countrySavingNote: 'Guardando el pais de referencia...',
       countrySaveAction: 'Guardar pais de referencia',
+      displayKicker: 'Pantalla',
+      displayTitle: 'Modo de pantalla completa',
+      displayDescription:
+        'Cambie este kiosco entre el modo de pantalla completa del navegador y el modo de ventana normal en este dispositivo.',
+      fullscreenEnterAction: 'Entrar en pantalla completa',
+      fullscreenExitAction: 'Salir de pantalla completa',
+      fullscreenActiveState: 'La pantalla completa esta activa.',
+      fullscreenInactiveState: 'La pantalla completa esta inactiva.',
       addMemberKicker: 'Agregar miembro',
       addMemberTitle: 'Nueva entrada',
       addMemberAction: 'Agregar miembro de la familia',

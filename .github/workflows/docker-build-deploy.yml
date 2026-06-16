@@ -139,6 +139,7 @@ jobs:
         shell: bash
         run: |
           cat > deploy.env <<EOF
+          COMPOSE_PROJECT_NAME=subway
           BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}:${{ needs.build.outputs.image_tag }}
           FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}:${{ needs.build.outputs.image_tag }}
           APP_PORT=8081
@@ -148,21 +149,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/backend/data'"
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/backend/data' '${DEPLOY_PATH}/backups'"
           scp compose.yml compose.vps.yml deploy.env "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
 
-      - name: Initialize remote database on first deploy
+      - name: Backup and migrate remote database
         shell: bash
         run: |
           set -euo pipefail
-          if ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "[[ -s '${DEPLOY_PATH}/backend/data/subway.sqlite' ]]"; then
-            echo "Remote database already exists; skipping initialization."
-          else
-            scp backend/data/subway.sqlite \
-              "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/backend/data/subway.sqlite"
-            ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              "chmod 600 '${DEPLOY_PATH}/backend/data/subway.sqlite'"
-          fi
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "
+            set -euo pipefail
+            cd '${DEPLOY_PATH}'
+
+            volume_name='subway_subway-data'
+            legacy_db='${DEPLOY_PATH}/backend/data/subway.sqlite'
+            backup_dir='${DEPLOY_PATH}/backups'
+            backup_name=\"subway-\$(date +%Y%m%d_%H%M%S).sqlite\"
+
+            docker volume create \"\${volume_name}\" >/dev/null
+
+            docker run --rm \
+              -v \"\${volume_name}:/data\" \
+              -v \"\${backup_dir}:/backup\" \
+              alpine:3.20 \
+              sh -c 'if [ -s /data/subway.sqlite ]; then cp /data/subway.sqlite \"/backup/'\"\${backup_name}\"'\"; fi'
+
+            docker run --rm \
+              -v \"\${volume_name}:/data\" \
+              -v \"${DEPLOY_PATH}/backend/data:/legacy\" \
+              alpine:3.20 \
+              sh -c 'if [ ! -s /data/subway.sqlite ] && [ -s /legacy/subway.sqlite ]; then cp /legacy/subway.sqlite /data/subway.sqlite; chmod 600 /data/subway.sqlite; fi'
+
+            if [ ! -s \"\${legacy_db}\" ] && ! docker run --rm -v \"\${volume_name}:/data\" alpine:3.20 sh -c 'test -s /data/subway.sqlite'; then
+              echo 'No existing VPS database found in either the legacy host path or the Docker volume.'
+              echo 'The deployment will proceed with a fresh database.'
+            fi
+          "
 
       - name: Validate remote app port
         shell: bash
@@ -202,6 +223,7 @@ jobs:
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login '${REGISTRY}' -u '${{ github.actor }}' --password-stdin
             docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env pull
             docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env up -d --no-build --remove-orphans
+            docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env exec -T backend test -s /app/data/subway.sqlite
             docker image prune -f
           "
 

@@ -27,7 +27,6 @@ type PermissionState =
   | 'error'
 type RecordingMode = 'video' | 'audio' | null
 type SurfaceMode = 'live' | 'history'
-type CameraFacingMode = 'user' | 'environment'
 
 interface AudioVisualWidgetProps {
   mode: AudioVisualPanelMode
@@ -139,16 +138,15 @@ export function AudioVisualWidget({
   const [recordingMode, setRecordingMode] = useState<RecordingMode>(null)
   const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0)
   const [audioLevel, setAudioLevel] = useState<number | null>(null)
-  const [peakLevel, setPeakLevel] = useState<number | null>(null)
   const [lastActionError, setLastActionError] = useState<string | null>(null)
   const [visibleHistoryCount, setVisibleHistoryCount] = useState(20)
   const [previewFlashVisible, setPreviewFlashVisible] = useState(false)
   const [latestPhotoPreviewUrl, setLatestPhotoPreviewUrl] = useState<string | null>(null)
+  const [lastPreviewFrameUrl, setLastPreviewFrameUrl] = useState<string | null>(null)
   const [previewReloadToken, setPreviewReloadToken] = useState(0)
   const [documentVisible, setDocumentVisible] = useState(() =>
     typeof document === 'undefined' ? true : document.visibilityState === 'visible',
   )
-  const [cameraFacingMode, setCameraFacingMode] = useState<CameraFacingMode>('user')
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const analyserAnimationRef = useRef<number | null>(null)
   const analyserContextRef = useRef<AudioContext | null>(null)
@@ -223,8 +221,12 @@ export function AudioVisualWidget({
       if (latestPhotoPreviewUrl) {
         URL.revokeObjectURL(latestPhotoPreviewUrl)
       }
+
+      if (lastPreviewFrameUrl) {
+        URL.revokeObjectURL(lastPreviewFrameUrl)
+      }
     }
-  }, [latestPhotoPreviewUrl])
+  }, [lastPreviewFrameUrl, latestPhotoPreviewUrl])
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -243,7 +245,40 @@ export function AudioVisualWidget({
   }, [])
 
   useEffect(() => {
+    const capturePreviewFrame = () => {
+      const videoElement = videoRef.current
+
+      if (!videoElement || videoElement.videoWidth <= 0 || videoElement.videoHeight <= 0) {
+        return
+      }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = videoElement.videoWidth
+      canvas.height = videoElement.videoHeight
+      const context = canvas.getContext('2d')
+
+      if (!context) {
+        return
+      }
+
+      context.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          return
+        }
+
+        setLastPreviewFrameUrl((currentValue) => {
+          if (currentValue) {
+            URL.revokeObjectURL(currentValue)
+          }
+
+          return URL.createObjectURL(blob)
+        })
+      }, 'image/jpeg', 0.82)
+    }
+
     const stopPreview = () => {
+      capturePreviewFrame()
       setPreviewStream((currentStream) => {
         currentStream?.getTracks().forEach((track) => track.stop())
         return null
@@ -278,11 +313,11 @@ export function AudioVisualWidget({
     setPermissionState('requesting')
     setLastActionError(null)
 
-    const requestStream = (facingMode: CameraFacingMode) =>
-      navigator.mediaDevices.getUserMedia({
+    navigator.mediaDevices
+      .getUserMedia({
         video: settings.cameraEnabled
           ? {
-              facingMode: { ideal: facingMode },
+              facingMode: { ideal: 'user' },
               frameRate: { ideal: 30, max: 30 },
               width: { ideal: 1280 },
               height: { ideal: 720 },
@@ -292,8 +327,6 @@ export function AudioVisualWidget({
           ? { echoCancellation: true, noiseSuppression: true }
           : false,
       })
-
-    requestStream(cameraFacingMode)
       .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop())
@@ -304,18 +337,16 @@ export function AudioVisualWidget({
           currentStream?.getTracks().forEach((track) => track.stop())
           return stream
         })
+        setLastPreviewFrameUrl((currentValue) => {
+          if (currentValue) {
+            URL.revokeObjectURL(currentValue)
+          }
+
+          return null
+        })
         setPermissionState('granted')
       })
       .catch((error: DOMException) => {
-        if (
-          cameraFacingMode === 'environment' &&
-          (error.name === 'OverconstrainedError' || error.name === 'NotFoundError')
-        ) {
-          setCameraFacingMode('user')
-          setPreviewReloadToken((currentValue) => currentValue + 1)
-          return
-        }
-
         stopPreview()
         if (error.name === 'NotAllowedError') {
           setPermissionState('denied')
@@ -333,7 +364,6 @@ export function AudioVisualWidget({
   }, [
     documentVisible,
     previewReloadToken,
-    cameraFacingMode,
     settings.cameraEnabled,
     settings.microphoneEnabled,
     surfaceMode,
@@ -370,7 +400,6 @@ export function AudioVisualWidget({
     analyserContextRef.current?.close().catch(() => undefined)
     analyserContextRef.current = null
     setAudioLevel(null)
-    setPeakLevel(null)
 
     const audioTrack = previewStream?.getAudioTracks()[0]
 
@@ -383,11 +412,14 @@ export function AudioVisualWidget({
     const source = context.createMediaStreamSource(new MediaStream([audioTrack]))
     const analyser = context.createAnalyser()
     analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.82
     source.connect(analyser)
     const buffer = new Uint8Array(analyser.fftSize)
     let currentPeak = -60
+    let smoothedLevel = -60
+    let lastMeterUpdateAt = 0
 
-    const updateMeter = () => {
+    const updateMeter = (frameTime: number) => {
       analyser.getByteTimeDomainData(buffer)
       let sumSquares = 0
 
@@ -398,9 +430,14 @@ export function AudioVisualWidget({
 
       const rms = Math.sqrt(sumSquares / buffer.length)
       const nextLevel = rms > 0 ? Math.max(-60, 20 * Math.log10(rms)) : -60
-      currentPeak = Math.max(currentPeak - 0.35, nextLevel)
-      setAudioLevel(Math.round(nextLevel * 10) / 10)
-      setPeakLevel(Math.round(currentPeak * 10) / 10)
+      smoothedLevel = smoothedLevel * 0.72 + nextLevel * 0.28
+      currentPeak = Math.max(currentPeak - 0.22, smoothedLevel)
+
+      if (frameTime - lastMeterUpdateAt >= 90) {
+        lastMeterUpdateAt = frameTime
+        setAudioLevel(Math.round(smoothedLevel * 10) / 10)
+      }
+
       analyserAnimationRef.current = requestAnimationFrame(updateMeter)
     }
 
@@ -510,7 +547,10 @@ export function AudioVisualWidget({
   }
 
   const stopRecording = () => {
-    recorderRef.current?.stop()
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.requestData()
+      recorderRef.current.stop()
+    }
     recorderRef.current = null
 
     if (recordingIntervalRef.current !== null) {
@@ -599,10 +639,12 @@ export function AudioVisualWidget({
 
       if (blob.size > 0) {
         await uploadBlob(nextMode === 'video' ? 'video' : 'audio', blob, durationSeconds)
+      } else {
+        setLastActionError(widgetText.copy.recordingError)
       }
     }
 
-    recorder.start()
+    recorder.start(1000)
   }
 
   const handleDelete = async (recordingId: string) => {
@@ -622,6 +664,15 @@ export function AudioVisualWidget({
   const hasVideoPreview = Boolean(previewStream?.getVideoTracks().length)
   const hasAudioPreview = Boolean(previewStream?.getAudioTracks().length)
   const isClipping = (audioLevel ?? -60) > -0.5
+  const previewClassName = `audio-visual-preview${mode === 'grid' ? ' audio-visual-preview--grid' : ''}`
+  const audioMeterWidth = `${Math.max(
+    8,
+    Math.min(100, (((audioLevel ?? -60) + 60) / 60) * 100),
+  )}%`
+  const isPlaybackDialogOpen = Boolean(playbackRecordingId)
+  const playbackActionLabel = isPlaybackDialogOpen
+    ? widgetText.copy.pauseAction
+    : widgetText.copy.playAction
 
   return (
     <div className={`audio-visual audio-visual--${mode}`}>
@@ -649,11 +700,22 @@ export function AudioVisualWidget({
             ) : hasVideoPreview ? (
               <video
                 ref={videoRef}
-                className="audio-visual-preview"
+                className={previewClassName}
                 autoPlay
                 muted
                 playsInline
               />
+            ) : lastPreviewFrameUrl && !settings.cameraEnabled ? (
+              <div className="audio-visual-disabled-preview">
+                <img
+                  className={`${previewClassName} audio-visual-preview--dimmed`}
+                  src={lastPreviewFrameUrl}
+                  alt=""
+                />
+                <div className="audio-visual-disabled-overlay">
+                  <p className="audio-visual-empty-title">{widgetText.copy.cameraDisabled}</p>
+                </div>
+              </div>
             ) : (
               <div className="audio-visual-empty-state">
                 <p className="audio-visual-empty-title">
@@ -690,6 +752,12 @@ export function AudioVisualWidget({
               />
             ) : null}
 
+            {statusMessage ? (
+              <div className="audio-visual-stage-toast" role="status">
+                {statusMessage}
+              </div>
+            ) : null}
+
             <div className="audio-visual-stage-overlay">
               <div className="audio-visual-topbar audio-visual-topbar--overlay">
                 <div className="audio-visual-status-group">
@@ -715,6 +783,17 @@ export function AudioVisualWidget({
                   {busyState === 'uploading' ? (
                     <span className="audio-visual-chip">{widgetText.copy.uploading}</span>
                   ) : null}
+                  <div className={`audio-visual-meter-pill${isClipping ? ' is-clipping' : ''}`}>
+                    <span className="audio-visual-meter-pill__label">
+                      {widgetText.copy.audioLevel}
+                    </span>
+                    <span className="audio-visual-meter-pill__track">
+                      <span
+                        className="audio-visual-meter-pill__fill"
+                        style={{ width: audioMeterWidth }}
+                      ></span>
+                    </span>
+                  </div>
                 </div>
                 <div className="audio-visual-toggle-row">
                   <button
@@ -729,21 +808,6 @@ export function AudioVisualWidget({
                   >
                     {settings.cameraEnabled ? widgetText.copy.cameraOn : widgetText.copy.cameraOff}
                   </button>
-                  {settings.cameraEnabled ? (
-                    <button
-                      type="button"
-                      className="audio-visual-toggle"
-                      onClick={() =>
-                        setCameraFacingMode((currentValue) =>
-                          currentValue === 'user' ? 'environment' : 'user',
-                        )
-                      }
-                    >
-                      {cameraFacingMode === 'user'
-                        ? widgetText.copy.frontCamera
-                        : widgetText.copy.rearCamera}
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     className={`audio-visual-toggle${settings.microphoneEnabled ? ' is-active' : ''}`}
@@ -808,29 +872,6 @@ export function AudioVisualWidget({
                       : widgetText.copy.recordAudio}
                   </button>
                 </div>
-
-                <div className={`audio-visual-meter-card audio-visual-meter-card--overlay${isClipping ? ' is-clipping' : ''}`}>
-                  <div className="audio-visual-meter-head">
-                    <span>{widgetText.copy.audioLevel}</span>
-                    <span>
-                      {audioLevel == null
-                        ? widgetText.copy.microphoneDisabled
-                        : `${audioLevel.toFixed(1)} dB`}
-                    </span>
-                  </div>
-                  <div className="audio-visual-meter-track">
-                    <div
-                      className="audio-visual-meter-fill"
-                      style={{
-                        width: `${Math.max(8, Math.min(100, (((audioLevel ?? -60) + 60) / 60) * 100))}%`,
-                      }}
-                    ></div>
-                  </div>
-                  <p className="audio-visual-meter-meta">
-                    {widgetText.copy.peak}: {peakLevel == null ? '--' : `${peakLevel.toFixed(1)} dB`}
-                    {isClipping ? ` · ${widgetText.copy.clipping}` : ''}
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -854,53 +895,12 @@ export function AudioVisualWidget({
               {widgetText.copy.history}
             </button>
           </div>
-          <div className="audio-visual-toggle-row">
-            <button
-              type="button"
-              className={`audio-visual-toggle${settings.cameraEnabled ? ' is-active' : ''}`}
-              onClick={() =>
-                void persistSettings({
-                  ...settings,
-                  cameraEnabled: !settings.cameraEnabled,
-                })
-              }
-            >
-              {settings.cameraEnabled ? widgetText.copy.cameraOn : widgetText.copy.cameraOff}
-            </button>
-            {settings.cameraEnabled ? (
-              <button
-                type="button"
-                className="audio-visual-toggle"
-                onClick={() =>
-                  setCameraFacingMode((currentValue) =>
-                    currentValue === 'user' ? 'environment' : 'user',
-                  )
-                }
-              >
-                {cameraFacingMode === 'user'
-                  ? widgetText.copy.frontCamera
-                  : widgetText.copy.rearCamera}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={`audio-visual-toggle${settings.microphoneEnabled ? ' is-active' : ''}`}
-              onClick={() =>
-                void persistSettings({
-                  ...settings,
-                  microphoneEnabled: !settings.microphoneEnabled,
-                })
-              }
-            >
-              {settings.microphoneEnabled
-                ? widgetText.copy.microphoneOn
-                : widgetText.copy.microphoneOff}
-            </button>
-          </div>
         </div>
       ) : null}
 
-      {statusMessage ? <p className="audio-visual-status-message">{statusMessage}</p> : null}
+      {surfaceMode !== 'live' && statusMessage ? (
+        <p className="audio-visual-status-message">{statusMessage}</p>
+      ) : null}
       {lastActionError ? <p className="audio-visual-error">{lastActionError}</p> : null}
       {historyError ? <p className="audio-visual-error">{historyError}</p> : null}
 
@@ -963,10 +963,14 @@ export function AudioVisualWidget({
                       className="audio-visual-inline-button"
                       onClick={() => {
                         setSelectedRecordingId(recording.id)
-                        setPlaybackRecordingId(recording.id)
+                        setPlaybackRecordingId((currentValue) =>
+                          currentValue === recording.id ? null : recording.id,
+                        )
                       }}
                     >
-                      {widgetText.copy.playAction}
+                      {playbackRecordingId === recording.id
+                        ? widgetText.copy.pauseAction
+                        : widgetText.copy.playAction}
                     </button>
                     <a
                       className="audio-visual-inline-link"
@@ -1006,9 +1010,13 @@ export function AudioVisualWidget({
                 <button
                   type="button"
                   className="audio-visual-inline-button"
-                  onClick={() => setPlaybackRecordingId(selectedRecording.id)}
+                  onClick={() =>
+                    setPlaybackRecordingId((currentValue) =>
+                      currentValue === selectedRecording.id ? null : selectedRecording.id,
+                    )
+                  }
                 >
-                  {widgetText.copy.playAction}
+                  {playbackActionLabel}
                 </button>
               </div>
               <p className="audio-visual-history-meta">

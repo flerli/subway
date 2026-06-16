@@ -19,7 +19,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDirectory = join(__dirname, 'data')
-const audioVisualStorageDirectory = join(__dirname, 'storage', 'audio-visual')
+const audioVisualStorageDirectory = join(dataDirectory, 'audio-visual')
 const databasePath = join(dataDirectory, 'subway.sqlite')
 const localCalendarSeedEventsPath = join(dataDirectory, 'calendarSeedEvents.local.json')
 const HOST = process.env.HOST ?? '0.0.0.0'
