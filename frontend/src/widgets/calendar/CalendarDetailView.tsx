@@ -240,9 +240,8 @@ const buildWeekdayHeaders = (languageCode: SupportedLanguageCode) => {
 
 const buildMonthMatrix = (anchorDate: string, events: CalendarEventRecord[]) => {
   const anchor = parseIsoDate(anchorDate)
-  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-  const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
-  const gridStart = startOfWeek(monthStart)
+  const gridStart = startOfWeek(anchor)
+  const gridEnd = addDays(gridStart, 27)
   const monthEventMap = new Map<string, CalendarEventRecord[]>()
 
   for (const event of events) {
@@ -252,7 +251,6 @@ const buildMonthMatrix = (anchorDate: string, events: CalendarEventRecord[]) => 
   }
 
   const monthCells = []
-  const gridEnd = addDays(startOfWeek(monthEnd), 6)
   let cursorDate = new Date(gridStart)
 
   while (cursorDate <= gridEnd) {

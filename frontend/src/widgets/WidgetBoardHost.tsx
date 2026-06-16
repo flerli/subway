@@ -31,6 +31,8 @@ import { widgetGridPlacementZones } from './widgetPlacementZones'
 import type { TodoWidgetTranslation } from './todo/translations'
 import { UiBenchmarkPanel } from './ui-benchmark/UiBenchmarkPanel'
 import type { UiBenchmarkWidgetTranslation } from './ui-benchmark/translations'
+import { YoutubeCompactView } from './youtube/YoutubeCompactView'
+import type { YoutubeWidgetTranslation } from './youtube/translations'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { WeatherWidgetTranslation } from './weather/translations'
 
@@ -772,6 +774,25 @@ export function WidgetBoardHost({
           ),
         })
       }
+      case 'youtube': {
+        const youtubeWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as YoutubeWidgetTranslation
+
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: null,
+          mode,
+          children: (
+            <YoutubeCompactView
+              data={{}}
+              languageCode={languageCode}
+              widgetText={youtubeWidgetText}
+            />
+          ),
+        })
+      }
       default:
         return null
     }
@@ -796,7 +817,9 @@ export function WidgetBoardHost({
                 focusedEventId: focusedCalendarEventId,
                 focusedEventDate: focusedCalendarEventDate,
               }
-            : null
+            : widget.entity.id === 'youtube'
+              ? {}
+              : null
 
       if (!detailData) {
         return renderWidget(widget, 'expanded')
@@ -831,7 +854,9 @@ export function WidgetBoardHost({
                     calendarWidgetText?.detail.rangeEventCountMeta ?? '{count} events in range',
                     { count: visibleAgenda.length },
                   )
-                : null,
+                : widget.entity.id === 'youtube'
+                  ? null
+                  : null,
           mode: 'expanded',
           children: detailContent,
         })

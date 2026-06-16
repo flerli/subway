@@ -960,6 +960,15 @@ const seedWidgets = [
     userScope: { mode: 'all', memberIds: [] },
     placementZones: [{ zoneId: 'b2', order: 1 }],
   },
+  {
+    id: 'youtube',
+    title: 'YouTube',
+    subwayLetter: 'Y',
+    subwayColor: '#ff0000',
+    sourceLocation: 'youtube',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [{ zoneId: 'b3', order: 1 }],
+  },
 ]
 
 const allowedWidgetSourceLocations = new Set(

@@ -36,6 +36,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   'ui-benchmark': {
     widgetNumber: 5,
   },
+  youtube: {
+    widgetNumber: 6,
+  },
 }
 
 export const buildWidgetRegistry = (
