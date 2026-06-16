@@ -1,46 +1,107 @@
 import React from 'react'
+import type { YoutubeVideo } from './youtubeApi'
 import type { YoutubeWidgetTranslation } from './translations'
 
 interface YoutubeCompactViewProps {
-  data: unknown
-  languageCode: string
+  query: string
+  selectedVideoId: string | null
+  selectedVideoTitle: string
+  searchPanelOpen: boolean
+  isSearching: boolean
+  canSelectPrevious: boolean
+  canSelectNext: boolean
+  onQueryChange: (value: string) => void
+  onSearch: () => void
+  onToggleSearchPanel: () => void
+  onSelectPrevious: () => void
+  onSelectNext: () => void
+  onToggleFullscreen: () => void
+  searchResults: YoutubeVideo[]
   widgetText: YoutubeWidgetTranslation
 }
 
 export const YoutubeCompactView: React.FC<YoutubeCompactViewProps> = ({
-  data,
+  query,
+  selectedVideoId,
+  selectedVideoTitle,
+  searchPanelOpen,
+  isSearching,
+  canSelectPrevious,
+  canSelectNext,
+  onQueryChange,
+  onSearch,
+  onToggleSearchPanel,
+  onSelectPrevious,
+  onSelectNext,
+  onToggleFullscreen,
+  searchResults,
   widgetText,
 }) => {
-  const youtubeData = data as any
-  const hasVideo = youtubeData?.currentVideoId
-  const videoCount = youtubeData?.videos?.length ?? 0
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    onSearch()
+  }
 
   return (
     <div style={styles.container}>
-      {hasVideo ? (
-        <div style={styles.playerPreview}>
-          <img
-            src={`https://img.youtube.com/vi/${youtubeData.currentVideoId}/mqdefault.jpg`}
-            alt="Video thumbnail"
-            style={styles.thumbnail}
-          />
-          <div style={styles.playOverlay}>
-            <div style={styles.playButton}>▶</div>
-          </div>
-          <div style={styles.label}>{widgetText.copy.playingLabel}</div>
-        </div>
-      ) : (
-        <div style={styles.empty}>
-          <div style={styles.searchIcon}>🔍</div>
-          <div style={styles.emptyText}>{widgetText.copy.emptyTitle}</div>
-        </div>
-      )}
+      <form style={styles.searchRow} onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={query}
+          placeholder={widgetText.copy.searchPlaceholder}
+          onChange={(event) => onQueryChange(event.target.value)}
+          style={styles.searchInput}
+        />
+        <button type="submit" style={styles.actionButton} disabled={isSearching}>
+          {isSearching ? '...' : 'Go'}
+        </button>
+      </form>
 
-      {videoCount > 0 && (
-        <div style={styles.meta}>
-          <span style={styles.metaText}>{videoCount} videos found</span>
-        </div>
-      )}
+      <div style={styles.controlRow}>
+        <button
+          type="button"
+          style={styles.iconButton}
+          onClick={onToggleSearchPanel}
+          title={searchPanelOpen ? 'Hide search panel' : 'Show search panel'}
+        >
+          ⌕
+        </button>
+        <button
+          type="button"
+          style={styles.iconButton}
+          onClick={onSelectPrevious}
+          disabled={!canSelectPrevious}
+          title="Previous result"
+        >
+          ◀
+        </button>
+        <button
+          type="button"
+          style={styles.iconButton}
+          onClick={onSelectNext}
+          disabled={!canSelectNext}
+          title="Next result"
+        >
+          ▶
+        </button>
+        <button
+          type="button"
+          style={styles.iconButton}
+          onClick={onToggleFullscreen}
+          title="Toggle fullscreen"
+        >
+          ⛶
+        </button>
+      </div>
+
+      <div style={styles.meta}>
+        <span style={styles.metaText}>
+          {selectedVideoId
+            ? `${widgetText.copy.playingLabel}: ${selectedVideoTitle}`
+            : widgetText.copy.emptyTitle}
+        </span>
+        <span style={styles.metaCount}>{searchResults.length}</span>
+      </div>
     </div>
   )
 }
@@ -51,75 +112,64 @@ const styles = {
     flexDirection: 'column' as const,
     height: '100%',
     gap: '0.5rem',
+    justifyContent: 'space-between',
   },
-  playerPreview: {
-    position: 'relative' as const,
-    flex: 1,
-    borderRadius: '4px',
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover' as const,
-  },
-  playOverlay: {
-    position: 'absolute' as const,
-    inset: 0,
+  searchRow: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  playButton: {
-    fontSize: '32px',
-    color: '#ff0000',
-    fontWeight: 'bold' as const,
-  },
-  label: {
-    position: 'absolute' as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '4px 8px',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    color: '#fff',
-    fontSize: '11px',
-    fontWeight: 'bold' as const,
-    textTransform: 'uppercase' as const,
-  },
-  empty: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: '0.5rem',
-    padding: '1rem',
-    color: '#999',
-    textAlign: 'center' as const,
   },
-  searchIcon: {
-    fontSize: '24px',
-  },
-  emptyText: {
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(5, 11, 23, 0.8)',
+    color: '#e5e7eb',
+    padding: '0.4rem 0.5rem',
     fontSize: '12px',
-    fontWeight: '500' as const,
+  },
+  actionButton: {
+    border: '1px solid rgba(255, 255, 255, 0.22)',
+    borderRadius: '6px',
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    fontSize: '12px',
+    padding: '0.4rem 0.55rem',
+    cursor: 'pointer',
+  },
+  controlRow: {
+    display: 'flex',
+    gap: '0.35rem',
+  },
+  iconButton: {
+    flex: 1,
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(2, 6, 23, 0.92)',
+    color: '#e2e8f0',
+    fontSize: '12px',
+    padding: '0.35rem 0.2rem',
+    cursor: 'pointer',
   },
   meta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.5rem',
-    fontSize: '11px',
-    color: '#aaa',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: '4px',
+    justifyContent: 'space-between',
+    gap: '0.4rem',
+    padding: '0.4rem 0.5rem',
+    fontSize: '10px',
+    color: '#93c5fd',
+    backgroundColor: 'rgba(15, 23, 42, 0.66)',
+    borderRadius: '6px',
   },
   metaText: {
+    flex: 1,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis' as const,
+  },
+  metaCount: {
+    color: '#cbd5e1',
+    fontVariantNumeric: 'tabular-nums' as const,
   },
 }

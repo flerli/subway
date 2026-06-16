@@ -73,3 +73,30 @@ Issues:
 | 005_CALENDAR__ISSUE_DEFINITION__002_EVENT_CRUD_OPERATIONS.md | Add authenticated create, read, update, and delete workflows for one-off and recurring calendar events with normalized country input. | planned |
 | 005_CALENDAR__ISSUE_DEFINITION__003_MINI_WEEK_WIDGET.md | Implement the compact calendar widget that shows the next seven days of upcoming events and flags events outside the user's country. | planned |
 | 005_CALENDAR__ISSUE_DEFINITION__004_EXTENDED_WEEK_MONTH_YEAR_VIEWS_AND_CRUD.md | Build the extended calendar experience with week, month, and year views, event management actions, and foreign-event flag indicators. | planned |
+
+## 006 KEYBOARD
+
+Description:
+Introduce a global kiosk software keyboard that opens automatically whenever users focus supported text fields, renders as a semi-transparent lower-half board overlay, and adapts key layout to the currently selected system language without widget-specific implementations.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 006_KEYBOARD__ISSUE_DEFINITION__001_GLOBAL_SOFTWARE_KEYBOARD_FOUNDATION.md | Define the global software keyboard contract and automatic activation on focused text inputs and textareas across the board. | implemented |
+| 006_KEYBOARD__ISSUE_DEFINITION__002_LOWER_OVERLAY_AND_KIOSK_INTERACTION_MODEL.md | Implement the lower-half semi-transparent overlay presentation, close interactions, and kiosk touch behavior. | implemented |
+| 006_KEYBOARD__ISSUE_DEFINITION__003_LANGUAGE_DRIVEN_LAYOUTS_AND_SYSTEM_ROLLOUT.md | Bind keyboard layout to the existing global language setting and complete shared rollout across board text-entry flows. | planned |
+
+## 007 AUDIO VISUAL INPUT
+
+Description:
+Introduce a family-wide audio-visual widget for capturing, recording, and replaying audio and video content. The widget provides live camera feed with on/off control, snapshot and video/audio recording with manual start/stop triggers, real-time audio level visualization, and a shared family history with playback and deletion capabilities.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__001_WIDGET_FOUNDATION_AND_LIVE_CAMERA_STREAMING.md | Establish widget foundation with live camera feed, permission handling, camera on/off toggle, and four-language UI. | planned |
+| 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__002_RECORDING_STILL_VIDEO_AND_AUDIO_CAPTURE.md | Implement snapshot, video recording, audio recording, and real-time audio level visualization with manual start/stop controls. | planned |
+| 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__003_TEMPORARY_SERVER_STORAGE_AND_UPLOAD.md | Add multipart upload API, persistent recording metadata, backend storage with soft-delete lifecycle, and family-wide retrieval. | planned |
+| 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__004_HISTORY_AND_REPLAY.md | Build recording history list, media playback (video/audio/photo), deletion workflow, and four-language history UI. | planned |

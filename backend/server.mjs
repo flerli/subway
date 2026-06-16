@@ -6,13 +6,20 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const dataDirectory = join(__dirname, 'data')
+const audioVisualStorageDirectory = join(__dirname, 'storage', 'audio-visual')
 const databasePath = join(dataDirectory, 'subway.sqlite')
 const localCalendarSeedEventsPath = join(dataDirectory, 'calendarSeedEvents.local.json')
 const HOST = process.env.HOST ?? '0.0.0.0'
@@ -23,6 +30,7 @@ const WEATHER_LOCATION = process.env.WEATHER_LOCATION ?? 'Berlin'
 const WEATHER_TIMEZONE = process.env.WEATHER_TIMEZONE ?? 'auto'
 const WEATHER_FORECAST_DAYS = 8
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000
+const YOUTUBE_RESULTS_LIMIT = 80
 const INITIAL_USER_ID = process.env.INITIAL_USER_ID ?? 'user-flerlage'
 const INITIAL_USER_USERNAME = process.env.INITIAL_USER_USERNAME ?? 'flerlage'
 const INITIAL_USER_PASSWORD =
@@ -34,6 +42,15 @@ const SESSION_COOKIE_SECURE = process.env.SESSION_COOKIE_SECURE === 'true'
 const SUPPORTED_LANGUAGE_CODES = ['en', 'de', 'fr', 'es']
 const DEFAULT_LANGUAGE_CODE = 'en'
 const DEFAULT_COUNTRY_CODE = 'DE'
+const AUDIO_VISUAL_PERMISSION_STATES = new Set([
+  'idle',
+  'requesting',
+  'granted',
+  'denied',
+  'unsupported',
+  'error',
+])
+const AUDIO_VISUAL_RECORDING_MODES = new Set(['video', 'audio'])
 const LEGACY_HOUSEHOLD_MEMBER_ID = '*'
 const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -48,6 +65,7 @@ const supportedRecurrenceFrequencySet = new Set([
 ])
 
 mkdirSync(dataDirectory, { recursive: true })
+mkdirSync(audioVisualStorageDirectory, { recursive: true })
 
 const db = new DatabaseSync(databasePath)
 
@@ -715,8 +733,31 @@ const createAppPreferencesTableSql = `
     owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
     language_code TEXT NOT NULL,
     country_code TEXT NOT NULL,
+    audio_visual_camera_enabled INTEGER NOT NULL DEFAULT 1,
+    audio_visual_microphone_enabled INTEGER NOT NULL DEFAULT 1,
+    audio_visual_permission_state TEXT NOT NULL DEFAULT 'idle',
+    audio_visual_last_recording_mode TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  )
+`
+
+const createAudioVisualRecordingsTableSql = `
+  CREATE TABLE IF NOT EXISTS audio_visual_recordings (
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    id TEXT NOT NULL,
+    recording_type TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    file_extension TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    duration_seconds REAL,
+    storage_path TEXT NOT NULL,
+    uploader_username TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    PRIMARY KEY (owner_user_id, id)
   )
 `
 
@@ -792,6 +833,11 @@ migrateOwnedTable({
 })
 
 db.exec(createAppPreferencesTableSql)
+db.exec(createAudioVisualRecordingsTableSql)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
+  ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
+`)
 
 const migrateCalendarEventsFoundation = () => {
   if (!hasColumn('calendar_events', 'event_date')) {
@@ -889,6 +935,28 @@ const migrateAppPreferencesFoundation = () => {
     db.exec('ALTER TABLE app_preferences ADD COLUMN country_code TEXT')
   }
 
+  if (!hasColumn('app_preferences', 'audio_visual_camera_enabled')) {
+    db.exec(
+      'ALTER TABLE app_preferences ADD COLUMN audio_visual_camera_enabled INTEGER NOT NULL DEFAULT 1',
+    )
+  }
+
+  if (!hasColumn('app_preferences', 'audio_visual_microphone_enabled')) {
+    db.exec(
+      'ALTER TABLE app_preferences ADD COLUMN audio_visual_microphone_enabled INTEGER NOT NULL DEFAULT 1',
+    )
+  }
+
+  if (!hasColumn('app_preferences', 'audio_visual_permission_state')) {
+    db.exec(
+      "ALTER TABLE app_preferences ADD COLUMN audio_visual_permission_state TEXT NOT NULL DEFAULT 'idle'",
+    )
+  }
+
+  if (!hasColumn('app_preferences', 'audio_visual_last_recording_mode')) {
+    db.exec('ALTER TABLE app_preferences ADD COLUMN audio_visual_last_recording_mode TEXT')
+  }
+
   db
     .prepare(`
       UPDATE app_preferences
@@ -896,6 +964,25 @@ const migrateAppPreferencesFoundation = () => {
       WHERE country_code IS NULL OR TRIM(country_code) = ''
     `)
     .run(DEFAULT_COUNTRY_CODE)
+
+  db
+    .prepare(`
+      UPDATE app_preferences
+      SET audio_visual_permission_state = 'idle'
+      WHERE audio_visual_permission_state IS NULL
+        OR TRIM(audio_visual_permission_state) = ''
+        OR audio_visual_permission_state NOT IN ('idle', 'requesting', 'granted', 'denied', 'unsupported', 'error')
+    `)
+    .run()
+
+  db
+    .prepare(`
+      UPDATE app_preferences
+      SET audio_visual_last_recording_mode = NULL
+      WHERE audio_visual_last_recording_mode IS NOT NULL
+        AND audio_visual_last_recording_mode NOT IN ('video', 'audio')
+    `)
+    .run()
 }
 
 migrateCalendarEventsFoundation()
@@ -968,6 +1055,15 @@ const seedWidgets = [
     sourceLocation: 'youtube',
     userScope: { mode: 'all', memberIds: [] },
     placementZones: [{ zoneId: 'b3', order: 1 }],
+  },
+  {
+    id: 'audio-visual',
+    title: 'Audio Visual',
+    subwayLetter: 'V',
+    subwayColor: '#8b5cf6',
+    sourceLocation: 'audio-visual',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [{ zoneId: 'a3', order: 1 }],
   },
 ]
 
@@ -1288,7 +1384,14 @@ const upsertWidgetSettings = (ownerUserId, widgetId, settingsJson, timestamp) =>
 const selectAppPreferences = (ownerUserId) => {
   const row = db
     .prepare(`
-      SELECT language_code, country_code, updated_at
+      SELECT
+        language_code,
+        country_code,
+        audio_visual_camera_enabled,
+        audio_visual_microphone_enabled,
+        audio_visual_permission_state,
+        audio_visual_last_recording_mode,
+        updated_at
       FROM app_preferences
       WHERE owner_user_id = ?
     `)
@@ -1297,27 +1400,161 @@ const selectAppPreferences = (ownerUserId) => {
   return {
     languageCode: normalizeLanguageCode(row?.language_code),
     countryCode: normalizeCountryCode(row?.country_code),
+    audioVisualCameraEnabled: row?.audio_visual_camera_enabled !== 0,
+    audioVisualMicrophoneEnabled: row?.audio_visual_microphone_enabled !== 0,
+    audioVisualPermissionState: AUDIO_VISUAL_PERMISSION_STATES.has(
+      row?.audio_visual_permission_state,
+    )
+      ? row.audio_visual_permission_state
+      : 'idle',
+    audioVisualLastRecordingMode: AUDIO_VISUAL_RECORDING_MODES.has(
+      row?.audio_visual_last_recording_mode,
+    )
+      ? row.audio_visual_last_recording_mode
+      : null,
     updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
   }
 }
 
-const upsertAppPreferences = (ownerUserId, languageCode, countryCode, timestamp) =>
+const insertAudioVisualRecording = (ownerUserId, recording) =>
+  db
+    .prepare(`
+      INSERT INTO audio_visual_recordings (
+        owner_user_id,
+        id,
+        recording_type,
+        mime_type,
+        file_extension,
+        file_size,
+        duration_seconds,
+        storage_path,
+        uploader_username,
+        captured_at,
+        created_at,
+        updated_at,
+        deleted_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      ownerUserId,
+      recording.id,
+      recording.recordingType,
+      recording.mimeType,
+      recording.fileExtension,
+      recording.fileSize,
+      recording.durationSeconds,
+      recording.storagePath,
+      recording.uploaderUsername,
+      recording.capturedAt,
+      recording.createdAt,
+      recording.updatedAt,
+      null,
+    )
+
+const selectAudioVisualRecordingById = (ownerUserId, recordingId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        recording_type,
+        mime_type,
+        file_extension,
+        file_size,
+        duration_seconds,
+        storage_path,
+        uploader_username,
+        captured_at,
+        created_at,
+        updated_at,
+        deleted_at
+      FROM audio_visual_recordings
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .get(ownerUserId, recordingId)
+
+const selectActiveAudioVisualRecordings = (ownerUserId, requestedType = 'all') => {
+  const normalizedType =
+    requestedType === 'photo' || requestedType === 'video' || requestedType === 'audio'
+      ? requestedType
+      : 'all'
+
+  return db
+    .prepare(`
+      SELECT
+        id,
+        recording_type,
+        mime_type,
+        file_extension,
+        file_size,
+        duration_seconds,
+        storage_path,
+        uploader_username,
+        captured_at,
+        created_at,
+        updated_at
+      FROM audio_visual_recordings
+      WHERE owner_user_id = ?
+        AND deleted_at IS NULL
+        AND (? = 'all' OR recording_type = ?)
+      ORDER BY captured_at DESC, created_at DESC, id DESC
+    `)
+    .all(ownerUserId, normalizedType, normalizedType)
+}
+
+const softDeleteAudioVisualRecording = (ownerUserId, recordingId, deletedAt) =>
+  db
+    .prepare(`
+      UPDATE audio_visual_recordings
+      SET deleted_at = ?, updated_at = ?
+      WHERE owner_user_id = ? AND id = ? AND deleted_at IS NULL
+    `)
+    .run(deletedAt, deletedAt, ownerUserId, recordingId)
+
+const upsertAppPreferences = (
+  ownerUserId,
+  languageCode,
+  countryCode,
+  audioVisualCameraEnabled,
+  audioVisualMicrophoneEnabled,
+  audioVisualPermissionState,
+  audioVisualLastRecordingMode,
+  timestamp,
+) =>
   db
     .prepare(`
       INSERT INTO app_preferences (
         owner_user_id,
         language_code,
         country_code,
+        audio_visual_camera_enabled,
+        audio_visual_microphone_enabled,
+        audio_visual_permission_state,
+        audio_visual_last_recording_mode,
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(owner_user_id) DO UPDATE SET
         language_code = excluded.language_code,
         country_code = excluded.country_code,
+        audio_visual_camera_enabled = excluded.audio_visual_camera_enabled,
+        audio_visual_microphone_enabled = excluded.audio_visual_microphone_enabled,
+        audio_visual_permission_state = excluded.audio_visual_permission_state,
+        audio_visual_last_recording_mode = excluded.audio_visual_last_recording_mode,
         updated_at = excluded.updated_at
     `)
-    .run(ownerUserId, languageCode, countryCode, timestamp, timestamp)
+    .run(
+      ownerUserId,
+      languageCode,
+      countryCode,
+      audioVisualCameraEnabled ? 1 : 0,
+      audioVisualMicrophoneEnabled ? 1 : 0,
+      audioVisualPermissionState,
+      audioVisualLastRecordingMode,
+      timestamp,
+      timestamp,
+    )
 
 const deleteWidgetById = (ownerUserId, widgetId) =>
   db.prepare('DELETE FROM widgets WHERE owner_user_id = ? AND id = ?').run(ownerUserId, widgetId)
@@ -1766,6 +2003,148 @@ const getWeatherPayload = async (latitude, longitude, locationLabel) => {
   }
 }
 
+const buildYoutubeSearchUrl = (query) => {
+  const url = new URL('https://www.youtube.com/results')
+  url.searchParams.set('search_query', query)
+  url.searchParams.set('hl', 'en')
+
+  return url
+}
+
+const readYoutubeInitialData = (html) => {
+  const patterns = [
+    /var ytInitialData = (\{[\s\S]*?\});<\/script>/,
+    /window\["ytInitialData"\] = (\{[\s\S]*?\});/,
+  ]
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(html)
+
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1])
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return null
+}
+
+const readYoutubeRunsText = (value) => {
+  if (typeof value?.simpleText === 'string') {
+    return value.simpleText.trim()
+  }
+
+  if (Array.isArray(value?.runs)) {
+    return value.runs
+      .map((run) => (typeof run?.text === 'string' ? run.text : ''))
+      .join('')
+      .trim()
+  }
+
+  return ''
+}
+
+const extractYoutubeVideoRenderers = (root) => {
+  const videoRenderers = []
+  const stack = [root]
+
+  while (stack.length > 0) {
+    const currentValue = stack.pop()
+
+    if (!currentValue || typeof currentValue !== 'object') {
+      continue
+    }
+
+    if (Array.isArray(currentValue)) {
+      for (const item of currentValue) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    if (currentValue.videoRenderer) {
+      videoRenderers.push(currentValue.videoRenderer)
+    }
+
+    for (const nestedValue of Object.values(currentValue)) {
+      stack.push(nestedValue)
+    }
+  }
+
+  return videoRenderers
+}
+
+const mapYoutubeSearchResults = (videoRenderers) => {
+  const usedIds = new Set()
+  const results = []
+
+  for (const renderer of videoRenderers) {
+    const id = typeof renderer?.videoId === 'string' ? renderer.videoId : ''
+
+    if (!id || usedIds.has(id)) {
+      continue
+    }
+
+    const title = readYoutubeRunsText(renderer?.title)
+    const channel = readYoutubeRunsText(renderer?.ownerText)
+    const duration = readYoutubeRunsText(renderer?.lengthText)
+    const thumbnails = Array.isArray(renderer?.thumbnail?.thumbnails)
+      ? renderer.thumbnail.thumbnails
+      : []
+    const thumbnailUrl =
+      thumbnails.length > 0 && typeof thumbnails[thumbnails.length - 1]?.url === 'string'
+        ? thumbnails[thumbnails.length - 1].url
+        : `https://img.youtube.com/vi/${id}/mqdefault.jpg`
+
+    if (!title) {
+      continue
+    }
+
+    usedIds.add(id)
+    results.push({
+      id,
+      title,
+      channel: channel || 'Unknown channel',
+      duration: duration || undefined,
+      thumbnail: thumbnailUrl,
+    })
+
+    if (results.length >= YOUTUBE_RESULTS_LIMIT) {
+      break
+    }
+  }
+
+  return results
+}
+
+const searchYoutubeVideos = async (query) => {
+  const response = await fetch(buildYoutubeSearchUrl(query), {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      Accept: 'text/html',
+      'Accept-Language': 'en-US,en;q=0.8',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`YouTube search request failed with ${response.status}`)
+  }
+
+  const html = await response.text()
+  const initialData = readYoutubeInitialData(html)
+
+  if (!initialData) {
+    return []
+  }
+
+  const videoRenderers = extractYoutubeVideoRenderers(initialData)
+  return mapYoutubeSearchResults(videoRenderers)
+}
+
 const selectAllTodoItems = (ownerUserId) =>
   db
     .prepare(`
@@ -2099,6 +2478,16 @@ const sendJson = (response, statusCode, payload, extraHeaders = {}) => {
   response.end(JSON.stringify(payload))
 }
 
+const sendBinary = (response, statusCode, body, extraHeaders = {}) => {
+  response.writeHead(statusCode, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    ...extraHeaders,
+  })
+  response.end(body)
+}
+
 const sanitizeFirstName = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 24) : ''
 
@@ -2109,6 +2498,87 @@ const normalizeColor = (value) =>
 
 const sanitizeUsername = (value) =>
   typeof value === 'string' ? value.trim().slice(0, 64) : ''
+
+const audioVisualMimeDefinitions = [
+  { prefix: 'image/jpeg', fileExtension: 'jpg', recordingType: 'photo' },
+  { prefix: 'video/webm', fileExtension: 'webm', recordingType: 'video' },
+  { prefix: 'video/mp4', fileExtension: 'mp4', recordingType: 'video' },
+  { prefix: 'audio/webm', fileExtension: 'webm', recordingType: 'audio' },
+  { prefix: 'audio/ogg', fileExtension: 'ogg', recordingType: 'audio' },
+  { prefix: 'audio/wav', fileExtension: 'wav', recordingType: 'audio' },
+  { prefix: 'audio/mpeg', fileExtension: 'mp3', recordingType: 'audio' },
+  { prefix: 'audio/mp3', fileExtension: 'mp3', recordingType: 'audio' },
+]
+
+const normalizeAudioVisualRecordingType = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : ''
+
+  return normalizedValue === 'photo' || normalizedValue === 'video' || normalizedValue === 'audio'
+    ? normalizedValue
+    : null
+}
+
+const resolveAudioVisualMimeDefinition = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : ''
+
+  return (
+    audioVisualMimeDefinitions.find((definition) =>
+      normalizedValue.startsWith(definition.prefix),
+    ) ?? null
+  )
+}
+
+const normalizeAudioVisualDurationSeconds = (value) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null
+  }
+
+  return Math.round(value * 100) / 100
+}
+
+const normalizeIsoTimestampOrNow = (value) => {
+  if (typeof value !== 'string') {
+    return new Date().toISOString()
+  }
+
+  const timestamp = new Date(value)
+
+  return Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString()
+}
+
+const buildAudioVisualStoragePath = (recordingId, fileExtension) =>
+  join(audioVisualStorageDirectory, `${recordingId}.${fileExtension}`)
+
+const buildAudioVisualRecordingPayload = (recording) => ({
+  id: recording.id,
+  recordingType: recording.recording_type,
+  mimeType: recording.mime_type,
+  fileExtension: recording.file_extension,
+  fileSize: recording.file_size,
+  durationSeconds:
+    typeof recording.duration_seconds === 'number' ? recording.duration_seconds : null,
+  uploadedBy: recording.uploader_username,
+  capturedAt: recording.captured_at,
+  uploadedAt: recording.created_at,
+  updatedAt: recording.updated_at,
+  contentUrl: `/api/audio-visual/recordings/${recording.id}/content`,
+  downloadUrl: `/api/audio-visual/recordings/${recording.id}/download`,
+})
+
+const parseAudioVisualRecordingPath = (pathname) => {
+  const match = /^\/api\/audio-visual\/recordings\/([^/]+)\/(content|download)$/.exec(
+    pathname,
+  )
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    recordingId: decodeURIComponent(match[1]),
+    action: match[2],
+  }
+}
 
 const parseCookies = (cookieHeader) => {
   if (typeof cookieHeader !== 'string' || cookieHeader.trim().length === 0) {
@@ -2378,6 +2848,54 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/audio-visual/recordings') {
+    const requestedType = requestUrl.searchParams.get('type') ?? 'all'
+
+    sendJson(response, 200, {
+      recordings: selectActiveAudioVisualRecordings(ownerUserId, requestedType).map(
+        buildAudioVisualRecordingPayload,
+      ),
+    })
+    return
+  }
+
+  const audioVisualRecordingPath = parseAudioVisualRecordingPath(requestUrl.pathname)
+
+  if (request.method === 'GET' && audioVisualRecordingPath) {
+    const recording = selectAudioVisualRecordingById(
+      ownerUserId,
+      audioVisualRecordingPath.recordingId,
+    )
+
+    if (!recording || recording.deleted_at) {
+      sendJson(response, 404, { error: 'Recording not found.' })
+      return
+    }
+
+    if (!existsSync(recording.storage_path)) {
+      sendJson(response, 404, { error: 'Recording file not found.' })
+      return
+    }
+
+    const fileBuffer = readFileSync(recording.storage_path)
+    const baseHeaders = {
+      'Content-Type': recording.mime_type,
+      'Content-Length': String(fileBuffer.length),
+      'Cache-Control': 'no-store',
+    }
+
+    if (audioVisualRecordingPath.action === 'download') {
+      sendBinary(response, 200, fileBuffer, {
+        ...baseHeaders,
+        'Content-Disposition': `attachment; filename="${recording.recording_type}_${recording.id}.${recording.file_extension}"`,
+      })
+      return
+    }
+
+    sendBinary(response, 200, fileBuffer, baseHeaders)
+    return
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/calendar-events') {
     const rangeStart = requestUrl.searchParams.get('rangeStart')
     const rangeEnd = requestUrl.searchParams.get('rangeEnd')
@@ -2438,6 +2956,24 @@ const server = createServer(async (request, response) => {
     }
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/youtube/search') {
+    const query = (requestUrl.searchParams.get('query') ?? '').trim()
+
+    if (!query) {
+      sendJson(response, 400, { error: 'query is required.' })
+      return
+    }
+
+    try {
+      const videos = await searchYoutubeVideos(query)
+      sendJson(response, 200, { query, videos })
+      return
+    } catch {
+      sendJson(response, 502, { error: 'Failed to fetch YouTube search results.' })
+      return
+    }
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/todo-items') {
     sendJson(response, 200, { todoItems: selectAllTodoItems(ownerUserId) })
     return
@@ -2465,6 +3001,81 @@ const server = createServer(async (request, response) => {
       return
     } catch {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/audio-visual/recordings') {
+    try {
+      const body = await readRequestBody(request)
+      const recordingType = normalizeAudioVisualRecordingType(body.recordingType)
+      const mimeDefinition = resolveAudioVisualMimeDefinition(body.mimeType)
+      const dataBase64 = typeof body.dataBase64 === 'string' ? body.dataBase64.trim() : ''
+
+      if (!recordingType) {
+        sendJson(response, 400, { error: 'recordingType must be photo, video, or audio.' })
+        return
+      }
+
+      if (!mimeDefinition) {
+        sendJson(response, 400, { error: 'mimeType is not supported.' })
+        return
+      }
+
+      if (mimeDefinition.recordingType !== recordingType) {
+        sendJson(response, 400, { error: 'mimeType does not match recordingType.' })
+        return
+      }
+
+      if (!dataBase64) {
+        sendJson(response, 400, { error: 'dataBase64 is required.' })
+        return
+      }
+
+      let fileBuffer
+
+      try {
+        fileBuffer = Buffer.from(dataBase64, 'base64')
+      } catch {
+        sendJson(response, 400, { error: 'dataBase64 is invalid.' })
+        return
+      }
+
+      if (!fileBuffer || fileBuffer.length === 0) {
+        sendJson(response, 400, { error: 'Recording payload is empty.' })
+        return
+      }
+
+      const recordingId = `recording-${randomUUID()}`
+      const timestamp = new Date().toISOString()
+      const capturedAt = normalizeIsoTimestampOrNow(body.capturedAt)
+      const storagePath = buildAudioVisualStoragePath(recordingId, mimeDefinition.fileExtension)
+
+      writeFileSync(storagePath, fileBuffer)
+
+      insertAudioVisualRecording(ownerUserId, {
+        id: recordingId,
+        recordingType,
+        mimeType: mimeDefinition.prefix,
+        fileExtension: mimeDefinition.fileExtension,
+        fileSize: fileBuffer.length,
+        durationSeconds: normalizeAudioVisualDurationSeconds(body.durationSeconds),
+        storagePath,
+        uploaderUsername: authContext.session?.username ?? INITIAL_USER_USERNAME,
+        capturedAt,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+
+      const persistedRecording = selectAudioVisualRecordingById(ownerUserId, recordingId)
+
+      sendJson(response, 201, {
+        recording: buildAudioVisualRecordingPayload(persistedRecording),
+      })
+      return
+    } catch (error) {
+      console.error('Failed to store audio-visual recording.', error)
+      sendJson(response, 400, { error: 'Invalid recording upload payload.' })
       return
     }
   }
@@ -2785,10 +3396,34 @@ const server = createServer(async (request, response) => {
       const payload = body && typeof body === 'object' && !Array.isArray(body) ? body : {}
       const hasLanguageCode = Object.prototype.hasOwnProperty.call(payload, 'languageCode')
       const hasCountryCode = Object.prototype.hasOwnProperty.call(payload, 'countryCode')
+      const hasAudioVisualCameraEnabled = Object.prototype.hasOwnProperty.call(
+        payload,
+        'audioVisualCameraEnabled',
+      )
+      const hasAudioVisualMicrophoneEnabled = Object.prototype.hasOwnProperty.call(
+        payload,
+        'audioVisualMicrophoneEnabled',
+      )
+      const hasAudioVisualPermissionState = Object.prototype.hasOwnProperty.call(
+        payload,
+        'audioVisualPermissionState',
+      )
+      const hasAudioVisualLastRecordingMode = Object.prototype.hasOwnProperty.call(
+        payload,
+        'audioVisualLastRecordingMode',
+      )
 
-      if (!hasLanguageCode && !hasCountryCode) {
+      if (
+        !hasLanguageCode &&
+        !hasCountryCode &&
+        !hasAudioVisualCameraEnabled &&
+        !hasAudioVisualMicrophoneEnabled &&
+        !hasAudioVisualPermissionState &&
+        !hasAudioVisualLastRecordingMode
+      ) {
         sendJson(response, 400, {
-          error: 'At least one of languageCode or countryCode is required.',
+          error:
+            'At least one app preference field must be provided.',
         })
         return
       }
@@ -2796,6 +3431,10 @@ const server = createServer(async (request, response) => {
       const currentPreferences = selectAppPreferences(ownerUserId)
       let languageCode = currentPreferences.languageCode
       let countryCode = currentPreferences.countryCode
+      let audioVisualCameraEnabled = currentPreferences.audioVisualCameraEnabled
+      let audioVisualMicrophoneEnabled = currentPreferences.audioVisualMicrophoneEnabled
+      let audioVisualPermissionState = currentPreferences.audioVisualPermissionState
+      let audioVisualLastRecordingMode = currentPreferences.audioVisualLastRecordingMode
 
       if (hasLanguageCode && !isSupportedLanguageCode(payload.languageCode)) {
         sendJson(response, 400, { error: 'languageCode must be one of en, de, fr, es.' })
@@ -2809,6 +3448,48 @@ const server = createServer(async (request, response) => {
         return
       }
 
+      if (
+        hasAudioVisualCameraEnabled &&
+        typeof payload.audioVisualCameraEnabled !== 'boolean'
+      ) {
+        sendJson(response, 400, {
+          error: 'audioVisualCameraEnabled must be boolean.',
+        })
+        return
+      }
+
+      if (
+        hasAudioVisualMicrophoneEnabled &&
+        typeof payload.audioVisualMicrophoneEnabled !== 'boolean'
+      ) {
+        sendJson(response, 400, {
+          error: 'audioVisualMicrophoneEnabled must be boolean.',
+        })
+        return
+      }
+
+      if (
+        hasAudioVisualPermissionState &&
+        !AUDIO_VISUAL_PERMISSION_STATES.has(payload.audioVisualPermissionState)
+      ) {
+        sendJson(response, 400, {
+          error:
+            'audioVisualPermissionState must be one of idle, requesting, granted, denied, unsupported, error.',
+        })
+        return
+      }
+
+      if (
+        hasAudioVisualLastRecordingMode &&
+        payload.audioVisualLastRecordingMode !== null &&
+        !AUDIO_VISUAL_RECORDING_MODES.has(payload.audioVisualLastRecordingMode)
+      ) {
+        sendJson(response, 400, {
+          error: 'audioVisualLastRecordingMode must be video, audio, or null.',
+        })
+        return
+      }
+
       if (hasLanguageCode) {
         languageCode = normalizeLanguageCode(payload.languageCode)
       }
@@ -2817,14 +3498,43 @@ const server = createServer(async (request, response) => {
         countryCode = normalizeCountryCode(payload.countryCode)
       }
 
+      if (hasAudioVisualCameraEnabled) {
+        audioVisualCameraEnabled = payload.audioVisualCameraEnabled
+      }
+
+      if (hasAudioVisualMicrophoneEnabled) {
+        audioVisualMicrophoneEnabled = payload.audioVisualMicrophoneEnabled
+      }
+
+      if (hasAudioVisualPermissionState) {
+        audioVisualPermissionState = payload.audioVisualPermissionState
+      }
+
+      if (hasAudioVisualLastRecordingMode) {
+        audioVisualLastRecordingMode = payload.audioVisualLastRecordingMode
+      }
+
       const timestamp = new Date().toISOString()
 
-      upsertAppPreferences(ownerUserId, languageCode, countryCode, timestamp)
+      upsertAppPreferences(
+        ownerUserId,
+        languageCode,
+        countryCode,
+        audioVisualCameraEnabled,
+        audioVisualMicrophoneEnabled,
+        audioVisualPermissionState,
+        audioVisualLastRecordingMode,
+        timestamp,
+      )
 
       sendJson(response, 200, {
         appPreferences: {
           languageCode,
           countryCode,
+          audioVisualCameraEnabled,
+          audioVisualMicrophoneEnabled,
+          audioVisualPermissionState,
+          audioVisualLastRecordingMode,
           updatedAt: timestamp,
         },
       })
@@ -2834,6 +3544,37 @@ const server = createServer(async (request, response) => {
       sendJson(response, 500, { error: 'Failed to update app preferences.' })
       return
     }
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    requestUrl.pathname.startsWith('/api/audio-visual/recordings/')
+  ) {
+    const recordingId = requestUrl.pathname.replace('/api/audio-visual/recordings/', '')
+
+    if (!recordingId) {
+      sendJson(response, 400, { error: 'Missing recording id.' })
+      return
+    }
+
+    const currentRecording = selectAudioVisualRecordingById(ownerUserId, recordingId)
+
+    if (!currentRecording || currentRecording.deleted_at) {
+      sendJson(response, 404, { error: 'Recording not found.' })
+      return
+    }
+
+    const deletedAt = new Date().toISOString()
+    softDeleteAudioVisualRecording(ownerUserId, recordingId, deletedAt)
+
+    sendJson(response, 200, {
+      recording: {
+        id: recordingId,
+        deletedAt,
+      },
+      deleted: true,
+    })
+    return
   }
 
   if (

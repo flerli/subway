@@ -11,7 +11,7 @@ services:
       WEATHER_LOCATION: ${WEATHER_LOCATION:-Berlin}
       WEATHER_TIMEZONE: ${WEATHER_TIMEZONE:-auto}
     volumes:
-      - ./backend/data:/app/data
+      - subway-data:/app/data
     restart: unless-stopped
     healthcheck:
       test:
@@ -38,3 +38,7 @@ services:
     ports:
       - ${APP_PORT:-8081}:80
     restart: unless-stopped
+
+volumes:
+  subway-data:
+    driver: local

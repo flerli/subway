@@ -1,10 +1,18 @@
-import { useEffect, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { AppTextBundle } from '../i18n/appText'
 import {
   formatLocalizedText,
   type SupportedLanguageCode,
 } from '../i18n/localization'
 import { buildBadgeStyle } from './widgetAppearance'
+import { AudioVisualWidget } from './audio-visual/AudioVisualWidget'
+import type { AudioVisualWidgetTranslation } from './audio-visual/translations'
 import type { ArrivalBoardWidgetTranslation } from './arrival-board/translations'
 import type { CalendarWidgetTranslation } from './calendar/translations'
 import type {
@@ -33,6 +41,7 @@ import { UiBenchmarkPanel } from './ui-benchmark/UiBenchmarkPanel'
 import type { UiBenchmarkWidgetTranslation } from './ui-benchmark/translations'
 import { YoutubeCompactView } from './youtube/YoutubeCompactView'
 import type { YoutubeWidgetTranslation } from './youtube/translations'
+import { searchYoutubeVideos, type YoutubeVideo } from './youtube/youtubeApi'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { WeatherWidgetTranslation } from './weather/translations'
 
@@ -57,6 +66,7 @@ interface WidgetBoardHostProps {
   familyMembers: FamilyMember[]
   homeCountryCode: string
   calendarSettings: WidgetSettingsValues
+  widgetSettingsMap: Record<string, WidgetSettingsValues>
   weatherData: WeatherWidgetData
   commuteNote: string
   focusedCalendarEventId: string | null
@@ -65,6 +75,10 @@ interface WidgetBoardHostProps {
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
   onCalendarDataChanged: () => void
   onOpenCalendarEvent: (selection: { eventId: string; eventDate: string }) => void
+  onSaveWidgetSettings: (
+    widgetId: string,
+    settings: WidgetSettingsValues,
+  ) => Promise<void>
 }
 
 interface WidgetZoneEntry {
@@ -271,20 +285,21 @@ export function WidgetBoardHost({
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
-  activeViewMode,
+  activeViewMode: _activeViewMode,
   expandedWidgetId,
-  filterOptions,
-  onFilterChange,
-  onViewModeChange,
+  filterOptions: _filterOptions,
+  onFilterChange: _onFilterChange,
+  onViewModeChange: _onViewModeChange,
   onExpandedWidgetChange,
-  onLogout,
-  authPending,
+  onLogout: _onLogout,
+  authPending: _authPending,
   visibleArrivals,
   visibleAgenda,
   visibleTodos,
   familyMembers,
   homeCountryCode,
   calendarSettings,
+  widgetSettingsMap,
   weatherData,
   commuteNote,
   focusedCalendarEventId,
@@ -293,7 +308,100 @@ export function WidgetBoardHost({
   onToggleTodoDone,
   onCalendarDataChanged,
   onOpenCalendarEvent,
+  onSaveWidgetSettings,
 }: WidgetBoardHostProps) {
+  const [youtubeQuery, setYoutubeQuery] = useState('')
+  const [youtubeResults, setYoutubeResults] = useState<YoutubeVideo[]>([])
+  const [youtubeSelectedVideoId, setYoutubeSelectedVideoId] = useState<string | null>(null)
+  const [youtubeSearchPanelOpen, setYoutubeSearchPanelOpen] = useState(false)
+  const [youtubeIsSearching, setYoutubeIsSearching] = useState(false)
+  const [youtubeIsFullscreen, setYoutubeIsFullscreen] = useState(false)
+
+  const selectedYoutubeIndex = useMemo(
+    () =>
+      youtubeSelectedVideoId
+        ? youtubeResults.findIndex((video) => video.id === youtubeSelectedVideoId)
+        : -1,
+    [youtubeResults, youtubeSelectedVideoId],
+  )
+
+  const handleYoutubeSearch = useCallback(async () => {
+    const normalizedQuery = youtubeQuery.trim()
+
+    if (!normalizedQuery) {
+      setYoutubeResults([])
+      setYoutubeSelectedVideoId(null)
+      return
+    }
+
+    setYoutubeIsSearching(true)
+    try {
+      const result = await searchYoutubeVideos(normalizedQuery)
+      setYoutubeResults(result.videos)
+
+      if (result.videos.length > 0) {
+        setYoutubeSelectedVideoId((currentSelectedVideoId) => {
+          const currentStillExists = result.videos.some(
+            (video) => video.id === currentSelectedVideoId,
+          )
+          return currentStillExists ? currentSelectedVideoId : result.videos[0]?.id ?? null
+        })
+      } else {
+        setYoutubeSelectedVideoId(null)
+      }
+      setYoutubeSearchPanelOpen(true)
+    } catch {
+      setYoutubeResults([])
+      setYoutubeSelectedVideoId(null)
+    } finally {
+      setYoutubeIsSearching(false)
+    }
+  }, [youtubeQuery])
+
+  const selectYoutubeResultAt = useCallback(
+    (index: number) => {
+      const candidate = youtubeResults[index]
+      if (!candidate) return
+      setYoutubeSelectedVideoId(candidate.id)
+      setYoutubeSearchPanelOpen(false)
+    },
+    [youtubeResults],
+  )
+
+  const handleSelectPreviousYoutubeResult = useCallback(() => {
+    if (selectedYoutubeIndex > 0) {
+      selectYoutubeResultAt(selectedYoutubeIndex - 1)
+    }
+  }, [selectedYoutubeIndex, selectYoutubeResultAt])
+
+  const handleSelectNextYoutubeResult = useCallback(() => {
+    if (selectedYoutubeIndex >= 0 && selectedYoutubeIndex < youtubeResults.length - 1) {
+      selectYoutubeResultAt(selectedYoutubeIndex + 1)
+    }
+  }, [selectedYoutubeIndex, selectYoutubeResultAt, youtubeResults.length])
+
+  const toggleYoutubeFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // Ignore fullscreen errors
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setYoutubeIsFullscreen(Boolean(document.fullscreenElement))
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
   const visibleWidgets = registeredWidgets.filter((widget) =>
     isWidgetVisibleForFilter(widget.entity, activeFilter),
   )
@@ -774,10 +882,34 @@ export function WidgetBoardHost({
           ),
         })
       }
+      case 'audio-visual': {
+        const audioVisualWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as AudioVisualWidgetTranslation
+
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: audioVisualWidgetText.copy.history,
+          mode,
+          children: (
+            <AudioVisualWidget
+              mode={mode}
+              languageCode={languageCode}
+              widgetText={audioVisualWidgetText}
+              initialSettings={widgetSettingsMap['audio-visual'] ?? {}}
+              onSaveSettings={onSaveWidgetSettings}
+            />
+          ),
+        })
+      }
       case 'youtube': {
         const youtubeWidgetText = widget.module.getTranslation(
           languageCode,
         ) as YoutubeWidgetTranslation
+        const selectedYoutubeTitle =
+          youtubeResults.find((video) => video.id === youtubeSelectedVideoId)?.title ??
+          ''
 
         return renderWidgetFrame({
           widget,
@@ -786,8 +918,25 @@ export function WidgetBoardHost({
           mode,
           children: (
             <YoutubeCompactView
-              data={{}}
-              languageCode={languageCode}
+              query={youtubeQuery}
+              selectedVideoId={youtubeSelectedVideoId}
+              selectedVideoTitle={selectedYoutubeTitle}
+              searchPanelOpen={youtubeSearchPanelOpen}
+              isSearching={youtubeIsSearching}
+              canSelectPrevious={selectedYoutubeIndex > 0}
+              canSelectNext={
+                selectedYoutubeIndex >= 0 &&
+                selectedYoutubeIndex < youtubeResults.length - 1
+              }
+              onQueryChange={setYoutubeQuery}
+              onSearch={handleYoutubeSearch}
+              onToggleSearchPanel={() =>
+                setYoutubeSearchPanelOpen((currentValue) => !currentValue)
+              }
+              onSelectPrevious={handleSelectPreviousYoutubeResult}
+              onSelectNext={handleSelectNextYoutubeResult}
+              onToggleFullscreen={toggleYoutubeFullscreen}
+              searchResults={youtubeResults}
               widgetText={youtubeWidgetText}
             />
           ),
@@ -818,7 +967,29 @@ export function WidgetBoardHost({
                 focusedEventDate: focusedCalendarEventDate,
               }
             : widget.entity.id === 'youtube'
-              ? {}
+              ? {
+                  query: youtubeQuery,
+                  results: youtubeResults,
+                  selectedVideoId: youtubeSelectedVideoId,
+                  searchPanelOpen: youtubeSearchPanelOpen,
+                  isSearching: youtubeIsSearching,
+                  isFullscreen: youtubeIsFullscreen,
+                  canSelectPrevious: selectedYoutubeIndex > 0,
+                  canSelectNext:
+                    selectedYoutubeIndex >= 0 &&
+                    selectedYoutubeIndex < youtubeResults.length - 1,
+                  onQueryChange: setYoutubeQuery,
+                  onSearch: handleYoutubeSearch,
+                  onToggleSearchPanel: () =>
+                    setYoutubeSearchPanelOpen((currentValue) => !currentValue),
+                  onSelectVideo: (videoId: string) => {
+                    setYoutubeSelectedVideoId(videoId)
+                    setYoutubeSearchPanelOpen(false)
+                  },
+                  onSelectPrevious: handleSelectPreviousYoutubeResult,
+                  onSelectNext: handleSelectNextYoutubeResult,
+                  onToggleFullscreen: toggleYoutubeFullscreen,
+                }
               : null
 
       if (!detailData) {
@@ -896,61 +1067,6 @@ export function WidgetBoardHost({
 
   return (
     <section className="dashboard-grid">
-      <section
-        className="widget-zone widget-zone--filters"
-        aria-label={appText.boardHost.filtersAriaLabel}
-      >
-        <div className="filter-bar">
-          <div
-            className="filter-row filter-row--board"
-            role="group"
-            aria-label={appText.boardHost.filtersAriaLabel}
-          >
-            {filterOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
-                aria-pressed={option.id === activeFilter}
-                onClick={() => onFilterChange(option.id)}
-              >
-                <span className="route-bullet" style={option.style}>
-                  {option.badgeText}
-                </span>
-                <span className="filter-copy">
-                  <span className="filter-label">{option.label}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="filter-actions">
-            <button
-              type="button"
-              className={`terminal-button${activeViewMode === 'board' ? ' is-active' : ''}`}
-              onClick={() => onViewModeChange('board')}
-            >
-              {appText.shell.boardTab}
-            </button>
-            <button
-              type="button"
-              className={`terminal-button${activeViewMode === 'settings' ? ' is-active' : ''}`}
-              onClick={() => onViewModeChange('settings')}
-            >
-              {appText.shell.settingsTab}
-            </button>
-            <button
-              type="button"
-              className="terminal-button terminal-button--quiet"
-              onClick={onLogout}
-              disabled={authPending}
-            >
-              {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
-            </button>
-          </div>
-        </div>
-      </section>
-
       <section
         className="widget-zone widget-zone--service-board"
         aria-label={appText.boardHost.serviceBoardZoneLabel}

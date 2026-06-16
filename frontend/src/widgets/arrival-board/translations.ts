@@ -17,6 +17,9 @@ export interface ArrivalBoardWidgetTranslation extends WidgetTranslationDefiniti
     hourUnitPlural: string
     dayUnitSingular: string
     dayUnitPlural: string
+    hourAbbr: string
+    minuteAbbr: string
+    dayAbbr: string
     noArrivalsTitle: string
     noArrivalsCopy: string
   }
@@ -36,6 +39,9 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
       hourUnitPlural: 'HRS',
       dayUnitSingular: 'DAY',
       dayUnitPlural: 'DAYS',
+      hourAbbr: 'h',
+      minuteAbbr: 'm',
+      dayAbbr: 'd',
       noArrivalsTitle: 'No personal arrivals yet',
       noArrivalsCopy: 'Add household data sources or switch back to the All filter.',
     },
@@ -67,6 +73,9 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
       hourUnitPlural: 'STD',
       dayUnitSingular: 'TAG',
       dayUnitPlural: 'TAGE',
+      hourAbbr: 'h',
+      minuteAbbr: 'min',
+      dayAbbr: 'Tage',
       noArrivalsTitle: 'Noch keine persoenlichen Ankuenfte',
       noArrivalsCopy: 'Fuege Haushaltsdatenquellen hinzu oder wechsle zum Filter Alle zurueck.',
     },
@@ -98,6 +107,9 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
       hourUnitPlural: 'H',
       dayUnitSingular: 'JOUR',
       dayUnitPlural: 'JOURS',
+      hourAbbr: 'h',
+      minuteAbbr: 'min',
+      dayAbbr: 'j',
       noArrivalsTitle: 'Pas encore d arrivees personnelles',
       noArrivalsCopy: 'Ajoutez des sources de donnees du foyer ou revenez au filtre Tous.',
     },
@@ -129,6 +141,9 @@ const arrivalBoardWidgetTranslationCatalog = createWidgetTranslationCatalog<Arri
       hourUnitPlural: 'H',
       dayUnitSingular: 'DIA',
       dayUnitPlural: 'DIAS',
+      hourAbbr: 'h',
+      minuteAbbr: 'min',
+      dayAbbr: 'd',
       noArrivalsTitle: 'Todavia no hay llegadas personales',
       noArrivalsCopy: 'Agrega fuentes de datos del hogar o vuelve al filtro Todos.',
     },

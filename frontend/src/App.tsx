@@ -11,6 +11,7 @@ import {
   fetchAppPreferences,
   normalizeCountryCode,
   updateAppPreferences,
+  type AppPreferencesRecord,
 } from './api/appPreferences'
 import {
   currentFrontendBuildId,
@@ -37,6 +38,11 @@ import {
   supportedLanguageOptions,
   type SupportedLanguageCode,
 } from './i18n/localization'
+import {
+  isSupportedSoftwareKeyboardTarget,
+  SoftwareKeyboardOverlay,
+  type SoftwareKeyboardTarget,
+} from './keyboard/softwareKeyboard'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import {
@@ -69,6 +75,7 @@ import {
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
 } from './widgets/WidgetMetadataAdminHost'
+import { normalizeAudioVisualSettings } from './widgets/audio-visual/AudioVisualPanel'
 import type {
   AgendaItem,
   Arrival,
@@ -151,10 +158,9 @@ const buildArrivalBoardEvents = (
   referenceTime: Date,
   arrivalLabel: string,
   units: {
-    hourSingular: string
-    hourPlural: string
-    daySingular: string
-    dayPlural: string
+    hourAbbr: string
+    minuteAbbr: string
+    dayAbbr: string
   },
 ): Arrival[] => {
   const nowTime = referenceTime.getTime()
@@ -178,10 +184,29 @@ const buildArrivalBoardEvents = (
     .map(({ agendaItem, eventDateTime }) => {
       const diffMs = Math.max(eventDateTime.getTime() - nowTime, 0)
       const totalHours = diffMs / (1000 * 60 * 60)
-      const useHours = totalHours < 24
-      const value = useHours
-        ? Math.max(1, Math.ceil(totalHours))
-        : Math.max(1, Math.ceil(totalHours / 24))
+      const totalMinutes = Math.round(diffMs / (1000 * 60))
+      
+      let value: string
+      let unit: string
+      
+      if (totalHours < 5) {
+        // Show hours + minutes for < 5 hours
+        const hours = Math.floor(totalMinutes / 60)
+        const mins = totalMinutes % 60
+        value = hours > 0 ? `${hours}${units.hourAbbr} ${mins}${units.minuteAbbr}` : `${Math.max(1, mins)}${units.minuteAbbr}`
+        unit = ''
+      } else if (totalHours < 24) {
+        // Show hours only for 5-24 hours
+        const hours = Math.max(1, Math.round(totalHours))
+        value = `${hours}${units.hourAbbr}`
+        unit = ''
+      } else {
+        // Show days for 24+ hours
+        const days = Math.max(1, Math.ceil(totalHours / 24))
+        value = `${days}${units.dayAbbr}`
+        unit = ''
+      }
+
       const isSameDay =
         eventDateTime.getFullYear() === referenceYear &&
         eventDateTime.getMonth() === referenceMonth &&
@@ -194,15 +219,9 @@ const buildArrivalBoardEvents = (
         destination: agendaItem.title,
         direction: arrivalLabel,
         platform: agendaItem.location,
-        value: `${value}`,
+        value,
         isSameDay,
-        unit: useHours
-          ? value === 1
-            ? units.hourSingular
-            : units.hourPlural
-          : value === 1
-            ? units.daySingular
-            : units.dayPlural,
+        unit,
         members: agendaItem.members,
         cancelled: agendaItem.cancelled,
       }
@@ -308,6 +327,17 @@ const householdBadgeStyleBySize = (sizeClassName = 'route-bullet') => ({
 const getLocalAppShellStorageKey = (userId: string) =>
   `${LOCAL_APP_SHELL_STORAGE_KEY_PREFIX}:${userId}`
 
+const getAudioVisualSettingsFromAppPreferences = (
+  appPreferences: Pick<
+    AppPreferencesRecord,
+    'audioVisualCameraEnabled' | 'audioVisualMicrophoneEnabled'
+  >,
+): WidgetSettingsValues =>
+  normalizeAudioVisualSettings({
+    cameraEnabled: appPreferences.audioVisualCameraEnabled,
+    microphoneEnabled: appPreferences.audioVisualMicrophoneEnabled,
+  })
+
 const normalizeAppShellPersistedState = (
   value: unknown,
 ): AppShellPersistedState => {
@@ -368,6 +398,13 @@ function App() {
   const [selectedLanguageCode, setSelectedLanguageCode] =
     useState<SupportedLanguageCode>(DEFAULT_LANGUAGE_CODE)
   const [selectedCountryCode, setSelectedCountryCode] = useState(DEFAULT_COUNTRY_CODE)
+  const [audioVisualPreferenceSettings, setAudioVisualPreferenceSettings] =
+    useState<WidgetSettingsValues>(() =>
+      getAudioVisualSettingsFromAppPreferences({
+        audioVisualCameraEnabled: true,
+        audioVisualMicrophoneEnabled: true,
+      }),
+    )
   const [countryCodeDraft, setCountryCodeDraft] = useState(DEFAULT_COUNTRY_CODE)
   const [loginUsername, setLoginUsername] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -424,6 +461,8 @@ function App() {
       longestLongTaskMs: null,
       lastLongTaskAt: null,
     })
+  const [softwareKeyboardTarget, setSoftwareKeyboardTarget] =
+    useState<SoftwareKeyboardTarget | null>(null)
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
   const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
@@ -451,12 +490,22 @@ function App() {
   const weatherError = resolveAppMessage(weatherErrorKey, appText)
   const calendarRangeStart = formatLocalIsoDate(now)
   const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 30))
+  const combinedWidgetSettingsMap: Record<string, WidgetSettingsValues> = {
+    ...widgetSettingsMap,
+    'audio-visual': audioVisualPreferenceSettings,
+  }
 
   const resetProtectedState = () => {
     setViewMode('board')
     setExpandedWidgetId(null)
     setSelectedLanguageCode(DEFAULT_LANGUAGE_CODE)
     setSelectedCountryCode(DEFAULT_COUNTRY_CODE)
+    setAudioVisualPreferenceSettings(
+      getAudioVisualSettingsFromAppPreferences({
+        audioVisualCameraEnabled: true,
+        audioVisualMicrophoneEnabled: true,
+      }),
+    )
     setCountryCodeDraft(DEFAULT_COUNTRY_CODE)
     setRegisteredWidgets([])
     setFamilyMembers([])
@@ -489,6 +538,7 @@ function App() {
     setWidgetSettingsLoaded(false)
     setWidgetSettingsAvailable(false)
     setAppShellStateHydrated(false)
+    setSoftwareKeyboardTarget(null)
     setPerformanceState({
       interactionLabel: null,
       interactionDurationMs: null,
@@ -535,6 +585,41 @@ function App() {
   const handleAuthRequired = () => {
     setLoginPassword('')
     enterUnauthenticatedState('authSessionExpired')
+  }
+
+  useEffect(() => {
+    const handleFocusIn = (event: FocusEvent) => {
+      if (isSupportedSoftwareKeyboardTarget(event.target)) {
+        setSoftwareKeyboardTarget(event.target)
+      }
+    }
+
+    const handleFocusOut = () => {
+      window.setTimeout(() => {
+        if (isSupportedSoftwareKeyboardTarget(document.activeElement)) {
+          setSoftwareKeyboardTarget(document.activeElement)
+          return
+        }
+
+        setSoftwareKeyboardTarget(null)
+      }, 0)
+    }
+
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
+    }
+  }, [])
+
+  const handleSoftwareKeyboardClose = () => {
+    if (softwareKeyboardTarget && document.contains(softwareKeyboardTarget)) {
+      softwareKeyboardTarget.blur()
+    }
+
+    setSoftwareKeyboardTarget(null)
   }
 
   useEffect(() => {
@@ -676,6 +761,9 @@ function App() {
           const appPreferences = await fetchAppPreferences()
 
           if (!cancelled) {
+            setAudioVisualPreferenceSettings(
+              getAudioVisualSettingsFromAppPreferences(appPreferences),
+            )
             enterAuthenticatedState(
               sessionState.user,
               appPreferences.languageCode,
@@ -1131,10 +1219,9 @@ function App() {
     now,
     arrivalBoardWidgetText.copy.arrivalLabel,
     {
-      hourSingular: arrivalBoardWidgetText.copy.hourUnitSingular,
-      hourPlural: arrivalBoardWidgetText.copy.hourUnitPlural,
-      daySingular: arrivalBoardWidgetText.copy.dayUnitSingular,
-      dayPlural: arrivalBoardWidgetText.copy.dayUnitPlural,
+      hourAbbr: arrivalBoardWidgetText.copy.hourAbbr,
+      minuteAbbr: arrivalBoardWidgetText.copy.minuteAbbr,
+      dayAbbr: arrivalBoardWidgetText.copy.dayAbbr,
     },
   )
   const visibleTodos = filterTodoItemsForView(
@@ -1270,6 +1357,10 @@ function App() {
         try {
           const appPreferences = await fetchAppPreferences()
 
+          setAudioVisualPreferenceSettings(
+            getAudioVisualSettingsFromAppPreferences(appPreferences),
+          )
+
           enterAuthenticatedState(
             user,
             appPreferences.languageCode,
@@ -1322,6 +1413,9 @@ function App() {
 
       setSelectedLanguageCode(persistedPreferences.languageCode)
       setSelectedCountryCode(persistedPreferences.countryCode)
+      setAudioVisualPreferenceSettings(
+        getAudioVisualSettingsFromAppPreferences(persistedPreferences),
+      )
       setCountryCodeDraft(persistedPreferences.countryCode)
     } catch (error) {
       if (isAuthRequiredError(error)) {
@@ -1361,6 +1455,9 @@ function App() {
 
       setSelectedLanguageCode(persistedPreferences.languageCode)
       setSelectedCountryCode(persistedPreferences.countryCode)
+      setAudioVisualPreferenceSettings(
+        getAudioVisualSettingsFromAppPreferences(persistedPreferences),
+      )
       setCountryCodeDraft(persistedPreferences.countryCode)
     } catch (error) {
       if (isAuthRequiredError(error)) {
@@ -1535,6 +1632,25 @@ function App() {
       )
       const normalizedSettings =
         widget?.module.settingsDefinition?.normalize(draftSettings) ?? draftSettings
+
+      if (widgetId === 'audio-visual') {
+        const persistedPreferences = await updateAppPreferences({
+          audioVisualCameraEnabled: Boolean(normalizedSettings.cameraEnabled),
+          audioVisualMicrophoneEnabled: Boolean(normalizedSettings.microphoneEnabled),
+        })
+
+        const nextAudioVisualSettings = getAudioVisualSettingsFromAppPreferences(
+          persistedPreferences,
+        )
+        setAudioVisualPreferenceSettings(nextAudioVisualSettings)
+        setWidgetSettingsMap((currentValues) => ({
+          ...currentValues,
+          'audio-visual': nextAudioVisualSettings,
+        }))
+        setWidgetSettingsErrorKey(null)
+        return
+      }
+
       const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
 
       setWidgetSettingsMap((currentValues) => ({
@@ -1613,6 +1729,10 @@ function App() {
               <p className="hero-copy">{appText.auth.sessionBootstrapCopy}</p>
             </article>
           </div>
+          <SoftwareKeyboardOverlay
+            activeTarget={softwareKeyboardTarget}
+            onRequestClose={handleSoftwareKeyboardClose}
+          />
         </section>
       </main>
     )
@@ -1689,6 +1809,10 @@ function App() {
               </div>
             </article>
           </div>
+          <SoftwareKeyboardOverlay
+            activeTarget={softwareKeyboardTarget}
+            onRequestClose={handleSoftwareKeyboardClose}
+          />
         </section>
       </main>
     )
@@ -1709,6 +1833,10 @@ function App() {
               <p className="hero-copy">{appText.auth.authenticatedSessionCopy}</p>
             </article>
           </div>
+          <SoftwareKeyboardOverlay
+            activeTarget={softwareKeyboardTarget}
+            onRequestClose={handleSoftwareKeyboardClose}
+          />
         </section>
       </main>
     )
@@ -1718,7 +1846,7 @@ function App() {
     <main className="app-shell">
       <section className="screen screen--shell">
         <header className="terminal-marquee">
-          <div className="terminal-left">
+          <div className="terminal-cell terminal-cell--title">
             <div className="terminal-copy" onClick={handleHiddenDebugTrigger}>
               <p className="terminal-location">{boardSubheadingDisplay}</p>
               <h1 className="terminal-title">
@@ -1729,39 +1857,78 @@ function App() {
             </div>
           </div>
 
-          <div
-            className={`terminal-right${viewMode === 'board' ? ' terminal-right--clock-only' : ''}`}
-          >
-            {viewMode === 'settings' ? (
-              <div className="terminal-actions">
-                <button
-                  type="button"
-                  className="terminal-button"
-                  onClick={() => handleViewModeChange('board')}
-                >
-                  {appText.shell.boardTab}
-                </button>
-                <button
-                  type="button"
-                  className="terminal-button is-active"
-                  onClick={() => handleViewModeChange('settings')}
-                >
-                  {appText.shell.settingsTab}
-                </button>
-                <button
-                  type="button"
-                  className="terminal-button terminal-button--quiet"
-                  onClick={handleLogout}
-                  disabled={authPending}
-                >
-                  {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
-                </button>
-              </div>
-            ) : null}
+          <div className="terminal-cell terminal-cell--clock">
             <div className="clock-stack">
               <p className="board-datetime">
                 {boardDate} {boardTime}
               </p>
+            </div>
+          </div>
+
+          <div className="terminal-cell terminal-cell--filters">
+            <div className="filter-bar">
+              <div
+                className="filter-row filter-row--board"
+                role="group"
+                aria-label={appText.boardHost.filtersAriaLabel}
+              >
+                {viewMode === 'board' ? filterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
+                    aria-pressed={option.id === activeFilter}
+                    onClick={() => handleFilterChange(option.id)}
+                  >
+                    <span className="route-bullet" style={option.style}>
+                      {option.badgeText}
+                    </span>
+                    <span className="filter-copy">
+                      <span className="filter-label">{option.label}</span>
+                    </span>
+                  </button>
+                )) : filterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
+                    aria-pressed={option.id === activeFilter}
+                    onClick={() => {}}
+                    disabled
+                  >
+                    <span className="route-bullet" style={option.style}>
+                      {option.badgeText}
+                    </span>
+                    <span className="filter-copy">
+                      <span className="filter-label">{option.label}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={viewMode === 'board' ? 'filter-actions' : 'terminal-actions'}>
+              <button
+                type="button"
+                className={`terminal-button${viewMode === 'board' ? ' is-active' : ''}`}
+                onClick={() => handleViewModeChange('board')}
+              >
+                {appText.shell.boardTab}
+              </button>
+              <button
+                type="button"
+                className={`terminal-button${viewMode === 'settings' ? ' is-active' : ''}`}
+                onClick={() => handleViewModeChange('settings')}
+              >
+                {appText.shell.settingsTab}
+              </button>
+              <button
+                type="button"
+                className="terminal-button terminal-button--quiet"
+                onClick={handleLogout}
+                disabled={authPending}
+              >
+                {authPending ? appText.shell.signingOutAction : appText.shell.signOutAction}
+              </button>
             </div>
           </div>
         </header>
@@ -1793,7 +1960,8 @@ function App() {
               visibleTodos={visibleTodos}
               familyMembers={familyMembers}
               homeCountryCode={selectedCountryCode}
-              calendarSettings={widgetSettingsMap.calendar ?? {}}
+              calendarSettings={combinedWidgetSettingsMap.calendar ?? {}}
+              widgetSettingsMap={combinedWidgetSettingsMap}
               weatherData={weatherWidgetData}
               commuteNote={commuteNote}
               focusedCalendarEventId={calendarFocusSelection?.eventId ?? null}
@@ -1802,6 +1970,7 @@ function App() {
               onToggleTodoDone={handleToggleTodoDone}
               onCalendarDataChanged={handleCalendarDataChanged}
               onOpenCalendarEvent={handleOpenCalendarEvent}
+              onSaveWidgetSettings={handleSaveWidgetSettings}
             />
           ) : (
             <section className="settings-page">
@@ -2033,7 +2202,7 @@ function App() {
                 availableSourceLocations={registeredWidgets.map(
                   (widget) => widget.module.folderName,
                 )}
-                widgetSettingsMap={widgetSettingsMap}
+                widgetSettingsMap={combinedWidgetSettingsMap}
                 onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
                   handleSaveWidgetSettings(widgetId, settings).catch(() => {
                     setWidgetSettingsErrorKey('widgetSettingsSaveFailed')
@@ -2063,6 +2232,10 @@ function App() {
             onClose={() => setDebugModeEnabled(false)}
           />
         ) : null}
+        <SoftwareKeyboardOverlay
+          activeTarget={softwareKeyboardTarget}
+          onRequestClose={handleSoftwareKeyboardClose}
+        />
       </section>
     </main>
   )

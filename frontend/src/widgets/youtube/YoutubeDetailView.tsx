@@ -1,9 +1,27 @@
-import React, { useState, useCallback } from 'react'
-import { searchYoutubeVideos, getYoutubeEmbedUrl } from './youtubeApi'
+import React from 'react'
+import { getYoutubeEmbedUrl, type YoutubeVideo } from './youtubeApi'
 import type { YoutubeWidgetTranslation } from './translations'
 
+export interface YoutubeDetailData {
+  query: string
+  results: YoutubeVideo[]
+  selectedVideoId: string | null
+  searchPanelOpen: boolean
+  isSearching: boolean
+  isFullscreen: boolean
+  canSelectPrevious: boolean
+  canSelectNext: boolean
+  onQueryChange: (value: string) => void
+  onSearch: () => void
+  onToggleSearchPanel: () => void
+  onSelectVideo: (videoId: string) => void
+  onSelectPrevious: () => void
+  onSelectNext: () => void
+  onToggleFullscreen: () => void
+}
+
 interface YoutubeDetailViewProps {
-  data: unknown
+  data: YoutubeDetailData
   languageCode: string
   widgetText: YoutubeWidgetTranslation
 }
@@ -12,65 +30,62 @@ export const YoutubeDetailView: React.FC<YoutubeDetailViewProps> = ({
   data,
   widgetText,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<any[]>([])
-  const [isSearching, setIsSearching] = useState(false)
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(
-    (data as any)?.currentVideoId ?? null,
-  )
-  const [showSearchPanel, setShowSearchPanel] = useState(false)
-
-  const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([])
-      return
-    }
-
-    setIsSearching(true)
-    try {
-      const results = await searchYoutubeVideos(query, 50) // Increased limit for browsing
-      setSearchResults(results.videos)
-    } catch (error) {
-      console.error('Search error:', error)
-      setSearchResults([])
-    } finally {
-      setIsSearching(false)
-    }
-  }, [])
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    handleSearch(searchQuery)
-  }
-
-  const handleVideoSelect = (videoId: string) => {
-    setSelectedVideoId(videoId)
-    setShowSearchPanel(false) // Auto-hide search when video selected
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    data.onSearch()
   }
 
   return (
     <div style={styles.container}>
-      {/* Video Player - Full Size */}
       <div style={styles.playerWrapper}>
-        {selectedVideoId ? (
+        {data.selectedVideoId ? (
           <>
             <iframe
               width="100%"
               height="100%"
-              src={getYoutubeEmbedUrl(selectedVideoId)}
+              src={getYoutubeEmbedUrl(data.selectedVideoId)}
               title="YouTube video player"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               style={styles.player}
             />
-            <button
-              style={styles.toggleButton}
-              onClick={() => setShowSearchPanel(!showSearchPanel)}
-              title={showSearchPanel ? 'Hide search' : 'Show search'}
-            >
-              {showSearchPanel ? '▼' : '▶'}
-            </button>
+            <div style={styles.overlayControls}>
+              <button
+                type="button"
+                style={styles.toggleButton}
+                onClick={data.onToggleSearchPanel}
+                title={data.searchPanelOpen ? 'Hide search panel' : 'Show search panel'}
+              >
+                ⌕
+              </button>
+              <button
+                type="button"
+                style={styles.toggleButton}
+                onClick={data.onSelectPrevious}
+                disabled={!data.canSelectPrevious}
+                title="Previous result"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                style={styles.toggleButton}
+                onClick={data.onSelectNext}
+                disabled={!data.canSelectNext}
+                title="Next result"
+              >
+                ▶
+              </button>
+              <button
+                type="button"
+                style={styles.toggleButton}
+                onClick={data.onToggleFullscreen}
+                title={data.isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {data.isFullscreen ? '⤢' : '⛶'}
+              </button>
+            </div>
           </>
         ) : (
           <div style={styles.emptyPlayer}>
@@ -78,8 +93,9 @@ export const YoutubeDetailView: React.FC<YoutubeDetailViewProps> = ({
             <div style={styles.emptyText}>{widgetText.copy.emptyTitle}</div>
             <div style={styles.emptySubtext}>{widgetText.copy.emptyCopy}</div>
             <button
-              style={styles.openSearchBtn}
-              onClick={() => setShowSearchPanel(true)}
+              type="button"
+              style={styles.openSearchButton}
+              onClick={data.onToggleSearchPanel}
             >
               Open Search
             </button>
@@ -87,58 +103,50 @@ export const YoutubeDetailView: React.FC<YoutubeDetailViewProps> = ({
         )}
       </div>
 
-      {/* Search & Results Panel - Collapsible */}
-      {showSearchPanel && (
+      {data.searchPanelOpen ? (
         <div style={styles.searchPanel}>
           <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
             <input
               type="text"
               placeholder={widgetText.copy.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={data.query}
+              onChange={(event) => data.onQueryChange(event.target.value)}
               style={styles.searchInput}
               autoFocus
             />
-            <button type="submit" style={styles.searchButton} disabled={isSearching}>
-              {isSearching ? '⏳' : '🔍'}
+            <button type="submit" style={styles.searchButton} disabled={data.isSearching}>
+              {data.isSearching ? '⏳' : '🔍'}
             </button>
           </form>
 
-          {searchResults.length > 0 && (
-            <div style={styles.resultsContainer}>
-              <div style={styles.resultsTitle}>
-                {searchResults.length} {searchResults.length === 1 ? 'Result' : 'Results'}
-              </div>
+          {data.results.length > 0 ? (
+            <div style={styles.resultsWrap}>
+              <div style={styles.resultsTitle}>{data.results.length} Results</div>
               <div style={styles.videoGrid}>
-                {searchResults.map((video) => (
-                  <div
+                {data.results.map((video) => (
+                  <button
                     key={video.id}
+                    type="button"
                     style={styles.videoCard}
-                    onClick={() => handleVideoSelect(video.id)}
+                    onClick={() => data.onSelectVideo(video.id)}
                     title={video.title}
                   >
-                    <img
-                      src={video.thumbnail}
-                      alt={video.title}
-                      style={styles.thumbnail}
-                    />
+                    <img src={video.thumbnail} alt={video.title} style={styles.thumbnail} />
                     <div style={styles.videoInfo}>
                       <div style={styles.videoTitle}>{video.title}</div>
                       <div style={styles.videoChannel}>{video.channel}</div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {searchResults.length === 0 && searchQuery && !isSearching && (
-            <div style={styles.noResults}>
-              <p>{widgetText.copy.noResults}</p>
-            </div>
-          )}
+          {data.results.length === 0 && data.query && !data.isSearching ? (
+            <div style={styles.noResults}>{widgetText.copy.noResults}</div>
+          ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -148,161 +156,148 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     height: '100%',
-    gap: '0',
-    backgroundColor: '#000',
+    backgroundColor: '#020617',
     overflow: 'hidden',
   },
   playerWrapper: {
     position: 'relative' as const,
     flex: 1,
+    minHeight: '280px',
     backgroundColor: '#000',
-    minHeight: '300px',
   },
   player: {
-    borderRadius: '0',
+    border: 'none',
     display: 'block',
   },
-  emptyPlayer: {
+  overlayControls: {
+    position: 'absolute' as const,
+    right: '0.9rem',
+    bottom: '0.9rem',
     display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    gap: '1rem',
-    color: '#999',
-    textAlign: 'center' as const,
-  },
-  emptyIcon: {
-    fontSize: '48px',
-  },
-  emptyText: {
-    fontSize: '18px',
-    fontWeight: '600' as const,
-    color: '#ccc',
-  },
-  emptySubtext: {
-    fontSize: '14px',
-    color: '#888',
-  },
-  openSearchBtn: {
-    marginTop: '1rem',
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#ff0000',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '14px',
-    fontWeight: 'bold' as const,
-    cursor: 'pointer',
+    gap: '0.35rem',
   },
   toggleButton: {
-    position: 'absolute' as const,
-    bottom: '12px',
-    right: '12px',
     width: '36px',
     height: '36px',
-    borderRadius: '50%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    border: '1px solid #ff0000',
-    color: '#ff0000',
+    borderRadius: '999px',
+    border: '1px solid rgba(239, 68, 68, 0.8)',
+    backgroundColor: 'rgba(2, 6, 23, 0.8)',
+    color: '#f8fafc',
+    fontSize: '14px',
     cursor: 'pointer',
-    fontSize: '18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
   },
-  searchPanel: {
-    flex: '0 0 auto',
-    maxHeight: '50%',
-    backgroundColor: '#1a1a1a',
-    borderTop: '1px solid #333',
+  emptyPlayer: {
+    height: '100%',
     display: 'flex',
     flexDirection: 'column' as const,
-    overflow: 'auto',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#94a3b8',
+    gap: '0.6rem',
+  },
+  emptyIcon: {
+    fontSize: '2rem',
+  },
+  emptyText: {
+    fontWeight: 600,
+  },
+  emptySubtext: {
+    fontSize: '12px',
+  },
+  openSearchButton: {
+    border: '1px solid rgba(239, 68, 68, 0.8)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(127, 29, 29, 0.45)',
+    color: '#fca5a5',
+    padding: '0.45rem 0.7rem',
+    cursor: 'pointer',
+  },
+  searchPanel: {
+    maxHeight: '52%',
+    borderTop: '1px solid rgba(148, 163, 184, 0.2)',
+    backgroundColor: '#0f172a',
+    display: 'flex',
+    flexDirection: 'column' as const,
   },
   searchForm: {
     display: 'flex',
     gap: '0.5rem',
-    padding: '1rem',
-    flexShrink: 0,
+    padding: '0.8rem',
   },
   searchInput: {
     flex: 1,
-    padding: '0.75rem',
-    borderRadius: '4px',
-    border: '1px solid #333',
-    backgroundColor: '#222',
-    color: '#fff',
-    fontSize: '14px',
+    border: '1px solid rgba(148, 163, 184, 0.25)',
+    borderRadius: '6px',
+    backgroundColor: '#1e293b',
+    color: '#e2e8f0',
+    padding: '0.55rem 0.65rem',
+    fontSize: '13px',
   },
   searchButton: {
-    padding: '0.75rem 1rem',
-    borderRadius: '4px',
-    border: 'none',
-    backgroundColor: '#ff0000',
-    color: 'white',
+    border: '1px solid rgba(239, 68, 68, 0.9)',
+    borderRadius: '6px',
+    backgroundColor: '#991b1b',
+    color: '#fee2e2',
+    fontWeight: 600,
+    minWidth: '42px',
     cursor: 'pointer',
-    fontWeight: 'bold' as const,
-    fontSize: '14px',
   },
-  resultsContainer: {
-    flex: 1,
-    overflow: 'auto',
+  resultsWrap: {
     display: 'flex',
     flexDirection: 'column' as const,
+    minHeight: 0,
   },
   resultsTitle: {
-    fontSize: '12px',
-    fontWeight: 'bold' as const,
-    color: '#aaa',
-    padding: '0.75rem 1rem 0.5rem 1rem',
+    fontSize: '11px',
+    letterSpacing: '0.04em',
     textTransform: 'uppercase' as const,
-    flexShrink: 0,
+    color: '#94a3b8',
+    padding: '0 0.9rem 0.45rem 0.9rem',
   },
   videoGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-    gap: '0.75rem',
-    padding: '0.75rem 1rem 1rem 1rem',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+    gap: '0.65rem',
+    padding: '0 0.9rem 0.9rem 0.9rem',
     overflow: 'auto',
   },
   videoCard: {
-    cursor: 'pointer',
-    borderRadius: '4px',
+    border: '1px solid rgba(148, 163, 184, 0.2)',
+    borderRadius: '8px',
+    backgroundColor: '#111827',
+    color: '#e5e7eb',
+    textAlign: 'left' as const,
+    padding: 0,
     overflow: 'hidden',
-    transition: 'transform 0.2s, box-shadow 0.2s',
-    backgroundColor: '#222',
-    border: '1px solid #333',
+    cursor: 'pointer',
   },
   thumbnail: {
     width: '100%',
-    height: '60px',
+    height: '78px',
     objectFit: 'cover' as const,
+    display: 'block',
   },
   videoInfo: {
-    padding: '0.5rem',
-    fontSize: '11px',
+    padding: '0.45rem 0.5rem 0.55rem 0.5rem',
   },
   videoTitle: {
-    fontWeight: '500' as const,
-    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 600,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis' as const,
-    marginBottom: '0.25rem',
   },
   videoChannel: {
-    color: '#999',
+    marginTop: '0.2rem',
     fontSize: '10px',
+    color: '#9ca3af',
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis' as const,
   },
   noResults: {
-    padding: '2rem 1rem',
-    textAlign: 'center' as const,
-    color: '#666',
-    fontSize: '14px',
+    padding: '0.8rem 0.9rem 1rem 0.9rem',
+    color: '#94a3b8',
+    fontSize: '12px',
   },
 }

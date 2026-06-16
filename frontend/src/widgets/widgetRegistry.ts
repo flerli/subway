@@ -39,6 +39,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   youtube: {
     widgetNumber: 6,
   },
+  'audio-visual': {
+    widgetNumber: 7,
+  },
 }
 
 export const buildWidgetRegistry = (
