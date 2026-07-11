@@ -56,6 +56,13 @@ export interface WidgetDetailViewContext {
   languageCode: SupportedLanguageCode
 }
 
+export interface WidgetSettingsPanelContext {
+  widget: RegisteredWidget
+  languageCode: SupportedLanguageCode
+  initialSettings: WidgetSettingsValues
+  onSave: (widgetId: string, settings: WidgetSettingsValues) => Promise<void>
+}
+
 export interface WidgetSettingsFieldTextDefinition {
   label: string
   placeholder?: string
@@ -103,6 +110,7 @@ export interface WidgetMicroAppContract {
   matchesDefaultTitle?: (title: string) => boolean
   loadData: (context: WidgetLoadContext) => unknown | Promise<unknown>
   mutateData?: (context: WidgetMutationContext) => void | Promise<void>
+  renderSettingsPanel?: (context: WidgetSettingsPanelContext) => ReactNode
   renderDetailView?: (context: WidgetDetailViewContext) => ReactNode
 }
 

@@ -42,6 +42,15 @@ function WidgetSettingsCard({
 
   const settingsDefinition = getLocalizedSettingsDefinition(widget.module, languageCode)
 
+  if (widget.module.renderSettingsPanel) {
+    return widget.module.renderSettingsPanel({
+      widget,
+      languageCode,
+      initialSettings,
+      onSave,
+    })
+  }
+
   if (!settingsDefinition) {
     return null
   }

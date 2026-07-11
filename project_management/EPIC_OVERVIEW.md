@@ -100,3 +100,17 @@ Issues:
 | 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__002_RECORDING_STILL_VIDEO_AND_AUDIO_CAPTURE.md | Implement snapshot, video recording, audio recording, and real-time audio level visualization with manual start/stop controls. | planned |
 | 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__003_TEMPORARY_SERVER_STORAGE_AND_UPLOAD.md | Add multipart upload API, persistent recording metadata, backend storage with soft-delete lifecycle, and family-wide retrieval. | planned |
 | 007_AUDIO_VISUAL_INPUT__ISSUE_DEFINITION__004_HISTORY_AND_REPLAY.md | Build recording history list, media playback (video/audio/photo), deletion workflow, and four-language history UI. | planned |
+
+## 008 BRING INTEGRATION
+
+Description:
+Integrate Bring! shopping lists into Subway through the upstream `bring-api` Python package behind the existing authenticated Node backend, with per-user encrypted Bring credentials, selected-list settings, stale-cache fallback, a compact shopping widget, and an extended detail view for list management.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 008_BRING_INTEGRATION__ISSUE_DEFINITION__001_PYTHON_SIDECAR_AND_CONNECTION_SETTINGS_FOUNDATION.md | Establish the internal Python Bring bridge, per-user encrypted Bring credential storage, selected-list configuration, and widget settings UI. | implemented |
+| 008_BRING_INTEGRATION__ISSUE_DEFINITION__002_SELECTED_LIST_CACHE_AND_ITEM_CRUD_API.md | Add selected-list snapshot caching, stale-read fallback, and authenticated item CRUD endpoints while following the upstream Bring API constraints. | implemented |
+| 008_BRING_INTEGRATION__ISSUE_DEFINITION__003_MINI_SHOPPING_LIST_WIDGET.md | Implement the compact Bring widget with open-item preview, remaining-count meta, stale-state visibility, and entry into the extended view. | implemented |
+| 008_BRING_INTEGRATION__ISSUE_DEFINITION__004_EXTENDED_SHOPPING_LIST_VIEW_AND_COMPLETION_WORKFLOWS.md | Build the extended Bring list experience with add, spec update, complete, delete, reconnect guidance, and reopen-through-readd workflow. | implemented |

@@ -3,6 +3,8 @@ services:
     build:
       context: ./backend
     image: ${BACKEND_IMAGE:-subway-backend:local}
+    depends_on:
+      - bring-sidecar
     environment:
       HOST: 0.0.0.0
       PORT: 8787
@@ -10,6 +12,7 @@ services:
       WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:-13.405}
       WEATHER_LOCATION: ${WEATHER_LOCATION:-Berlin}
       WEATHER_TIMEZONE: ${WEATHER_TIMEZONE:-auto}
+      BRING_SIDECAR_URL: ${BRING_SIDECAR_URL:-http://bring-sidecar:8788}
     volumes:
       - subway-data:/app/data
     restart: unless-stopped
@@ -25,6 +28,15 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  bring-sidecar:
+    build:
+      context: ./backend/bring_sidecar
+    image: ${BRING_SIDECAR_IMAGE:-subway-bring-sidecar:local}
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+    restart: unless-stopped
 
   frontend:
     build:

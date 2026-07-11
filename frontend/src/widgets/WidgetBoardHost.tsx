@@ -19,6 +19,7 @@ import type {
   AgendaItem,
   Arrival,
   AudienceBadgeRenderer,
+  BringWidgetData,
   FamilyMember,
   FilterId,
   FilterOption,
@@ -37,6 +38,7 @@ import {
 } from './widgetLocalization'
 import { widgetGridPlacementZones } from './widgetPlacementZones'
 import type { TodoWidgetTranslation } from './todo/translations'
+import type { BringWidgetTranslation } from './bring/translations'
 import { UiBenchmarkPanel } from './ui-benchmark/UiBenchmarkPanel'
 import type { UiBenchmarkWidgetTranslation } from './ui-benchmark/translations'
 import { YoutubeCompactView } from './youtube/YoutubeCompactView'
@@ -63,6 +65,7 @@ interface WidgetBoardHostProps {
   visibleArrivals: Arrival[]
   visibleAgenda: AgendaItem[]
   visibleTodos: TodoItem[]
+  bringData: BringWidgetData
   familyMembers: FamilyMember[]
   homeCountryCode: string
   calendarSettings: WidgetSettingsValues
@@ -71,6 +74,19 @@ interface WidgetBoardHostProps {
   commuteNote: string
   focusedCalendarEventId: string | null
   focusedCalendarEventDate: string | null
+  onBringRefresh: () => Promise<unknown>
+  onBringCreateItem: (input: { itemName: string; specification: string }) => Promise<unknown>
+  onBringUpdateItem: (input: {
+    itemName: string
+    specification: string
+    itemUuid?: string
+  }) => Promise<unknown>
+  onBringDeleteItem: (input: { itemName: string; itemUuid?: string }) => Promise<unknown>
+  onBringCompleteItem: (input: {
+    itemName: string
+    specification: string
+    itemUuid?: string
+  }) => Promise<unknown>
   renderAudienceBadge: AudienceBadgeRenderer
   onToggleTodoDone: (todoItemId: string, done: boolean) => void
   onCalendarDataChanged: () => void
@@ -289,13 +305,14 @@ export function WidgetBoardHost({
   expandedWidgetId,
   filterOptions: _filterOptions,
   onFilterChange: _onFilterChange,
-  onViewModeChange: _onViewModeChange,
+  onViewModeChange,
   onExpandedWidgetChange,
   onLogout: _onLogout,
   authPending: _authPending,
   visibleArrivals,
   visibleAgenda,
   visibleTodos,
+  bringData,
   familyMembers,
   homeCountryCode,
   calendarSettings,
@@ -304,6 +321,11 @@ export function WidgetBoardHost({
   commuteNote,
   focusedCalendarEventId,
   focusedCalendarEventDate,
+  onBringRefresh,
+  onBringCreateItem,
+  onBringUpdateItem,
+  onBringDeleteItem,
+  onBringCompleteItem,
   renderAudienceBadge,
   onToggleTodoDone,
   onCalendarDataChanged,
@@ -867,6 +889,73 @@ export function WidgetBoardHost({
           ),
         })
       }
+      case 'bring': {
+        const bringWidgetText = widget.module.getTranslation(
+          languageCode,
+        ) as BringWidgetTranslation
+        const bringList = bringData.list
+        const bringMeta =
+          bringData.status === 'ready' && bringList
+            ? `${formatLocalizedText(bringWidgetText.copy.openItemsMeta, {
+                count: bringList.openItemCount,
+              })}${bringList.freshness === 'stale' ? ` · ${bringWidgetText.copy.staleMeta}` : ''}`
+            : bringData.status === 'not-configured'
+              ? bringWidgetText.copy.notConfiguredTitle
+              : null
+
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta: bringMeta,
+          mode,
+          children:
+            bringData.status === 'loading' ? (
+              renderEmptyState(
+                bringWidgetText.copy.loadingTitle,
+                bringWidgetText.copy.loadingCopy,
+              )
+            ) : bringData.status === 'not-configured' ? (
+              renderEmptyState(
+                bringWidgetText.copy.notConfiguredTitle,
+                bringData.message ?? bringWidgetText.copy.notConfiguredCopy,
+              )
+            ) : bringData.status === 'error' ? (
+              renderEmptyState(
+                bringWidgetText.copy.unavailableTitle,
+                bringData.message ?? bringWidgetText.copy.unavailableCopy,
+              )
+            ) : !bringList || bringList.openItems.length === 0 ? (
+              renderEmptyState(
+                bringWidgetText.copy.emptyTitle,
+                bringWidgetText.copy.emptyCopy,
+              )
+            ) : (
+              <div className="bring-widget-shell">
+                {bringList.freshness === 'stale' ? (
+                  <p className="bring-state-banner">{bringWidgetText.copy.staleMeta}</p>
+                ) : null}
+
+                <ul className="bring-list">
+                  {bringList.openItems.slice(0, 4).map((item) => (
+                    <li
+                      className="bring-row"
+                      key={item.uuid || `${item.itemName}-${item.specification}`}
+                    >
+                      <div className="bring-copy">
+                        <p className="bring-item-name">{item.itemName}</p>
+                        {item.specification ? (
+                          <p className="bring-item-specification">{item.specification}</p>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="bring-recent-hint">{bringWidgetText.copy.recentHint}</p>
+              </div>
+            ),
+        })
+      }
       case 'ui-benchmark': {
         const uiBenchmarkWidgetText = widget.module.getTranslation(
           languageCode,
@@ -966,6 +1055,16 @@ export function WidgetBoardHost({
                 focusedEventId: focusedCalendarEventId,
                 focusedEventDate: focusedCalendarEventDate,
               }
+            : widget.entity.id === 'bring'
+              ? {
+                  bringData,
+                  onRefresh: onBringRefresh,
+                  onCreateItem: onBringCreateItem,
+                  onUpdateItem: onBringUpdateItem,
+                  onDeleteItem: onBringDeleteItem,
+                  onCompleteItem: onBringCompleteItem,
+                  onOpenSettings: () => onViewModeChange('settings'),
+                }
             : widget.entity.id === 'youtube'
               ? {
                   query: youtubeQuery,
@@ -1009,6 +1108,9 @@ export function WidgetBoardHost({
         const calendarWidgetText = widget.module.getTranslation?.(
           languageCode,
         ) as CalendarWidgetTranslation | undefined
+        const bringWidgetText = widget.module.getTranslation?.(
+          languageCode,
+        ) as BringWidgetTranslation | undefined
 
         return renderWidgetFrame({
           widget,
@@ -1025,6 +1127,15 @@ export function WidgetBoardHost({
                     calendarWidgetText?.detail.rangeEventCountMeta ?? '{count} events in range',
                     { count: visibleAgenda.length },
                   )
+                : widget.entity.id === 'bring'
+                  ? bringData.list
+                    ? `${formatLocalizedText(
+                        bringWidgetText?.copy.openItemsMeta ?? '{count} open shopping items',
+                        { count: bringData.list.openItemCount },
+                      )}${bringData.list.freshness === 'stale' ? ` · ${bringWidgetText?.copy.staleMeta ?? 'cached'}` : ''}`
+                    : bringData.status === 'not-configured'
+                      ? bringWidgetText?.copy.notConfiguredTitle ?? null
+                      : null
                 : widget.entity.id === 'youtube'
                   ? null
                   : null,

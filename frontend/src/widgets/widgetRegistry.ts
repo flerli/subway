@@ -42,6 +42,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   'audio-visual': {
     widgetNumber: 7,
   },
+  bring: {
+    widgetNumber: 8,
+  },
 }
 
 export const buildWidgetRegistry = (

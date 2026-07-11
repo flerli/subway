@@ -1,5 +1,7 @@
 import { createServer } from 'node:http'
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   randomBytes,
   randomUUID,
@@ -31,6 +33,17 @@ const WEATHER_TIMEZONE = process.env.WEATHER_TIMEZONE ?? 'auto'
 const WEATHER_FORECAST_DAYS = 8
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000
 const YOUTUBE_RESULTS_LIMIT = 80
+const BRING_SIDECAR_URL = process.env.BRING_SIDECAR_URL ?? 'http://127.0.0.1:8788'
+const BRING_SIDECAR_REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.BRING_SIDECAR_REQUEST_TIMEOUT_MS ?? '15000',
+  10,
+)
+const BRING_CREDENTIAL_ENCRYPTION_SECRET =
+  process.env.BRING_CREDENTIAL_ENCRYPTION_KEY ?? ''
+const bringCredentialEncryptionKey =
+  BRING_CREDENTIAL_ENCRYPTION_SECRET.trim().length > 0
+    ? createHash('sha256').update(BRING_CREDENTIAL_ENCRYPTION_SECRET).digest()
+    : null
 const INITIAL_USER_ID = process.env.INITIAL_USER_ID ?? 'user-flerlage'
 const INITIAL_USER_USERNAME = process.env.INITIAL_USER_USERNAME ?? 'flerlage'
 const INITIAL_USER_PASSWORD =
@@ -226,6 +239,47 @@ const sanitizeCalendarText = (value, fallback = '') => {
 
   return normalizedValue.length > 0 ? normalizedValue : fallback
 }
+
+const sanitizeBringUsername = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 320)
+}
+
+const sanitizeBringPassword = (value) =>
+  typeof value === 'string' ? value : ''
+
+const normalizeBringListUuid = (value) =>
+  typeof value === 'string' ? value.trim().slice(0, 120) : ''
+
+const sanitizeBringListName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 160)
+}
+
+const sanitizeBringItemName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().replace(/\s+/g, ' ').slice(0, 160)
+}
+
+const sanitizeBringItemSpecification = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().replace(/\s+/g, ' ').slice(0, 320)
+}
+
+const normalizeBringItemUuid = (value) =>
+  typeof value === 'string' ? value.trim().slice(0, 120) : ''
 
 const normalizeRecurrenceFrequency = (value) => {
   const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : 'none'
@@ -761,6 +815,29 @@ const createAudioVisualRecordingsTableSql = `
   )
 `
 
+const createBringIntegrationsTableSql = `
+  CREATE TABLE IF NOT EXISTS bring_integrations (
+    owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
+    bring_username TEXT NOT NULL,
+    encrypted_password_json TEXT,
+    selected_list_uuid TEXT,
+    selected_list_name TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`
+
+const createBringListSnapshotsTableSql = `
+  CREATE TABLE IF NOT EXISTS bring_list_snapshots (
+    owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
+    list_uuid TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    refreshed_at TEXT NOT NULL,
+    stale_at TEXT,
+    updated_at TEXT NOT NULL
+  )
+`
+
 const defaultAppUserId = ensureInitialUserRecord()
 
 migrateOwnedTable({
@@ -834,6 +911,8 @@ migrateOwnedTable({
 
 db.exec(createAppPreferencesTableSql)
 db.exec(createAudioVisualRecordingsTableSql)
+db.exec(createBringIntegrationsTableSql)
+db.exec(createBringListSnapshotsTableSql)
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
   ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
@@ -1064,6 +1143,15 @@ const seedWidgets = [
     sourceLocation: 'audio-visual',
     userScope: { mode: 'all', memberIds: [] },
     placementZones: [{ zoneId: 'a3', order: 1 }],
+  },
+  {
+    id: 'bring',
+    title: 'Bring',
+    subwayLetter: 'G',
+    subwayColor: '#7ac943',
+    sourceLocation: 'bring',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [{ zoneId: 'service-board', order: 2 }],
   },
 ]
 
@@ -1381,6 +1469,177 @@ const upsertWidgetSettings = (ownerUserId, widgetId, settingsJson, timestamp) =>
     `)
     .run(ownerUserId, widgetId, settingsJson, timestamp, timestamp)
 
+const selectBringIntegrationRow = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT
+        bring_username,
+        encrypted_password_json,
+        selected_list_uuid,
+        selected_list_name,
+        updated_at
+      FROM bring_integrations
+      WHERE owner_user_id = ?
+    `)
+    .get(ownerUserId)
+
+const selectBringSettings = (ownerUserId) => {
+  const row = selectBringIntegrationRow(ownerUserId)
+
+  return {
+    username: sanitizeBringUsername(row?.bring_username),
+    hasStoredPassword:
+      typeof row?.encrypted_password_json === 'string' && row.encrypted_password_json.length > 0,
+    selectedListUuid: normalizeBringListUuid(row?.selected_list_uuid),
+    selectedListName: sanitizeBringListName(row?.selected_list_name),
+    updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
+  }
+}
+
+const upsertBringIntegration = (
+  ownerUserId,
+  bringUsername,
+  encryptedPasswordJson,
+  selectedListUuid,
+  selectedListName,
+  timestamp,
+) =>
+  db
+    .prepare(`
+      INSERT INTO bring_integrations (
+        owner_user_id,
+        bring_username,
+        encrypted_password_json,
+        selected_list_uuid,
+        selected_list_name,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(owner_user_id) DO UPDATE SET
+        bring_username = excluded.bring_username,
+        encrypted_password_json = excluded.encrypted_password_json,
+        selected_list_uuid = excluded.selected_list_uuid,
+        selected_list_name = excluded.selected_list_name,
+        updated_at = excluded.updated_at
+    `)
+    .run(
+      ownerUserId,
+      bringUsername,
+      encryptedPasswordJson,
+      selectedListUuid,
+      selectedListName,
+      timestamp,
+      timestamp,
+    )
+
+const normalizeBringSnapshotItem = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const itemName = sanitizeBringItemName(candidate.itemName)
+
+  if (!itemName) {
+    return null
+  }
+
+  return {
+    itemName,
+    specification: sanitizeBringItemSpecification(candidate.specification),
+    uuid: normalizeBringItemUuid(candidate.uuid),
+  }
+}
+
+const normalizeBringListSnapshot = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const listUuid = normalizeBringListUuid(candidate.listUuid)
+  const listName = sanitizeBringListName(candidate.listName)
+
+  if (!listUuid || !listName) {
+    return null
+  }
+
+  const openItems = Array.isArray(candidate.openItems)
+    ? candidate.openItems
+        .map(normalizeBringSnapshotItem)
+        .filter((item) => item !== null)
+    : []
+  const recentItems = Array.isArray(candidate.recentItems)
+    ? candidate.recentItems
+        .map(normalizeBringSnapshotItem)
+        .filter((item) => item !== null)
+    : []
+
+  return {
+    listUuid,
+    listName,
+    openItems,
+    recentItems,
+  }
+}
+
+const selectBringListSnapshotRow = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT list_uuid, snapshot_json, refreshed_at, stale_at, updated_at
+      FROM bring_list_snapshots
+      WHERE owner_user_id = ?
+    `)
+    .get(ownerUserId)
+
+const selectBringListSnapshot = (ownerUserId) => {
+  const row = selectBringListSnapshotRow(ownerUserId)
+
+  if (!row || typeof row.snapshot_json !== 'string') {
+    return null
+  }
+
+  try {
+    const snapshot = normalizeBringListSnapshot(JSON.parse(row.snapshot_json))
+
+    if (!snapshot) {
+      return null
+    }
+
+    return {
+      ...snapshot,
+      refreshedAt: typeof row.refreshed_at === 'string' ? row.refreshed_at : null,
+      staleAt: typeof row.stale_at === 'string' ? row.stale_at : null,
+      updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+const upsertBringListSnapshot = (ownerUserId, listUuid, snapshotJson, refreshedAt) =>
+  db
+    .prepare(`
+      INSERT INTO bring_list_snapshots (
+        owner_user_id,
+        list_uuid,
+        snapshot_json,
+        refreshed_at,
+        stale_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, NULL, ?)
+      ON CONFLICT(owner_user_id) DO UPDATE SET
+        list_uuid = excluded.list_uuid,
+        snapshot_json = excluded.snapshot_json,
+        refreshed_at = excluded.refreshed_at,
+        stale_at = NULL,
+        updated_at = excluded.updated_at
+    `)
+    .run(ownerUserId, listUuid, snapshotJson, refreshedAt, refreshedAt)
+
+const markBringListSnapshotStale = (ownerUserId, staleAt) =>
+  db
+    .prepare(`
+      UPDATE bring_list_snapshots
+      SET stale_at = COALESCE(stale_at, ?), updated_at = ?
+      WHERE owner_user_id = ?
+    `)
+    .run(staleAt, staleAt, ownerUserId)
+
 const selectAppPreferences = (ownerUserId) => {
   const row = db
     .prepare(`
@@ -1613,6 +1872,33 @@ const ensureSeedWidgetsPresent = (ownerUserId) => {
     if (!existingWidgetIds.has(widget.id)) {
       insertWidget(ownerUserId, widget, now, now)
     }
+  }
+}
+
+const ensureBringWidgetDefaultPlacement = () => {
+  const bringWidgets = db
+    .prepare(`
+      SELECT owner_user_id, id, placement_zones
+      FROM widgets
+      WHERE source_location = 'bring'
+    `)
+    .all()
+
+  const updatePlacement = db.prepare(`
+    UPDATE widgets
+    SET placement_zones = ?, updated_at = ?
+    WHERE owner_user_id = ? AND id = ?
+  `)
+
+  const timestamp = new Date().toISOString()
+  const defaultBringPlacement = JSON.stringify([{ zoneId: 'service-board', order: 2 }])
+
+  for (const widget of bringWidgets) {
+    if (parseJsonArray(widget.placement_zones).length > 0) {
+      continue
+    }
+
+    updatePlacement.run(defaultBringPlacement, timestamp, widget.owner_user_id, widget.id)
   }
 }
 
@@ -2357,6 +2643,351 @@ const normalizeWidgetPlacementZones = (value) => {
     .filter(Boolean)
 }
 
+class BringIntegrationError extends Error {
+  constructor(message, statusCode, errorCode) {
+    super(message)
+    this.name = 'BringIntegrationError'
+    this.statusCode = statusCode
+    this.errorCode = errorCode
+  }
+}
+
+const ensureBringCredentialEncryptionConfigured = () => {
+  if (!bringCredentialEncryptionKey) {
+    throw new BringIntegrationError(
+      'Bring integration is not configured on the server.',
+      503,
+      'bring_configuration_missing',
+    )
+  }
+}
+
+const encryptBringPassword = (password) => {
+  ensureBringCredentialEncryptionConfigured()
+
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', bringCredentialEncryptionKey, iv)
+  const encryptedValue = Buffer.concat([cipher.update(password, 'utf8'), cipher.final()])
+  const authTag = cipher.getAuthTag()
+
+  return JSON.stringify({
+    iv: iv.toString('base64'),
+    value: encryptedValue.toString('base64'),
+    authTag: authTag.toString('base64'),
+  })
+}
+
+const decryptBringPassword = (encryptedPasswordJson) => {
+  ensureBringCredentialEncryptionConfigured()
+
+  let parsedValue
+
+  try {
+    parsedValue = JSON.parse(encryptedPasswordJson)
+  } catch {
+    throw new BringIntegrationError(
+      'Stored Bring credentials are invalid.',
+      500,
+      'bring_credentials_invalid',
+    )
+  }
+
+  if (
+    !parsedValue ||
+    typeof parsedValue !== 'object' ||
+    typeof parsedValue.iv !== 'string' ||
+    typeof parsedValue.value !== 'string' ||
+    typeof parsedValue.authTag !== 'string'
+  ) {
+    throw new BringIntegrationError(
+      'Stored Bring credentials are invalid.',
+      500,
+      'bring_credentials_invalid',
+    )
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      bringCredentialEncryptionKey,
+      Buffer.from(parsedValue.iv, 'base64'),
+    )
+    decipher.setAuthTag(Buffer.from(parsedValue.authTag, 'base64'))
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(parsedValue.value, 'base64')),
+      decipher.final(),
+    ]).toString('utf8')
+  } catch {
+    throw new BringIntegrationError(
+      'Stored Bring credentials cannot be decrypted.',
+      500,
+      'bring_credentials_invalid',
+    )
+  }
+}
+
+const normalizeBringListsPayload = (value) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => {
+      const candidate = entry && typeof entry === 'object' ? entry : {}
+      const listUuid = normalizeBringListUuid(candidate.listUuid)
+      const name = sanitizeBringListName(candidate.name)
+
+      if (!listUuid || !name) {
+        return null
+      }
+
+      return {
+        listUuid,
+        name,
+        theme: typeof candidate.theme === 'string' ? candidate.theme : null,
+      }
+    })
+    .filter(Boolean)
+}
+
+const callBringSidecar = async (pathname, payload) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), BRING_SIDECAR_REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(`${BRING_SIDECAR_URL}${pathname}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+
+    let responseBody = {}
+
+    try {
+      responseBody = await response.json()
+    } catch {
+      responseBody = {}
+    }
+
+    if (!response.ok) {
+      throw new BringIntegrationError(
+        typeof responseBody.error === 'string'
+          ? responseBody.error
+          : 'Bring integration request failed.',
+        response.status,
+        typeof responseBody.errorCode === 'string'
+          ? responseBody.errorCode
+          : 'bring_sidecar_error',
+      )
+    }
+
+    return responseBody
+  } catch (error) {
+    if (error instanceof BringIntegrationError) {
+      throw error
+    }
+
+    throw new BringIntegrationError(
+      'Bring integration is temporarily unavailable.',
+      503,
+      'bring_sidecar_unavailable',
+    )
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const loadBringLists = async (username, password) => {
+  const responseBody = await callBringSidecar('/lists', {
+    username,
+    password,
+  })
+
+  return normalizeBringListsPayload(responseBody.lists)
+}
+
+const resolveBringCredentials = (ownerUserId, body) => {
+  const currentIntegration = selectBringIntegrationRow(ownerUserId)
+  const username = sanitizeBringUsername(body?.username ?? currentIntegration?.bring_username)
+  const providedPassword = sanitizeBringPassword(body?.password)
+  const hasStoredPassword =
+    typeof currentIntegration?.encrypted_password_json === 'string' &&
+    currentIntegration.encrypted_password_json.length > 0
+
+  let password = providedPassword
+
+  if (!password && hasStoredPassword) {
+    password = decryptBringPassword(currentIntegration.encrypted_password_json)
+  }
+
+  return {
+    currentIntegration,
+    username,
+    password,
+    hasStoredPassword,
+  }
+}
+
+const sendBringIntegrationError = (response, error) => {
+  if (error instanceof BringIntegrationError) {
+    sendJson(response, error.statusCode, {
+      error: error.message,
+      errorCode: error.errorCode,
+    })
+    return
+  }
+
+  console.error('Unexpected Bring integration failure.', error)
+  sendJson(response, 500, {
+    error: 'Bring integration request failed.',
+    errorCode: 'bring_unknown_error',
+  })
+}
+
+const resolveBringSelectedListContext = (ownerUserId, body = undefined) => {
+  const { currentIntegration, username, password } = resolveBringCredentials(ownerUserId, body)
+  const selectedListUuid = normalizeBringListUuid(
+    body?.selectedListUuid ?? currentIntegration?.selected_list_uuid,
+  )
+  const selectedListName = sanitizeBringListName(currentIntegration?.selected_list_name)
+
+  if (!username) {
+    throw new BringIntegrationError(
+      'Bring username is not configured.',
+      400,
+      'bring_username_missing',
+    )
+  }
+
+  if (!password) {
+    throw new BringIntegrationError(
+      'Bring password is not configured.',
+      400,
+      'bring_password_missing',
+    )
+  }
+
+  if (!selectedListUuid) {
+    throw new BringIntegrationError(
+      'No Bring shopping list is selected.',
+      400,
+      'bring_selected_list_missing',
+    )
+  }
+
+  return {
+    username,
+    password,
+    selectedListUuid,
+    selectedListName,
+  }
+}
+
+const parseBringSnapshotFromSidecar = (responseBody) => {
+  const snapshot = normalizeBringListSnapshot(responseBody?.snapshot)
+
+  if (!snapshot) {
+    throw new BringIntegrationError(
+      'Bring returned an unexpected list payload.',
+      502,
+      'bring_snapshot_invalid',
+    )
+  }
+
+  return snapshot
+}
+
+const buildBringListPayload = (snapshot, freshness, refreshedAt, staleAt) => ({
+  listUuid: snapshot.listUuid,
+  listName: snapshot.listName,
+  openItems: snapshot.openItems,
+  recentItems: snapshot.recentItems,
+  openItemCount: snapshot.openItems.length,
+  recentItemCount: snapshot.recentItems.length,
+  freshness,
+  readOnly: freshness !== 'live',
+  refreshedAt,
+  staleAt,
+})
+
+const isBringTemporaryReadFailure = (error) =>
+  error instanceof BringIntegrationError &&
+  (error.errorCode === 'bring_request_failed' ||
+    error.errorCode === 'bring_sidecar_unavailable' ||
+    error.errorCode === 'bring_sidecar_error')
+
+const refreshBringSelectedList = async (ownerUserId) => {
+  const context = resolveBringSelectedListContext(ownerUserId)
+  const responseBody = await callBringSidecar('/selected-list', {
+    username: context.username,
+    password: context.password,
+    listUuid: context.selectedListUuid,
+  })
+  const snapshot = parseBringSnapshotFromSidecar(responseBody)
+  const refreshedAt = new Date().toISOString()
+
+  upsertBringListSnapshot(
+    ownerUserId,
+    context.selectedListUuid,
+    JSON.stringify(snapshot),
+    refreshedAt,
+  )
+
+  return buildBringListPayload(snapshot, 'live', refreshedAt, null)
+}
+
+const getBringListWithFallback = async (ownerUserId) => {
+  try {
+    return await refreshBringSelectedList(ownerUserId)
+  } catch (error) {
+    if (!isBringTemporaryReadFailure(error)) {
+      throw error
+    }
+
+    const context = resolveBringSelectedListContext(ownerUserId)
+    const cachedSnapshot = selectBringListSnapshot(ownerUserId)
+
+    if (!cachedSnapshot || cachedSnapshot.listUuid !== context.selectedListUuid) {
+      throw error
+    }
+
+    const staleAt = cachedSnapshot.staleAt ?? new Date().toISOString()
+    markBringListSnapshotStale(ownerUserId, staleAt)
+
+    return buildBringListPayload(
+      cachedSnapshot,
+      'stale',
+      cachedSnapshot.refreshedAt,
+      staleAt,
+    )
+  }
+}
+
+const mutateBringSelectedList = async (ownerUserId, pathname, mutation) => {
+  const context = resolveBringSelectedListContext(ownerUserId)
+  const responseBody = await callBringSidecar(pathname, {
+    username: context.username,
+    password: context.password,
+    listUuid: context.selectedListUuid,
+    ...mutation,
+  })
+  const snapshot = parseBringSnapshotFromSidecar(responseBody)
+  const refreshedAt = new Date().toISOString()
+
+  upsertBringListSnapshot(
+    ownerUserId,
+    context.selectedListUuid,
+    JSON.stringify(snapshot),
+    refreshedAt,
+  )
+
+  return buildBringListPayload(snapshot, 'live', refreshedAt, null)
+}
+
 const seedCount = getFamilyMemberCount(defaultAppUserId)
 const widgetSeedCount = getWidgetCount(defaultAppUserId)
 const calendarEventSeedCount = getCalendarEventCount(defaultAppUserId)
@@ -2446,6 +3077,8 @@ if (widgetSeedCount === 0) {
 }
 
 ensureSeedWidgetsPresent(defaultAppUserId)
+
+ensureBringWidgetDefaultPlacement()
 
 deleteUnsupportedWidgets()
 
@@ -2848,6 +3481,22 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/bring/settings') {
+    sendJson(response, 200, { bringSettings: selectBringSettings(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/bring/list') {
+    try {
+      const bringList = await getBringListWithFallback(ownerUserId)
+      sendJson(response, 200, { bringList })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/audio-visual/recordings') {
     const requestedType = requestUrl.searchParams.get('type') ?? 'all'
 
@@ -3001,6 +3650,113 @@ const server = createServer(async (request, response) => {
       return
     } catch {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/bring/settings/lists') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const { username, password } = resolveBringCredentials(ownerUserId, body)
+
+      if (!username) {
+        sendJson(response, 400, { error: 'username is required.' })
+        return
+      }
+
+      if (!password) {
+        sendJson(response, 400, { error: 'password is required.' })
+        return
+      }
+
+      const lists = await loadBringLists(username, password)
+      const currentSettings = selectBringSettings(ownerUserId)
+      const selectedList = lists.find(
+        (entry) => entry.listUuid === currentSettings.selectedListUuid,
+      )
+
+      sendJson(response, 200, {
+        lists,
+        selectedListUuid: selectedList?.listUuid ?? '',
+        selectedListName: selectedList?.name ?? '',
+      })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/bring/list/items') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const itemName = sanitizeBringItemName(body?.itemName)
+
+    if (!itemName) {
+      sendJson(response, 400, { error: 'itemName is required.' })
+      return
+    }
+
+    try {
+      const bringList = await mutateBringSelectedList(ownerUserId, '/selected-list/items/add', {
+        itemName,
+        specification: sanitizeBringItemSpecification(body?.specification),
+        itemUuid: normalizeBringItemUuid(body?.itemUuid) || randomUUID(),
+      })
+      sendJson(response, 200, { bringList })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/bring/list/items/complete') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const itemName = sanitizeBringItemName(body?.itemName)
+
+    if (!itemName) {
+      sendJson(response, 400, { error: 'itemName is required.' })
+      return
+    }
+
+    try {
+      const bringList = await mutateBringSelectedList(
+        ownerUserId,
+        '/selected-list/items/complete',
+        {
+          itemName,
+          specification: sanitizeBringItemSpecification(body?.specification),
+          itemUuid: normalizeBringItemUuid(body?.itemUuid),
+        },
+      )
+      sendJson(response, 200, { bringList })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
       return
     }
   }
@@ -3183,6 +3939,113 @@ const server = createServer(async (request, response) => {
 
   if (
     request.method === 'PATCH' &&
+    requestUrl.pathname === '/api/bring/settings'
+  ) {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      ensureBringCredentialEncryptionConfigured()
+
+      const {
+        currentIntegration,
+        username,
+        password,
+        hasStoredPassword,
+      } = resolveBringCredentials(ownerUserId, body)
+
+      if (!username) {
+        sendJson(response, 400, { error: 'username is required.' })
+        return
+      }
+
+      if (!password) {
+        sendJson(response, 400, { error: 'password is required.' })
+        return
+      }
+
+      const lists = await loadBringLists(username, password)
+      const requestedSelectedListUuid = normalizeBringListUuid(
+        body?.selectedListUuid ?? currentIntegration?.selected_list_uuid,
+      )
+      const selectedList = requestedSelectedListUuid
+        ? lists.find((entry) => entry.listUuid === requestedSelectedListUuid) ?? null
+        : null
+
+      if (lists.length > 0 && !selectedList) {
+        sendJson(response, 400, {
+          error: 'selectedListUuid must match one available Bring shopping list.',
+        })
+        return
+      }
+
+      const encryptedPasswordJson =
+        typeof body?.password === 'string' && body.password.length > 0
+          ? encryptBringPassword(password)
+          : hasStoredPassword
+            ? currentIntegration.encrypted_password_json
+            : encryptBringPassword(password)
+      const timestamp = new Date().toISOString()
+
+      upsertBringIntegration(
+        ownerUserId,
+        username,
+        encryptedPasswordJson,
+        selectedList?.listUuid ?? '',
+        selectedList?.name ?? '',
+        timestamp,
+      )
+
+      sendJson(response, 200, {
+        bringSettings: selectBringSettings(ownerUserId),
+        lists,
+      })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'PATCH' && requestUrl.pathname === '/api/bring/list/items') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const itemName = sanitizeBringItemName(body?.itemName)
+
+    if (!itemName) {
+      sendJson(response, 400, { error: 'itemName is required.' })
+      return
+    }
+
+    try {
+      const bringList = await mutateBringSelectedList(ownerUserId, '/selected-list/items/update', {
+        itemName,
+        specification: sanitizeBringItemSpecification(body?.specification),
+        itemUuid: normalizeBringItemUuid(body?.itemUuid),
+      })
+      sendJson(response, 200, { bringList })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'PATCH' &&
     requestUrl.pathname.startsWith('/api/widgets/')
   ) {
     const widgetId = requestUrl.pathname.replace('/api/widgets/', '')
@@ -3249,6 +4112,36 @@ const server = createServer(async (request, response) => {
       return
     } catch {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (request.method === 'DELETE' && requestUrl.pathname === '/api/bring/list/items') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const itemName = sanitizeBringItemName(body?.itemName)
+
+    if (!itemName) {
+      sendJson(response, 400, { error: 'itemName is required.' })
+      return
+    }
+
+    try {
+      const bringList = await mutateBringSelectedList(ownerUserId, '/selected-list/items/remove', {
+        itemName,
+        itemUuid: normalizeBringItemUuid(body?.itemUuid),
+      })
+      sendJson(response, 200, { bringList })
+      return
+    } catch (error) {
+      sendBringIntegrationError(response, error)
       return
     }
   }

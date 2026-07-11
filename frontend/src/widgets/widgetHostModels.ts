@@ -55,6 +55,31 @@ export interface TodoItem extends ScopedItem {
   done: boolean
 }
 
+export interface BringListItem {
+  itemName: string
+  specification: string
+  uuid: string
+}
+
+export interface BringListData {
+  listUuid: string
+  listName: string
+  openItems: BringListItem[]
+  recentItems: BringListItem[]
+  openItemCount: number
+  recentItemCount: number
+  freshness: 'live' | 'stale'
+  readOnly: boolean
+  refreshedAt: string | null
+  staleAt: string | null
+}
+
+export interface BringWidgetData {
+  status: 'loading' | 'ready' | 'not-configured' | 'error'
+  list: BringListData | null
+  message: string | null
+}
+
 export interface NewsItem extends ScopedItem {
   source: string
   headline: string

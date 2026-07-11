@@ -23,6 +23,15 @@ import {
   fetchFamilyMembers,
   updateFamilyMember,
 } from './api/familyMembers'
+import {
+  BringApiError,
+  completeBringItem,
+  createBringItem,
+  deleteBringItem,
+  fetchBringList,
+  type BringListRecord,
+  updateBringItem,
+} from './api/bring'
 import { isAuthRequiredError } from './api/request'
 import {
   fetchWidgetSettings,
@@ -75,11 +84,13 @@ import {
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
 } from './widgets/WidgetMetadataAdminHost'
+import { WidgetSettingsHost } from './widgets/WidgetSettingsHost'
 import { normalizeAudioVisualSettings } from './widgets/audio-visual/AudioVisualPanel'
 import type {
   AgendaItem,
   Arrival,
   AudienceId,
+  BringWidgetData,
   FamilyMember,
   FilterId,
   FilterOption,
@@ -125,6 +136,15 @@ type MemberId = string
 interface PendingInteractionMeasurement {
   label: string
   startedAt: number
+}
+
+interface FullscreenDocument extends Document {
+  webkitFullscreenElement?: Element | null
+  webkitExitFullscreen?: () => Promise<void> | void
+}
+
+interface FullscreenElementWithWebkit extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void> | void
 }
 
 const resolveAppMessage = (
@@ -281,6 +301,18 @@ const defaultFallbackWeatherData = buildFallbackWeatherData(
   DEFAULT_LANGUAGE_CODE,
 )
 
+const defaultBringWidgetData: BringWidgetData = {
+  status: 'loading',
+  list: null,
+  message: null,
+}
+
+const bringNotConfiguredErrorCodes = new Set([
+  'bring_username_missing',
+  'bring_password_missing',
+  'bring_selected_list_missing',
+])
+
 const commuteNotes: Record<string, string> = {
   [ALL_FILTER_ID]:
     'Household advisory: dry commute now, light rain most likely after the evening return window.',
@@ -338,6 +370,16 @@ const getAudioVisualSettingsFromAppPreferences = (
     microphoneEnabled: appPreferences.audioVisualMicrophoneEnabled,
   })
 
+const buildBringWidgetData = (
+  list: BringListRecord | null,
+  status: BringWidgetData['status'],
+  message: string | null = null,
+): BringWidgetData => ({
+  status,
+  list,
+  message,
+})
+
 const normalizeAppShellPersistedState = (
   value: unknown,
 ): AppShellPersistedState => {
@@ -389,6 +431,16 @@ const persistLocalAppShellState = (userId: string, state: AppShellPersistedState
   }
 }
 
+const getFullscreenElement = () => {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const fullscreenDocument = document as FullscreenDocument
+
+  return document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null
+}
+
 function App() {
   const [now, setNow] = useState(() => new Date())
   const [authStatus, setAuthStatus] = useState<AuthStatus>('bootstrapping')
@@ -415,6 +467,8 @@ function App() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [calendarEvents, setCalendarEvents] = useState<AgendaItem[]>([])
   const [todoWidgetItems, setTodoWidgetItems] = useState<TodoItem[]>([])
+  const [bringWidgetData, setBringWidgetData] =
+    useState<BringWidgetData>(defaultBringWidgetData)
   const [weatherWidgetData, setWeatherWidgetData] =
     useState<WeatherWidgetData>(defaultFallbackWeatherData)
   const [weatherRefreshToken, setWeatherRefreshToken] = useState(0)
@@ -464,7 +518,7 @@ function App() {
   const [softwareKeyboardTarget, setSoftwareKeyboardTarget] =
     useState<SoftwareKeyboardTarget | null>(null)
   const [isFullscreenActive, setIsFullscreenActive] = useState(() =>
-    typeof document !== 'undefined' ? Boolean(document.fullscreenElement) : false,
+    Boolean(getFullscreenElement()),
   )
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
   const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
@@ -514,6 +568,7 @@ function App() {
     setFamilyMembers([])
     setCalendarEvents([])
     setTodoWidgetItems([])
+    setBringWidgetData(defaultBringWidgetData)
     setWeatherWidgetData(defaultFallbackWeatherData)
     setWeatherRefreshToken(0)
     setNextWeatherRefreshAt(null)
@@ -810,13 +865,18 @@ function App() {
     }
 
     const handleFullscreenChange = () => {
-      setIsFullscreenActive(Boolean(document.fullscreenElement))
+      setIsFullscreenActive(Boolean(getFullscreenElement()))
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange as EventListener)
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener(
+        'webkitfullscreenchange',
+        handleFullscreenChange as EventListener,
+      )
     }
   }, [])
 
@@ -897,6 +957,59 @@ function App() {
       window.clearInterval(runtimePollInterval)
     }
   }, [])
+
+  const applyBringListRecord = (bringList: BringListRecord) => {
+    setBringWidgetData(buildBringWidgetData(bringList, 'ready'))
+    setWidgetHealthMap((currentValues) => ({
+      ...currentValues,
+      bring: {
+        widgetId: 'bring',
+        refreshStatus: bringList.freshness === 'stale' ? 'cached' : 'ok',
+        lastRefreshAt: bringList.refreshedAt ?? new Date().toISOString(),
+        itemCount: bringList.openItemCount,
+        failureState: bringList.freshness === 'stale' ? 'stale-cache' : undefined,
+      },
+    }))
+  }
+
+  const applyBringLoadFailure = (error: unknown) => {
+    if (
+      error instanceof BringApiError &&
+      error.errorCode &&
+      bringNotConfiguredErrorCodes.has(error.errorCode)
+    ) {
+      setBringWidgetData(buildBringWidgetData(null, 'not-configured', error.message))
+      setWidgetHealthMap((currentValues) => ({
+        ...currentValues,
+        bring: {
+          widgetId: 'bring',
+          refreshStatus: 'static',
+          failureState: error.errorCode ?? 'bring-not-configured',
+        },
+      }))
+      return
+    }
+
+    const message = error instanceof Error ? error.message : 'Failed to load Bring list.'
+    setBringWidgetData(buildBringWidgetData(null, 'error', message))
+    setWidgetHealthMap((currentValues) => ({
+      ...currentValues,
+      bring: {
+        widgetId: 'bring',
+        refreshStatus: 'error',
+        failureState:
+          error instanceof BringApiError
+            ? error.errorCode ?? 'bring-load-failed'
+            : 'bring-load-failed',
+      },
+    }))
+  }
+
+  const refreshBringWidgetData = async () => {
+    const bringList = await fetchBringList()
+    applyBringListRecord(bringList)
+    return bringList
+  }
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -1210,6 +1323,121 @@ function App() {
     }
   }, [authStatus, todoRefreshToken])
 
+  useEffect(() => {
+    if (authStatus !== 'authenticated') {
+      return
+    }
+
+    if (!registeredWidgets.some((widget) => widget.entity.id === 'bring')) {
+      return
+    }
+
+    let cancelled = false
+
+    setBringWidgetData((currentValue) =>
+      currentValue.status === 'ready' ? currentValue : defaultBringWidgetData,
+    )
+
+    fetchBringList()
+      .then((bringList) => {
+        if (!cancelled) {
+          applyBringListRecord(bringList)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+
+          applyBringLoadFailure(error)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authStatus, registeredWidgets, viewMode])
+
+  const handleBringRefresh = async () => {
+    try {
+      return await refreshBringWidgetData()
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        throw error
+      }
+
+      applyBringLoadFailure(error)
+      throw error
+    }
+  }
+
+  const handleBringCreateItem = async (input: { itemName: string; specification: string }) => {
+    try {
+      const bringList = await createBringItem(input)
+      applyBringListRecord(bringList)
+      return bringList
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+      }
+
+      throw error
+    }
+  }
+
+  const handleBringUpdateItem = async (input: {
+    itemName: string
+    specification: string
+    itemUuid?: string
+  }) => {
+    try {
+      const bringList = await updateBringItem(input)
+      applyBringListRecord(bringList)
+      return bringList
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+      }
+
+      throw error
+    }
+  }
+
+  const handleBringDeleteItem = async (input: { itemName: string; itemUuid?: string }) => {
+    try {
+      const bringList = await deleteBringItem(input)
+      applyBringListRecord(bringList)
+      return bringList
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+      }
+
+      throw error
+    }
+  }
+
+  const handleBringCompleteItem = async (input: {
+    itemName: string
+    specification: string
+    itemUuid?: string
+  }) => {
+    try {
+      const bringList = await completeBringItem(input)
+      applyBringListRecord(bringList)
+      return bringList
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+      }
+
+      throw error
+    }
+  }
+
   const membersById = new Map(familyMembers.map((member) => [member.id, member]))
   const filterOptions: FilterOption[] = [
     {
@@ -1520,10 +1748,29 @@ function App() {
     }
 
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen()
+      const fullscreenDocument = document as FullscreenDocument
+      const fullscreenElement = getFullscreenElement()
+
+      if (fullscreenElement) {
+        if (typeof document.exitFullscreen === 'function') {
+          await document.exitFullscreen()
+          return
+        }
+
+        if (typeof fullscreenDocument.webkitExitFullscreen === 'function') {
+          await fullscreenDocument.webkitExitFullscreen()
+        }
       } else {
-        await document.documentElement.requestFullscreen()
+        const rootElement = document.documentElement as FullscreenElementWithWebkit
+
+        if (typeof rootElement.requestFullscreen === 'function') {
+          await rootElement.requestFullscreen()
+          return
+        }
+
+        if (typeof rootElement.webkitRequestFullscreen === 'function') {
+          await rootElement.webkitRequestFullscreen()
+        }
       }
     } catch {
       // Ignore fullscreen errors so the settings panel remains usable.
@@ -1993,6 +2240,7 @@ function App() {
               visibleArrivals={visibleArrivals}
               visibleAgenda={visibleAgenda}
               visibleTodos={visibleTodos}
+              bringData={bringWidgetData}
               familyMembers={familyMembers}
               homeCountryCode={selectedCountryCode}
               calendarSettings={combinedWidgetSettingsMap.calendar ?? {}}
@@ -2001,6 +2249,11 @@ function App() {
               commuteNote={commuteNote}
               focusedCalendarEventId={calendarFocusSelection?.eventId ?? null}
               focusedCalendarEventDate={calendarFocusSelection?.eventDate ?? null}
+              onBringRefresh={handleBringRefresh}
+              onBringCreateItem={handleBringCreateItem}
+              onBringUpdateItem={handleBringUpdateItem}
+              onBringDeleteItem={handleBringDeleteItem}
+              onBringCompleteItem={handleBringCompleteItem}
               renderAudienceBadge={renderAudienceBadge}
               onToggleTodoDone={handleToggleTodoDone}
               onCalendarDataChanged={handleCalendarDataChanged}
@@ -2275,6 +2528,19 @@ function App() {
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
                     throw new Error('widget metadata save failed')
+                  })
+                }
+              />
+
+              <WidgetSettingsHost
+                appText={appText}
+                languageCode={selectedLanguageCode}
+                registeredWidgets={registeredWidgets}
+                widgetSettingsMap={combinedWidgetSettingsMap}
+                onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
+                  handleSaveWidgetSettings(widgetId, settings).catch(() => {
+                    setWidgetSettingsErrorKey('widgetSettingsSaveFailed')
+                    throw new Error('widget settings save failed')
                   })
                 }
               />

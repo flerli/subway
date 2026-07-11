@@ -86,6 +86,14 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     userScope: createScope('member', ['family-3']),
     placementZones: [createPlacement('a2', 1)],
   }),
+  normalizeWidgetEntity({
+    id: 'bring',
+    title: 'Bring',
+    subwayColor: '#7ac943',
+    sourceLocation: 'bring',
+    userScope: createScope('all'),
+    placementZones: [createPlacement('service-board', 2)],
+  }),
 ]
 
 export const mergeWidgetEntitiesWithSeed = (
