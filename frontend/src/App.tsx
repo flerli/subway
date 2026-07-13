@@ -178,6 +178,7 @@ const formatRuntimeTimestamp = (
 }
 
 type ViewMode = 'board' | 'settings'
+type SettingsHubPanelId = 'system' | 'family'
 type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
 type AppPreferencesErrorKey = 'load-failed' | 'save-failed'
 type AppTextMessageKey = keyof AppTextBundle['messages']
@@ -513,6 +514,8 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('board')
   const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
   const [expandedWidgetSettingsId, setExpandedWidgetSettingsId] = useState<string | null>(null)
+  const [expandedSettingsHubPanelId, setExpandedSettingsHubPanelId] =
+    useState<SettingsHubPanelId | null>(null)
   const [calendarFocusSelection, setCalendarFocusSelection] = useState<CalendarFocusSelection | null>(null)
   const [registeredWidgets, setRegisteredWidgets] = useState<RegisteredWidget[]>([])
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
@@ -1875,6 +1878,334 @@ function App() {
     }
   }
 
+  const toggleExpandedSettingsHubPanel = (panelId: SettingsHubPanelId) => {
+    setExpandedSettingsHubPanelId((currentPanelId) =>
+      currentPanelId === panelId ? null : panelId,
+    )
+  }
+
+  const renderSystemSettingsPanel = () => {
+    const selectedLanguageLabel =
+      supportedLanguageOptions.find((language) => language.code === selectedLanguageCode)
+        ?.label ?? selectedLanguageCode.toUpperCase()
+
+    return (
+      <article className="settings-card settings-card--expanded-panel">
+        <div className="widget-head">
+          <div className="widget-flag">
+            <span className="route-bullet route-bullet--large" style={badgeStyle('#7dd3fc')}>
+              S
+            </span>
+            <div>
+              <p className="widget-kicker">{appText.settings.systemKicker}</p>
+              <h3>{appText.settings.systemHubTitle}</h3>
+            </div>
+          </div>
+
+          <div className="widget-head-side">
+            <p className="widget-meta">{`${selectedLanguageLabel} · ${selectedCountryCode}`}</p>
+            <button
+              type="button"
+              className="widget-action-button is-active"
+              aria-label={appText.settings.closeExpandedPanelAriaLabel}
+              onClick={() => setExpandedSettingsHubPanelId(null)}
+            >
+              <span>{appText.boardHost.collapseAction}</span>
+            </button>
+          </div>
+        </div>
+
+        <p className="settings-copy">{appText.settings.systemHubCopy}</p>
+
+        <div className="settings-extended-grid settings-extended-grid--system">
+          <article className="settings-card">
+            <div className="settings-card-head">
+              <p className="widget-kicker">{appText.settings.systemKicker}</p>
+              <h3>{appText.settings.systemTitle}</h3>
+            </div>
+
+            <p className="settings-copy">{appText.settings.systemDescription}</p>
+
+            <div className="settings-runtime-list">
+              <div className="settings-runtime-row">
+                <span>{appText.settings.buildVersionLabel}</span>
+                <strong className="settings-runtime-value settings-runtime-value--mono">
+                  {settingsBuildIdLabel}
+                </strong>
+              </div>
+
+              <div className="settings-runtime-row">
+                <span>{appText.settings.latestDeploymentLabel}</span>
+                <strong className="settings-runtime-value">{latestDeploymentLabel}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="settings-card">
+            <div className="settings-card-head">
+              <p className="widget-kicker">{appText.settings.languageKicker}</p>
+              <h3>{appText.settings.languageTitle}</h3>
+            </div>
+
+            <p className="settings-copy">{appText.settings.languageDescription}</p>
+
+            <label className="settings-label">
+              <span>{appText.settings.languageLabel}</span>
+              <select
+                className="settings-input settings-select"
+                value={selectedLanguageCode}
+                onChange={(event) => {
+                  void handleLanguagePreferenceChange(
+                    normalizeLanguageCode(event.target.value),
+                  )
+                }}
+                disabled={appPreferencesPending}
+              >
+                {supportedLanguageOptions.map((language) => (
+                  <option key={language.code} value={language.code}>
+                    {language.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <p className="settings-note">
+              {appPreferencesPending
+                ? appText.settings.languageSavingNote
+                : appText.settings.languagePersistenceNote}
+            </p>
+          </article>
+
+          <form className="settings-card settings-form" onSubmit={handleCountryPreferenceSubmit}>
+            <div className="settings-card-head">
+              <p className="widget-kicker">{appText.settings.countryKicker}</p>
+              <h3>{appText.settings.countryTitle}</h3>
+            </div>
+
+            <p className="settings-copy">{appText.settings.countryDescription}</p>
+
+            <label className="settings-label">
+              <span>{appText.settings.countryLabel}</span>
+              <input
+                className="settings-input"
+                type="text"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={2}
+                value={countryCodeDraft}
+                onChange={(event) =>
+                  setCountryCodeDraft(
+                    event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
+                  )
+                }
+                placeholder={appText.settings.countryPlaceholder}
+                disabled={appPreferencesPending}
+              />
+            </label>
+
+            <p className="settings-note">{appText.settings.countryFormatNote}</p>
+
+            <button
+              className="settings-submit"
+              type="submit"
+              disabled={
+                appPreferencesPending ||
+                !isCountryCodeDraftValid ||
+                normalizedCountryCodeDraft === selectedCountryCode
+              }
+            >
+              {appPreferencesPending
+                ? appText.settings.countrySavingNote
+                : appText.settings.countrySaveAction}
+            </button>
+
+            <p className="settings-note">{appText.settings.countryPersistenceNote}</p>
+          </form>
+
+          <article className="settings-card">
+            <div className="settings-card-head">
+              <p className="widget-kicker">{appText.settings.displayKicker}</p>
+              <h3>{appText.settings.displayTitle}</h3>
+            </div>
+
+            <p className="settings-copy">{appText.settings.displayDescription}</p>
+
+            <button
+              className="settings-submit"
+              type="button"
+              onClick={() => {
+                void handleToggleFullscreen()
+              }}
+            >
+              {isFullscreenActive
+                ? appText.settings.fullscreenExitAction
+                : appText.settings.fullscreenEnterAction}
+            </button>
+
+            <p className="settings-note">
+              {isFullscreenActive
+                ? appText.settings.fullscreenActiveState
+                : appText.settings.fullscreenInactiveState}
+            </p>
+          </article>
+        </div>
+      </article>
+    )
+  }
+
+  const renderFamilySettingsPanel = () => (
+    <article className="settings-card settings-card--expanded-panel">
+      <div className="widget-head">
+        <div className="widget-flag">
+          <span className="route-bullet route-bullet--large" style={badgeStyle('#4aa8ff')}>
+            F
+          </span>
+          <div>
+            <p className="widget-kicker">{appText.settings.panelKicker}</p>
+            <h3>{appText.settings.familyMembersTitle}</h3>
+          </div>
+        </div>
+
+        <div className="widget-head-side">
+          <p className="widget-meta">
+            {formatLocalizedText(appText.settings.familyMembersMeta, {
+              count: familyMembers.length,
+            })}
+          </p>
+          <button
+            type="button"
+            className="widget-action-button is-active"
+            aria-label={appText.settings.closeExpandedPanelAriaLabel}
+            onClick={() => setExpandedSettingsHubPanelId(null)}
+          >
+            <span>{appText.boardHost.collapseAction}</span>
+          </button>
+        </div>
+      </div>
+
+      <p className="settings-copy">{appText.settings.familyMembersCopy}</p>
+
+      <div className="settings-grid">
+        <div className="member-list">
+          {familyMembers.map((member) => {
+            const isDeletingMember = deletingFamilyMemberId === member.id
+
+            return (
+              <article className="member-editor" key={member.id}>
+                <div className="member-editor-head">
+                  <span
+                    className="route-bullet route-bullet--large"
+                    style={badgeStyle(normalizeHexColor(member.color))}
+                  >
+                    {getInitial(member.firstName)}
+                  </span>
+                  <div>
+                    <h3>{getMemberLabel(member)}</h3>
+                  </div>
+                </div>
+
+                <div className="member-form-fields">
+                  <label className="settings-label">
+                    <span>{appText.settings.firstNameLabel}</span>
+                    <input
+                      className="settings-input"
+                      type="text"
+                      value={member.firstName}
+                      disabled={isDeletingMember}
+                      onChange={(event) =>
+                        updateMember(member.id, 'firstName', event.target.value)
+                      }
+                      placeholder={appText.settings.firstNamePlaceholder}
+                    />
+                  </label>
+
+                  <label className="settings-label settings-label--color">
+                    <span>{appText.settings.colorLabel}</span>
+                    <input
+                      className="settings-color"
+                      type="color"
+                      value={normalizeHexColor(member.color)}
+                      disabled={isDeletingMember}
+                      onChange={(event) =>
+                        updateMember(member.id, 'color', event.target.value)
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="member-editor-actions">
+                  <button
+                    className="settings-submit settings-submit--secondary settings-submit--danger"
+                    type="button"
+                    disabled={isDeletingMember}
+                    onClick={() => void handleDeleteMember(member)}
+                  >
+                    {isDeletingMember
+                      ? appText.settings.deletingMemberAction
+                      : appText.settings.deleteMemberAction}
+                  </button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+
+        <div className="settings-side">
+          <form className="settings-card settings-form" onSubmit={handleAddMember}>
+            <div className="settings-card-head">
+              <p className="widget-kicker">{appText.settings.addMemberKicker}</p>
+              <h3>{appText.settings.addMemberTitle}</h3>
+            </div>
+
+            <label className="settings-label">
+              <span>{appText.settings.firstNameLabel}</span>
+              <input
+                className="settings-input"
+                type="text"
+                value={newMemberName}
+                onChange={(event) => setNewMemberName(event.target.value)}
+                placeholder={appText.settings.firstNamePlaceholder}
+              />
+            </label>
+
+            <label className="settings-label settings-label--color">
+              <span>{appText.settings.colorLabel}</span>
+              <input
+                className="settings-color"
+                type="color"
+                value={newMemberColor}
+                onChange={(event) => setNewMemberColor(event.target.value)}
+              />
+            </label>
+
+            <button className="settings-submit" type="submit">
+              {appText.settings.addMemberAction}
+            </button>
+          </form>
+        </div>
+      </div>
+    </article>
+  )
+
+  const renderExpandedSettingsHubPanel = () => {
+    if (expandedSettingsHubPanelId === 'system') {
+      return renderSystemSettingsPanel()
+    }
+
+    if (expandedSettingsHubPanelId === 'family') {
+      return renderFamilySettingsPanel()
+    }
+
+    return (
+      <div className="empty-state empty-state--expanded">
+        <p className="empty-title">{appText.settings.noExpandedPanelTitle}</p>
+        <p className="empty-copy">{appText.settings.noExpandedPanelCopy}</p>
+      </div>
+    )
+  }
+
   const renderAudienceBadge = (
     audience: readonly AudienceId[],
     sizeClassName = 'route-bullet--small',
@@ -2371,17 +2702,10 @@ function App() {
                   </span>
                   <div>
                     <p className="widget-kicker">{appText.settings.panelKicker}</p>
-                    <h2>{appText.settings.familyMembersTitle}</h2>
+                    <h2>{appText.shell.familySettingsTitle}</h2>
                   </div>
                 </div>
-                <p className="widget-meta">
-                  {formatLocalizedText(appText.settings.familyMembersMeta, {
-                    count: familyMembers.length,
-                  })}
-                </p>
               </div>
-
-              <p className="settings-copy">{appText.settings.familyMembersCopy}</p>
 
               {familyMembersError ? (
                 <p className="settings-note settings-note--warning">{familyMembersError}</p>
@@ -2415,238 +2739,103 @@ function App() {
                 <p className="settings-note settings-note--warning">{weatherError}</p>
               ) : null}
 
-              <div className="settings-grid">
-                <div className="member-list">
-                  {familyMembers.map((member) => {
-                    const isDeletingMember = deletingFamilyMemberId === member.id
-
-                    return (
-                    <article className="member-editor" key={member.id}>
-                      <div className="member-editor-head">
-                        <span
-                          className="route-bullet route-bullet--large"
-                          style={badgeStyle(normalizeHexColor(member.color))}
-                        >
-                          {getInitial(member.firstName)}
-                        </span>
-                        <div>
-                          <h3>{getMemberLabel(member)}</h3>
-                        </div>
-                      </div>
-
-                      <div className="member-form-fields">
-                        <label className="settings-label">
-                          <span>{appText.settings.firstNameLabel}</span>
-                          <input
-                            className="settings-input"
-                            type="text"
-                            value={member.firstName}
-                            disabled={isDeletingMember}
-                            onChange={(event) =>
-                              updateMember(member.id, 'firstName', event.target.value)
-                            }
-                            placeholder={appText.settings.firstNamePlaceholder}
-                          />
-                        </label>
-
-                        <label className="settings-label settings-label--color">
-                          <span>{appText.settings.colorLabel}</span>
-                          <input
-                            className="settings-color"
-                            type="color"
-                            value={normalizeHexColor(member.color)}
-                            disabled={isDeletingMember}
-                            onChange={(event) =>
-                              updateMember(member.id, 'color', event.target.value)
-                            }
-                          />
-                        </label>
-                      </div>
-
-                      <div className="member-editor-actions">
-                        <button
-                          className="settings-submit settings-submit--secondary settings-submit--danger"
-                          type="button"
-                          disabled={isDeletingMember}
-                          onClick={() => void handleDeleteMember(member)}
-                        >
-                          {isDeletingMember
-                            ? appText.settings.deletingMemberAction
-                            : appText.settings.deleteMemberAction}
-                        </button>
-                      </div>
-                    </article>
-                    )
-                  })}
-                </div>
-
-                <div className="settings-side">
-                  <article className="settings-card">
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">{appText.settings.systemKicker}</p>
-                      <h3>{appText.settings.systemTitle}</h3>
-                    </div>
-
-                    <p className="settings-copy">{appText.settings.systemDescription}</p>
-
-                    <div className="settings-runtime-list">
-                      <div className="settings-runtime-row">
-                        <span>{appText.settings.buildVersionLabel}</span>
-                        <strong className="settings-runtime-value settings-runtime-value--mono">
-                          {settingsBuildIdLabel}
-                        </strong>
-                      </div>
-
-                      <div className="settings-runtime-row">
-                        <span>{appText.settings.latestDeploymentLabel}</span>
-                        <strong className="settings-runtime-value">{latestDeploymentLabel}</strong>
+              <div className="settings-hub-grid">
+                <article
+                  className={`settings-card settings-hub-card${
+                    expandedSettingsHubPanelId === 'system' ? ' is-active' : ''
+                  }`}
+                >
+                  <div className="widget-head">
+                    <div className="widget-flag">
+                      <span className="route-bullet route-bullet--large" style={badgeStyle('#7dd3fc')}>
+                        S
+                      </span>
+                      <div>
+                        <p className="widget-kicker">{appText.settings.systemKicker}</p>
+                        <h3>{appText.settings.systemHubTitle}</h3>
                       </div>
                     </div>
-                  </article>
-
-                  <article className="settings-card">
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">{appText.settings.languageKicker}</p>
-                      <h3>{appText.settings.languageTitle}</h3>
+                    <div className="widget-head-side">
+                      <p className="widget-meta">{`${selectedLanguageCode.toUpperCase()} · ${selectedCountryCode}`}</p>
                     </div>
+                  </div>
 
-                    <p className="settings-copy">{appText.settings.languageDescription}</p>
+                  <p className="settings-copy">{appText.settings.systemHubCopy}</p>
 
-                    <label className="settings-label">
-                      <span>{appText.settings.languageLabel}</span>
-                      <select
-                        className="settings-input settings-select"
-                        value={selectedLanguageCode}
-                        onChange={(event) => {
-                          void handleLanguagePreferenceChange(
-                            normalizeLanguageCode(event.target.value),
-                          )
-                        }}
-                        disabled={appPreferencesPending}
-                      >
-                        {supportedLanguageOptions.map((language) => (
-                          <option key={language.code} value={language.code}>
-                            {language.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <p className="settings-note">
-                      {appPreferencesPending
-                        ? appText.settings.languageSavingNote
-                        : appText.settings.languagePersistenceNote}
-                    </p>
-                  </article>
-
-                  <form className="settings-card settings-form" onSubmit={handleCountryPreferenceSubmit}>
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">{appText.settings.countryKicker}</p>
-                      <h3>{appText.settings.countryTitle}</h3>
-                    </div>
-
-                    <p className="settings-copy">{appText.settings.countryDescription}</p>
-
-                    <label className="settings-label">
-                      <span>{appText.settings.countryLabel}</span>
-                      <input
-                        className="settings-input"
-                        type="text"
-                        inputMode="text"
-                        autoCapitalize="characters"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        maxLength={2}
-                        value={countryCodeDraft}
-                        onChange={(event) =>
-                          setCountryCodeDraft(
-                            event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
-                          )
-                        }
-                        placeholder={appText.settings.countryPlaceholder}
-                        disabled={appPreferencesPending}
-                      />
-                    </label>
-
-                    <p className="settings-note">{appText.settings.countryFormatNote}</p>
-
+                  <div className="widget-head-side">
                     <button
-                      className="settings-submit"
-                      type="submit"
-                      disabled={
-                        appPreferencesPending ||
-                        !isCountryCodeDraftValid ||
-                        normalizedCountryCodeDraft === selectedCountryCode
-                      }
-                    >
-                      {appPreferencesPending
-                        ? appText.settings.countrySavingNote
-                        : appText.settings.countrySaveAction}
-                    </button>
-
-                    <p className="settings-note">{appText.settings.countryPersistenceNote}</p>
-                  </form>
-
-                  <article className="settings-card">
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">{appText.settings.displayKicker}</p>
-                      <h3>{appText.settings.displayTitle}</h3>
-                    </div>
-
-                    <p className="settings-copy">{appText.settings.displayDescription}</p>
-
-                    <button
-                      className="settings-submit"
                       type="button"
-                      onClick={() => {
-                        void handleToggleFullscreen()
-                      }}
+                      className={`widget-action-button${
+                        expandedSettingsHubPanelId === 'system' ? ' is-active' : ''
+                      }`}
+                      aria-label={
+                        expandedSettingsHubPanelId === 'system'
+                          ? appText.settings.closeExpandedPanelAriaLabel
+                          : appText.settings.openSystemPanelAriaLabel
+                      }
+                      onClick={() => toggleExpandedSettingsHubPanel('system')}
                     >
-                      {isFullscreenActive
-                        ? appText.settings.fullscreenExitAction
-                        : appText.settings.fullscreenEnterAction}
+                      <span>
+                        {expandedSettingsHubPanelId === 'system'
+                          ? appText.boardHost.collapseAction
+                          : appText.widgetAdmin.openSettingsAction}
+                      </span>
                     </button>
+                  </div>
+                </article>
 
-                    <p className="settings-note">
-                      {isFullscreenActive
-                        ? appText.settings.fullscreenActiveState
-                        : appText.settings.fullscreenInactiveState}
-                    </p>
-                  </article>
-
-                  <form className="settings-card settings-form" onSubmit={handleAddMember}>
-                    <div className="settings-card-head">
-                      <p className="widget-kicker">{appText.settings.addMemberKicker}</p>
-                      <h3>{appText.settings.addMemberTitle}</h3>
+                <article
+                  className={`settings-card settings-hub-card${
+                    expandedSettingsHubPanelId === 'family' ? ' is-active' : ''
+                  }`}
+                >
+                  <div className="widget-head">
+                    <div className="widget-flag">
+                      <span className="route-bullet route-bullet--large" style={badgeStyle('#4aa8ff')}>
+                        F
+                      </span>
+                      <div>
+                        <p className="widget-kicker">{appText.settings.panelKicker}</p>
+                        <h3>{appText.settings.familyMembersTitle}</h3>
+                      </div>
                     </div>
+                    <div className="widget-head-side">
+                      <p className="widget-meta">
+                        {formatLocalizedText(appText.settings.familyMembersMeta, {
+                          count: familyMembers.length,
+                        })}
+                      </p>
+                    </div>
+                  </div>
 
-                    <label className="settings-label">
-                      <span>{appText.settings.firstNameLabel}</span>
-                      <input
-                        className="settings-input"
-                        type="text"
-                        value={newMemberName}
-                        onChange={(event) => setNewMemberName(event.target.value)}
-                        placeholder={appText.settings.firstNamePlaceholder}
-                      />
-                    </label>
+                  <p className="settings-copy">{appText.settings.familyHubCopy}</p>
 
-                    <label className="settings-label settings-label--color">
-                      <span>{appText.settings.colorLabel}</span>
-                      <input
-                        className="settings-color"
-                        type="color"
-                        value={newMemberColor}
-                        onChange={(event) => setNewMemberColor(event.target.value)}
-                      />
-                    </label>
-
-                    <button className="settings-submit" type="submit">
-                      {appText.settings.addMemberAction}
+                  <div className="widget-head-side">
+                    <button
+                      type="button"
+                      className={`widget-action-button${
+                        expandedSettingsHubPanelId === 'family' ? ' is-active' : ''
+                      }`}
+                      aria-label={
+                        expandedSettingsHubPanelId === 'family'
+                          ? appText.settings.closeExpandedPanelAriaLabel
+                          : appText.settings.openFamilyPanelAriaLabel
+                      }
+                      onClick={() => toggleExpandedSettingsHubPanel('family')}
+                    >
+                      <span>
+                        {expandedSettingsHubPanelId === 'family'
+                          ? appText.boardHost.collapseAction
+                          : appText.widgetAdmin.openSettingsAction}
+                      </span>
                     </button>
-                  </form>
-                </div>
+                  </div>
+                </article>
               </div>
+
+              <section className="widget-zone widget-zone--expanded-stage">
+                {renderExpandedSettingsHubPanel()}
+              </section>
 
               <WidgetMetadataAdminHost
                 appText={appText}

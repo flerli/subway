@@ -44,11 +44,14 @@ export interface AppTextBundle {
     firstNamePlaceholder: string
     colorLabel: string
     systemKicker: string
+    systemHubTitle: string
+    systemHubCopy: string
     systemTitle: string
     systemDescription: string
     buildVersionLabel: string
     latestDeploymentLabel: string
     runtimeUnavailableValue: string
+    familyHubCopy: string
     languageKicker: string
     languageTitle: string
     languageDescription: string
@@ -79,6 +82,11 @@ export interface AppTextBundle {
     deleteMemberAction: string
     deletingMemberAction: string
     deleteMemberConfirm: string
+    openSystemPanelAriaLabel: string
+    openFamilyPanelAriaLabel: string
+    closeExpandedPanelAriaLabel: string
+    noExpandedPanelTitle: string
+    noExpandedPanelCopy: string
   }
   boardHost: {
     expandAction: string
@@ -229,12 +237,17 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNamePlaceholder: 'Forename',
       colorLabel: 'Color',
       systemKicker: 'System',
+      systemHubTitle: 'System',
+      systemHubCopy:
+        'Open build, language, home country, and display settings for this screen and account.',
       systemTitle: 'Build and deployment',
       systemDescription:
         'Reference details for the version currently running on this screen and the most recent deployment detected by the app runtime.',
       buildVersionLabel: 'Build ID',
       latestDeploymentLabel: 'Latest deployment',
       runtimeUnavailableValue: 'n/a',
+      familyHubCopy:
+        'Open the family roster to add members, rename them, and update their colors.',
       languageKicker: 'Language',
       languageTitle: 'Display language',
       languageDescription:
@@ -270,6 +283,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       deletingMemberAction: 'Deleting...',
       deleteMemberConfirm:
         'Delete {firstName} from the family roster? This cannot be undone.',
+      openSystemPanelAriaLabel: 'Open system settings in the lower panel',
+      openFamilyPanelAriaLabel: 'Open family member settings in the lower panel',
+      closeExpandedPanelAriaLabel: 'Close expanded settings panel',
+      noExpandedPanelTitle: 'No settings panel selected',
+      noExpandedPanelCopy:
+        'Open System or Family members to edit them in the lower panel.',
     },
     boardHost: {
       expandAction: 'Expand',
@@ -428,12 +447,17 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNamePlaceholder: 'Vorname',
       colorLabel: 'Farbe',
       systemKicker: 'System',
+      systemHubTitle: 'System',
+      systemHubCopy:
+        'Oeffne Build-, Sprach-, Heimatland- und Anzeigeeinstellungen fuer diesen Bildschirm und dieses Konto.',
       systemTitle: 'Build und Deployment',
       systemDescription:
         'Referenzdaten fuer die Version, die aktuell auf diesem Bildschirm laeuft, sowie fuer das zuletzt von der App-Laufzeit erkannte Deployment.',
       buildVersionLabel: 'Build-ID',
       latestDeploymentLabel: 'Letztes Deployment',
       runtimeUnavailableValue: 'k. A.',
+      familyHubCopy:
+        'Oeffne die Familienliste, um Mitglieder hinzuzufuegen, umzubenennen und ihre Farben zu aendern.',
       languageKicker: 'Sprache',
       languageTitle: 'Anzeigesprache',
       languageDescription:
@@ -470,6 +494,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       deletingMemberAction: 'Wird geloescht...',
       deleteMemberConfirm:
         '{firstName} aus der Familienliste loeschen? Dies kann nicht rueckgaengig gemacht werden.',
+      openSystemPanelAriaLabel: 'Systemeinstellungen im unteren Bereich oeffnen',
+      openFamilyPanelAriaLabel:
+        'Familienmitglied-Einstellungen im unteren Bereich oeffnen',
+      closeExpandedPanelAriaLabel: 'Erweiterten Einstellungsbereich schliessen',
+      noExpandedPanelTitle: 'Kein Einstellungsbereich ausgewaehlt',
+      noExpandedPanelCopy:
+        'Oeffne System oder Familienmitglieder, um sie im unteren Bereich zu bearbeiten.',
     },
     boardHost: {
       expandAction: 'Oeffnen',
@@ -636,12 +667,17 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNamePlaceholder: 'Prenom',
       colorLabel: 'Couleur',
       systemKicker: 'Systeme',
+      systemHubTitle: 'Systeme',
+      systemHubCopy:
+        'Ouvrez les reglages de build, de langue, de pays de reference et d affichage pour cet ecran et ce compte.',
       systemTitle: 'Build et deploiement',
       systemDescription:
         'Informations de reference sur la version actuellement executee sur cet ecran et sur le deploiement le plus recent detecte par le runtime de l application.',
       buildVersionLabel: 'ID du build',
       latestDeploymentLabel: 'Dernier deploiement',
       runtimeUnavailableValue: 'n/d',
+      familyHubCopy:
+        'Ouvrez la liste familiale pour ajouter des membres, les renommer et mettre a jour leurs couleurs.',
       languageKicker: 'Langue',
       languageTitle: 'Langue d affichage',
       languageDescription:
@@ -678,6 +714,14 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       deletingMemberAction: 'Suppression...',
       deleteMemberConfirm:
         'Supprimer {firstName} de la liste familiale ? Cette action est definitive.',
+      openSystemPanelAriaLabel:
+        'Ouvrir les reglages systeme dans le panneau inferieur',
+      openFamilyPanelAriaLabel:
+        'Ouvrir les reglages des membres de la famille dans le panneau inferieur',
+      closeExpandedPanelAriaLabel: 'Fermer le panneau de reglages detaille',
+      noExpandedPanelTitle: 'Aucun panneau de reglages selectionne',
+      noExpandedPanelCopy:
+        'Ouvrez Systeme ou Membres de la famille pour les modifier dans le panneau inferieur.',
     },
     boardHost: {
       expandAction: 'Etendre',
@@ -844,12 +888,17 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNamePlaceholder: 'Nombre',
       colorLabel: 'Color',
       systemKicker: 'Sistema',
+      systemHubTitle: 'Sistema',
+      systemHubCopy:
+        'Abre la compilacion, el idioma, el pais de referencia y la configuracion de pantalla de esta pantalla y esta cuenta.',
       systemTitle: 'Build y despliegue',
       systemDescription:
         'Detalles de referencia de la version que se esta ejecutando en esta pantalla y del despliegue mas reciente detectado por el runtime de la aplicacion.',
       buildVersionLabel: 'ID de build',
       latestDeploymentLabel: 'Ultimo despliegue',
       runtimeUnavailableValue: 'n/d',
+      familyHubCopy:
+        'Abre la lista familiar para agregar miembros, renombrarlos y actualizar sus colores.',
       languageKicker: 'Idioma',
       languageTitle: 'Idioma de pantalla',
       languageDescription:
@@ -886,6 +935,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       deletingMemberAction: 'Eliminando...',
       deleteMemberConfirm:
         'Eliminar a {firstName} de la lista familiar? Esta accion no se puede deshacer.',
+      openSystemPanelAriaLabel: 'Abrir ajustes del sistema en el panel inferior',
+      openFamilyPanelAriaLabel:
+        'Abrir ajustes de miembros de la familia en el panel inferior',
+      closeExpandedPanelAriaLabel: 'Cerrar panel ampliado de ajustes',
+      noExpandedPanelTitle: 'No hay panel de ajustes seleccionado',
+      noExpandedPanelCopy:
+        'Abre Sistema o Miembros de la familia para editarlos en el panel inferior.',
     },
     boardHost: {
       expandAction: 'Expandir',

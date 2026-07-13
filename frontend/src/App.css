@@ -1706,12 +1706,29 @@ select {
   gap: 14px;
 }
 
+.settings-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .member-list,
 .settings-side,
 .widget-number-list,
 .settings-form {
   display: grid;
   gap: 12px;
+}
+
+.settings-hub-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.settings-hub-card.is-active {
+  border-color: rgba(214, 232, 255, 0.32);
+  background: rgba(214, 232, 255, 0.07);
 }
 
 .member-list {
@@ -1790,6 +1807,23 @@ select {
 .settings-card-head {
   display: grid;
   gap: 4px;
+}
+
+.settings-card--expanded-panel {
+  min-height: 100%;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.settings-extended-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-extended-grid--system {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .settings-label {
@@ -3084,7 +3118,12 @@ select {
 }
 
 @container (max-width: 1220px) {
+  .settings-hub-grid,
   .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-extended-grid--system {
     grid-template-columns: 1fr;
   }
 
@@ -3160,6 +3199,7 @@ select {
   .calendar-detail-event-row,
   .weather-summary,
   .member-form-fields,
+  .settings-hub-grid,
   .settings-grid,
   .calendar-event-row-actions {
     grid-template-columns: 1fr;
