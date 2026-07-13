@@ -101,6 +101,7 @@ export interface AppTextBundle {
     synced: string
     syncFailed: string
     idle: string
+    openSettingsAction: string
     titleLabel: string
     letterLabel: string
     colorLabel: string
@@ -293,6 +294,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synced',
       syncFailed: 'Sync failed',
       idle: 'Idle',
+      openSettingsAction: 'Open',
       titleLabel: 'Title',
       letterLabel: 'Letter',
       colorLabel: 'Color',
@@ -492,6 +494,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synchronisiert',
       syncFailed: 'Synchronisierung fehlgeschlagen',
       idle: 'Leerlauf',
+      openSettingsAction: 'Oeffnen',
       titleLabel: 'Titel',
       letterLabel: 'Buchstabe',
       colorLabel: 'Farbe',
@@ -699,6 +702,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synchronise',
       syncFailed: 'Echec de synchronisation',
       idle: 'Inactif',
+      openSettingsAction: 'Ouvrir',
       titleLabel: 'Titre',
       letterLabel: 'Lettre',
       colorLabel: 'Couleur',
@@ -906,6 +910,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Sincronizado',
       syncFailed: 'Fallo de sincronizacion',
       idle: 'En espera',
+      openSettingsAction: 'Abrir',
       titleLabel: 'Titulo',
       letterLabel: 'Letra',
       colorLabel: 'Color',

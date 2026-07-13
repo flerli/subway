@@ -512,6 +512,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
   const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+  const [expandedWidgetSettingsId, setExpandedWidgetSettingsId] = useState<string | null>(null)
   const [calendarFocusSelection, setCalendarFocusSelection] = useState<CalendarFocusSelection | null>(null)
   const [registeredWidgets, setRegisteredWidgets] = useState<RegisteredWidget[]>([])
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
@@ -2430,7 +2431,6 @@ function App() {
                         </span>
                         <div>
                           <h3>{getMemberLabel(member)}</h3>
-                          <p>{appText.settings.memberEditorCopy}</p>
                         </div>
                       </div>
 
@@ -2656,13 +2656,8 @@ function App() {
                 availableSourceLocations={registeredWidgets.map(
                   (widget) => widget.module.folderName,
                 )}
-                widgetSettingsMap={combinedWidgetSettingsMap}
-                onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
-                  handleSaveWidgetSettings(widgetId, settings).catch(() => {
-                    setWidgetSettingsErrorKey('widgetSettingsSaveFailed')
-                    throw new Error('widget settings save failed')
-                  })
-                }
+                expandedWidgetId={expandedWidgetSettingsId}
+                onExpandedWidgetChange={setExpandedWidgetSettingsId}
                 onSaveWidgetMetadata={(widgetId: string, draft: WidgetMetadataDraft) =>
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
@@ -2675,6 +2670,8 @@ function App() {
                 appText={appText}
                 languageCode={selectedLanguageCode}
                 registeredWidgets={registeredWidgets}
+                expandedWidgetId={expandedWidgetSettingsId}
+                onExpandedWidgetChange={setExpandedWidgetSettingsId}
                 widgetSettingsMap={combinedWidgetSettingsMap}
                 onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
                   handleSaveWidgetSettings(widgetId, settings).catch(() => {

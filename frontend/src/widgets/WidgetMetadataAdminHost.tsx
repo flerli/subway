@@ -6,19 +6,13 @@ import {
 } from '../i18n/localization'
 import { buildBadgeStyle } from './widgetAppearance'
 import type { FamilyMember } from './widgetHostModels'
-import {
-  widgetPlacementZoneIds,
-} from './widgetPlacementZones'
+import { widgetPlacementZoneIds } from './widgetPlacementZones'
 import type {
   RegisteredWidget,
   WidgetPlacementZoneId,
   WidgetScopeMode,
-  WidgetSettingsValues,
 } from './widgetTypes'
-import {
-  getLocalizedSettingsDefinition,
-  resolveWidgetTitle,
-} from './widgetLocalization'
+import { resolveWidgetTitle } from './widgetLocalization'
 
 export interface WidgetMetadataDraft {
   title: string
@@ -40,12 +34,9 @@ interface WidgetMetadataAdminHostProps {
   registeredWidgets: RegisteredWidget[]
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
-  widgetSettingsMap: Record<string, WidgetSettingsValues>
+  expandedWidgetId: string | null
+  onExpandedWidgetChange: (widgetId: string | null) => void
   onSaveWidgetMetadata: (widgetId: string, draft: WidgetMetadataDraft) => Promise<void>
-  onSaveWidgetSettings: (
-    widgetId: string,
-    settings: WidgetSettingsValues,
-  ) => Promise<void>
 }
 
 const zoneOptions: WidgetPlacementZoneId[] = widgetPlacementZoneIds
@@ -65,75 +56,6 @@ type SyncState = 'idle' | 'pending' | 'syncing' | 'synced' | 'error'
 const getMemberBadgeText = (member: FamilyMember) =>
   member.firstName.trim().charAt(0).toUpperCase() || '?'
 
-const buildOrderedSpecificFields = (
-  widgetId: string,
-  settingsDefinition: RegisteredWidget['module']['settingsDefinition'],
-) => {
-
-  if (!settingsDefinition) {
-    return []
-  }
-
-  if (widgetId !== 'weather') {
-    return settingsDefinition.fields
-  }
-
-  const fieldsByKey = new Map(
-    settingsDefinition.fields.map((field) => [field.key, field]),
-  )
-  const orderedFields = []
-
-  const focusField = fieldsByKey.get('focusLocationSlot')
-  const refreshIntervalField = fieldsByKey.get('refreshIntervalMinutes')
-
-  if (focusField) {
-    orderedFields.push(focusField)
-  }
-
-  if (refreshIntervalField) {
-    orderedFields.push(refreshIntervalField)
-  }
-
-  for (let slotIndex = 1; slotIndex <= 5; slotIndex += 1) {
-    const labelField = fieldsByKey.get(`location${slotIndex}Label`)
-    const longitudeField = fieldsByKey.get(`location${slotIndex}Longitude`)
-    const latitudeField = fieldsByKey.get(`location${slotIndex}Latitude`)
-
-    if (labelField) {
-      orderedFields.push(labelField)
-    }
-
-    if (longitudeField) {
-      orderedFields.push(longitudeField)
-    }
-
-    if (latitudeField) {
-      orderedFields.push(latitudeField)
-    }
-  }
-
-  return orderedFields
-}
-
-const buildSpecificFieldsByKey = (
-  settingsDefinition: RegisteredWidget['module']['settingsDefinition'],
-) => {
-  return new Map(settingsDefinition?.fields.map((field) => [field.key, field]) ?? [])
-}
-
-const buildSettingsDraft = (
-  widget: RegisteredWidget,
-  settings: WidgetSettingsValues | undefined,
-) => {
-  const settingsDefinition = widget.module.settingsDefinition
-
-  if (!settingsDefinition) {
-    return {}
-  }
-
-  return settingsDefinition.normalize(settings ?? settingsDefinition.defaults)
-}
-
 const buildMetadataSnapshot = (draft: WidgetMetadataDraft) =>
   JSON.stringify({
     ...draft,
@@ -142,9 +64,6 @@ const buildMetadataSnapshot = (draft: WidgetMetadataDraft) =>
       ...placement,
     })),
   })
-
-const buildSettingsSnapshot = (settings: WidgetSettingsValues) =>
-  JSON.stringify(settings)
 
 const buildDraftFromWidget = (widget: RegisteredWidget): WidgetMetadataDraft => ({
   title: widget.entity.title,
@@ -169,57 +88,30 @@ function WidgetMetadataCard({
   languageCode,
   familyMembers,
   availableSourceLocations,
-  widgetSettings,
+  isSettingsOpen,
+  onToggleSettings,
   onSave,
-  onSaveSettings,
 }: {
   widget: RegisteredWidget
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
-  widgetSettings: WidgetSettingsValues | undefined
+  isSettingsOpen: boolean
+  onToggleSettings: (widgetId: string) => void
   onSave: (widgetId: string, draft: WidgetMetadataDraft) => Promise<void>
-  onSaveSettings: (
-    widgetId: string,
-    settings: WidgetSettingsValues,
-  ) => Promise<void>
 }) {
   const [draft, setDraft] = useState<WidgetMetadataDraft>(buildDraftFromWidget(widget))
-  const [settingsDraft, setSettingsDraft] = useState<WidgetSettingsValues>(
-    buildSettingsDraft(widget, widgetSettings),
-  )
   const [syncState, setSyncState] = useState<SyncState>('idle')
 
   const syncTimerRef = useRef<number | null>(null)
   const metadataDraftRef = useRef<WidgetMetadataDraft>(buildDraftFromWidget(widget))
-  const settingsDraftRef = useRef<WidgetSettingsValues>(
-    buildSettingsDraft(widget, widgetSettings),
-  )
   const lastSavedMetadataRef = useRef(buildMetadataSnapshot(buildDraftFromWidget(widget)))
-  const lastSavedSettingsRef = useRef(
-    buildSettingsSnapshot(buildSettingsDraft(widget, widgetSettings)),
-  )
-
-  const settingsDefinition = widget.module.settingsDefinition
-  const localizedSettingsDefinition = getLocalizedSettingsDefinition(
-    widget.module,
-    languageCode,
-  )
-  const orderedSpecificFields = buildOrderedSpecificFields(
-    widget.entity.id,
-    localizedSettingsDefinition,
-  )
-  const specificFieldsByKey = buildSpecificFieldsByKey(localizedSettingsDefinition)
 
   const isAllScope = draft.userScopeMode === 'all'
 
-  const queueSync = (
-    nextMetadataDraft: WidgetMetadataDraft,
-    nextSettingsDraft: WidgetSettingsValues,
-  ) => {
+  const queueSync = (nextMetadataDraft: WidgetMetadataDraft) => {
     metadataDraftRef.current = nextMetadataDraft
-    settingsDraftRef.current = nextSettingsDraft
 
     if (syncTimerRef.current !== null) {
       window.clearTimeout(syncTimerRef.current)
@@ -228,33 +120,9 @@ function WidgetMetadataCard({
     setSyncState('pending')
 
     syncTimerRef.current = window.setTimeout(async () => {
-      const normalizedSettings = settingsDefinition
-        ? settingsDefinition.normalize(settingsDraftRef.current)
-        : {}
       const metadataSnapshot = buildMetadataSnapshot(metadataDraftRef.current)
-      const settingsSnapshot = buildSettingsSnapshot(normalizedSettings)
-      const saveTasks: Promise<void>[] = []
 
-      if (metadataSnapshot !== lastSavedMetadataRef.current) {
-        saveTasks.push(
-          onSave(widget.entity.id, metadataDraftRef.current).then(() => {
-            lastSavedMetadataRef.current = metadataSnapshot
-          }),
-        )
-      }
-
-      if (
-        settingsDefinition &&
-        settingsSnapshot !== lastSavedSettingsRef.current
-      ) {
-        saveTasks.push(
-          onSaveSettings(widget.entity.id, normalizedSettings).then(() => {
-            lastSavedSettingsRef.current = settingsSnapshot
-          }),
-        )
-      }
-
-      if (saveTasks.length === 0) {
+      if (metadataSnapshot === lastSavedMetadataRef.current) {
         setSyncState('idle')
         return
       }
@@ -262,7 +130,8 @@ function WidgetMetadataCard({
       setSyncState('syncing')
 
       try {
-        await Promise.all(saveTasks)
+        await onSave(widget.entity.id, metadataDraftRef.current)
+        lastSavedMetadataRef.current = metadataSnapshot
         setSyncState('synced')
       } catch {
         setSyncState('error')
@@ -272,20 +141,16 @@ function WidgetMetadataCard({
 
   useEffect(() => {
     const nextMetadataDraft = buildDraftFromWidget(widget)
-    const nextSettingsDraft = buildSettingsDraft(widget, widgetSettings)
 
     if (syncTimerRef.current !== null) {
       window.clearTimeout(syncTimerRef.current)
     }
 
     setDraft(nextMetadataDraft)
-    setSettingsDraft(nextSettingsDraft)
     metadataDraftRef.current = nextMetadataDraft
-    settingsDraftRef.current = nextSettingsDraft
     lastSavedMetadataRef.current = buildMetadataSnapshot(nextMetadataDraft)
-    lastSavedSettingsRef.current = buildSettingsSnapshot(nextSettingsDraft)
     setSyncState('idle')
-  }, [widget, widgetSettings])
+  }, [widget])
 
   useEffect(
     () => () => {
@@ -302,21 +167,9 @@ function WidgetMetadataCard({
     setDraft((currentDraft) => {
       const nextDraft = updater(currentDraft)
 
-      queueSync(nextDraft, settingsDraftRef.current)
+      queueSync(nextDraft)
 
       return nextDraft
-    })
-  }
-
-  const updateSettingsDraft = (
-    updater: (currentSettings: WidgetSettingsValues) => WidgetSettingsValues,
-  ) => {
-    setSettingsDraft((currentSettings: WidgetSettingsValues) => {
-      const nextSettings = updater(currentSettings)
-
-      queueSync(metadataDraftRef.current, nextSettings)
-
-      return nextSettings
     })
   }
 
@@ -380,62 +233,6 @@ function WidgetMetadataCard({
             ? appText.widgetAdmin.syncFailed
             : appText.widgetAdmin.idle
 
-
-  const renderSpecificField = (
-    fieldKey: string,
-    className = 'settings-label',
-  ) => {
-    const field = specificFieldsByKey.get(fieldKey)
-
-    if (!field) {
-      return null
-    }
-
-    const fieldValue = settingsDraft[field.key]
-
-    if (field.type === 'boolean') {
-      return (
-        <label className="settings-toggle" key={field.key}>
-          <span>{field.label}</span>
-          <input
-            type="checkbox"
-            checked={Boolean(fieldValue)}
-            onChange={(event) =>
-              updateSettingsDraft((currentSettings) => ({
-                ...currentSettings,
-                [field.key]: event.target.checked,
-              }))
-            }
-          />
-        </label>
-      )
-    }
-
-    return (
-      <label className={className} key={field.key}>
-        <span>{field.label}</span>
-        <input
-          className="settings-input"
-          type={field.type === 'number' ? 'number' : 'text'}
-          value={String(fieldValue ?? '')}
-          min={field.min}
-          max={field.max}
-          step={field.step}
-          placeholder={field.placeholder}
-          onChange={(event) =>
-            updateSettingsDraft((currentSettings) => ({
-              ...currentSettings,
-              [field.key]:
-                field.type === 'number'
-                  ? Number(event.target.value)
-                  : event.target.value,
-            }))
-          }
-        />
-      </label>
-    )
-  }
-
   return (
     <article className="settings-card widget-config-row">
       <div className="widget-config-header">
@@ -451,48 +248,48 @@ function WidgetMetadataCard({
           </div>
         </div>
 
-        <p className={`widget-sync-state widget-sync-state--${syncState}`}>
-          {syncStateLabel}
-        </p>
+        <div className="widget-config-header-actions">
+          <p className={`widget-sync-state widget-sync-state--${syncState}`}>
+            {syncStateLabel}
+          </p>
+
+          {widget.module.hasSettingsPanel ? (
+            <button
+              type="button"
+              className={`widget-action-button${isSettingsOpen ? ' is-active' : ''}`}
+              aria-label={
+                isSettingsOpen
+                  ? formatLocalizedText(appText.boardHost.collapseAriaLabel, {
+                      title: resolveWidgetTitle(widget, languageCode),
+                    })
+                  : formatLocalizedText(appText.boardHost.expandAriaLabel, {
+                      title: resolveWidgetTitle(widget, languageCode),
+                    })
+              }
+              aria-pressed={isSettingsOpen}
+              onClick={() => onToggleSettings(widget.entity.id)}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path
+                  d="M4 8V4h4M12 4h4v4M4 12v4h4M16 12v4h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.5"
+                />
+              </svg>
+              <span>
+                {isSettingsOpen
+                  ? appText.boardHost.collapseAction
+                  : appText.widgetAdmin.openSettingsAction}
+              </span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="widget-config-body">
-        {settingsDefinition ? (
-          <div className="widget-config-section widget-config-section--specific">
-            <div
-              className={`widget-config-fields widget-config-fields--specific${
-                widget.entity.id === 'weather' ? ' widget-config-fields--weather' : ''
-              }`}
-            >
-              {widget.entity.id === 'weather' ? (
-                <>
-                  {renderSpecificField(
-                    'focusLocationSlot',
-                    'settings-label settings-label--span-full',
-                  )}
-                  {renderSpecificField(
-                    'refreshIntervalMinutes',
-                    'settings-label settings-label--span-full',
-                  )}
-                  {Array.from({ length: 5 }, (_, index) => {
-                    const slotNumber = index + 1
-
-                    return (
-                      <div className="weather-location-settings-row" key={slotNumber}>
-                        {renderSpecificField(`location${slotNumber}Label`)}
-                        {renderSpecificField(`location${slotNumber}Longitude`)}
-                        {renderSpecificField(`location${slotNumber}Latitude`)}
-                      </div>
-                    )
-                  })}
-                </>
-              ) : (
-                orderedSpecificFields.map((field) => renderSpecificField(field.key))
-              )}
-            </div>
-          </div>
-        ) : null}
-
         <div className="widget-config-section widget-config-section--standard">
           <div className="widget-config-fields widget-config-fields--meta">
             <label className="settings-label">
@@ -635,9 +432,9 @@ export function WidgetMetadataAdminHost({
   registeredWidgets,
   familyMembers,
   availableSourceLocations,
-  widgetSettingsMap,
+  expandedWidgetId,
+  onExpandedWidgetChange,
   onSaveWidgetMetadata,
-  onSaveWidgetSettings,
 }: WidgetMetadataAdminHostProps) {
   return (
     <section className="widget-metadata-host">
@@ -649,9 +446,13 @@ export function WidgetMetadataAdminHost({
           languageCode={languageCode}
           familyMembers={familyMembers}
           availableSourceLocations={availableSourceLocations}
-          widgetSettings={widgetSettingsMap[widget.entity.id]}
+          isSettingsOpen={expandedWidgetId === widget.entity.id}
+          onToggleSettings={(widgetId) =>
+            onExpandedWidgetChange(
+              expandedWidgetId === widgetId ? null : widgetId,
+            )
+          }
           onSave={onSaveWidgetMetadata}
-          onSaveSettings={onSaveWidgetSettings}
         />
       ))}
     </section>
