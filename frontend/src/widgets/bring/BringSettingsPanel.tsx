@@ -13,6 +13,8 @@ import type { BringWidgetTranslation } from './translations'
 interface BringSettingsPanelProps {
   widget: RegisteredWidget
   languageCode: SupportedLanguageCode
+  initialSettings: Record<string, unknown>
+  onSave: (widgetId: string, settings: Record<string, unknown>) => Promise<void>
   widgetText: BringWidgetTranslation
 }
 
@@ -21,13 +23,27 @@ type RequestState = 'idle' | 'loading' | 'saving' | 'saved' | 'error'
 export function BringSettingsPanel({
   widget,
   languageCode,
+  initialSettings,
+  onSave,
   widgetText,
 }: BringSettingsPanelProps) {
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(
+    typeof initialSettings.username === 'string' ? initialSettings.username : '',
+  )
   const [password, setPassword] = useState('')
-  const [selectedListUuid, setSelectedListUuid] = useState('')
-  const [selectedListName, setSelectedListName] = useState('')
-  const [hasStoredPassword, setHasStoredPassword] = useState(false)
+  const [selectedListUuid, setSelectedListUuid] = useState(
+    typeof initialSettings.selectedListUuid === 'string'
+      ? initialSettings.selectedListUuid
+      : '',
+  )
+  const [selectedListName, setSelectedListName] = useState(
+    typeof initialSettings.selectedListName === 'string'
+      ? initialSettings.selectedListName
+      : '',
+  )
+  const [hasStoredPassword, setHasStoredPassword] = useState(
+    initialSettings.hasStoredPassword === true,
+  )
   const [availableLists, setAvailableLists] = useState<BringListOption[]>([])
   const [requestState, setRequestState] = useState<RequestState>('idle')
   const [statusMessage, setStatusMessage] = useState(widgetText.copy.idleState)
@@ -125,6 +141,14 @@ export function BringSettingsPanel({
       setSelectedListUuid(payload.bringSettings.selectedListUuid)
       setSelectedListName(nextSelectedList?.name ?? payload.bringSettings.selectedListName)
       setPassword('')
+      await onSave(widget.entity.id, {
+        username: payload.bringSettings.username,
+        hasStoredPassword: payload.bringSettings.hasStoredPassword,
+        selectedListUuid: payload.bringSettings.selectedListUuid,
+        selectedListName:
+          nextSelectedList?.name ?? payload.bringSettings.selectedListName,
+        updatedAt: payload.bringSettings.updatedAt,
+      })
       setRequestState('saved')
       setStatusMessage(widgetText.copy.savedState)
     } catch (error) {

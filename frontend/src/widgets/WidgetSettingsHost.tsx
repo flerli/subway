@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AppTextBundle } from '../i18n/appText'
 import type { SupportedLanguageCode } from '../i18n/localization'
 import type { RegisteredWidget, WidgetSettingsValues } from './widgetTypes'
@@ -13,6 +13,7 @@ interface WidgetSettingsHostProps {
   registeredWidgets: RegisteredWidget[]
   expandedWidgetId: string | null
   onExpandedWidgetChange: (widgetId: string | null) => void
+  externalPanel?: ReactNode
   widgetSettingsMap: Record<string, WidgetSettingsValues>
   onSaveWidgetSettings: (
     widgetId: string,
@@ -155,6 +156,7 @@ export function WidgetSettingsHost({
   registeredWidgets,
   expandedWidgetId,
   onExpandedWidgetChange,
+  externalPanel,
   widgetSettingsMap,
   onSaveWidgetSettings,
 }: WidgetSettingsHostProps) {
@@ -186,7 +188,9 @@ export function WidgetSettingsHost({
         className="widget-zone widget-zone--expanded-stage"
         aria-label={appText.widgetSettingsHost.expandedWidgetViewAriaLabel}
       >
-        {expandedWidget ? (
+        {externalPanel ? (
+          externalPanel
+        ) : expandedWidget ? (
           <WidgetSettingsExpandedCard
             key={expandedWidget.entity.id}
             appText={appText}

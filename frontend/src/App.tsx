@@ -1879,6 +1879,7 @@ function App() {
   }
 
   const toggleExpandedSettingsHubPanel = (panelId: SettingsHubPanelId) => {
+    setExpandedWidgetSettingsId(null)
     setExpandedSettingsHubPanelId((currentPanelId) =>
       currentPanelId === panelId ? null : panelId,
     )
@@ -2362,6 +2363,31 @@ function App() {
         return
       }
 
+      if (widgetId === 'bring') {
+        setWidgetSettingsMap((currentValues) => ({
+          ...currentValues,
+          [widgetId]: normalizedSettings,
+        }))
+
+        try {
+          const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
+
+          setWidgetSettingsMap((currentValues) => ({
+            ...currentValues,
+            [widgetId]: persistedSettings.settings,
+          }))
+        } catch (error) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+        }
+
+        await refreshBringWidgetData()
+        setWidgetSettingsErrorKey(null)
+        return
+      }
+
       const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
 
       setWidgetSettingsMap((currentValues) => ({
@@ -2833,10 +2859,6 @@ function App() {
                 </article>
               </div>
 
-              <section className="widget-zone widget-zone--expanded-stage">
-                {renderExpandedSettingsHubPanel()}
-              </section>
-
               <WidgetMetadataAdminHost
                 appText={appText}
                 languageCode={selectedLanguageCode}
@@ -2846,7 +2868,10 @@ function App() {
                   (widget) => widget.module.folderName,
                 )}
                 expandedWidgetId={expandedWidgetSettingsId}
-                onExpandedWidgetChange={setExpandedWidgetSettingsId}
+                onExpandedWidgetChange={(widgetId) => {
+                  setExpandedSettingsHubPanelId(null)
+                  setExpandedWidgetSettingsId(widgetId)
+                }}
                 onSaveWidgetMetadata={(widgetId: string, draft: WidgetMetadataDraft) =>
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
@@ -2861,6 +2886,9 @@ function App() {
                 registeredWidgets={registeredWidgets}
                 expandedWidgetId={expandedWidgetSettingsId}
                 onExpandedWidgetChange={setExpandedWidgetSettingsId}
+                externalPanel={
+                  expandedSettingsHubPanelId ? renderExpandedSettingsHubPanel() : undefined
+                }
                 widgetSettingsMap={combinedWidgetSettingsMap}
                 onSaveWidgetSettings={(widgetId: string, settings: WidgetSettingsValues) =>
                   handleSaveWidgetSettings(widgetId, settings).catch(() => {

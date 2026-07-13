@@ -16,10 +16,12 @@ export const bringWidget: WidgetMicroAppContract = {
   getTranslation: getBringWidgetTranslation,
   matchesDefaultTitle: matchesBringWidgetTitle,
   loadData: async () => null,
-  renderSettingsPanel: ({ widget, languageCode }) =>
+  renderSettingsPanel: ({ widget, languageCode, initialSettings, onSave }) =>
     createElement(BringSettingsPanel, {
       widget,
       languageCode,
+      initialSettings,
+      onSave,
       widgetText: getBringWidgetTranslation(languageCode),
     }),
   renderDetailView: ({ data, languageCode }) =>
