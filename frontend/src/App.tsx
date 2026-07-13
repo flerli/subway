@@ -20,6 +20,7 @@ import {
 } from './api/runtime'
 import {
   createFamilyMember,
+  deleteFamilyMember,
   fetchFamilyMembers,
   updateFamilyMember,
 } from './api/familyMembers'
@@ -476,6 +477,7 @@ function App() {
   const [activeFilter, setActiveFilter] = useState<FilterId>(ALL_FILTER_ID)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberColor, setNewMemberColor] = useState(DEFAULT_NEW_MEMBER_COLOR)
+  const [deletingFamilyMemberId, setDeletingFamilyMemberId] = useState<string | null>(null)
   const [familyMembersErrorKey, setFamilyMembersErrorKey] =
     useState<AppTextMessageKey | null>(null)
   const [widgetMetadataErrorKey, setWidgetMetadataErrorKey] =
@@ -1583,6 +1585,44 @@ function App() {
       })
   }
 
+  const handleDeleteMember = async (member: FamilyMember) => {
+    const confirmed = window.confirm(
+      formatLocalizedText(appText.settings.deleteMemberConfirm, {
+        firstName: getMemberLabel(member),
+      }),
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingFamilyMemberId(member.id)
+
+    try {
+      await deleteFamilyMember(member.id)
+      setFamilyMembers((currentMembers) =>
+        currentMembers.filter((currentMember) => currentMember.id !== member.id),
+      )
+
+      if (activeFilter === member.id) {
+        setActiveFilter(ALL_FILTER_ID)
+      }
+
+      setFamilyMembersErrorKey(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      setFamilyMembersErrorKey('familyMemberDeleteFailed')
+    } finally {
+      setDeletingFamilyMemberId((currentId) =>
+        currentId === member.id ? null : currentId,
+      )
+    }
+  }
+
   const handleLogin = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -2319,7 +2359,10 @@ function App() {
 
               <div className="settings-grid">
                 <div className="member-list">
-                  {familyMembers.map((member) => (
+                  {familyMembers.map((member) => {
+                    const isDeletingMember = deletingFamilyMemberId === member.id
+
+                    return (
                     <article className="member-editor" key={member.id}>
                       <div className="member-editor-head">
                         <span
@@ -2341,6 +2384,7 @@ function App() {
                             className="settings-input"
                             type="text"
                             value={member.firstName}
+                            disabled={isDeletingMember}
                             onChange={(event) =>
                               updateMember(member.id, 'firstName', event.target.value)
                             }
@@ -2354,14 +2398,29 @@ function App() {
                             className="settings-color"
                             type="color"
                             value={normalizeHexColor(member.color)}
+                            disabled={isDeletingMember}
                             onChange={(event) =>
                               updateMember(member.id, 'color', event.target.value)
                             }
                           />
                         </label>
                       </div>
+
+                      <div className="member-editor-actions">
+                        <button
+                          className="settings-submit settings-submit--secondary settings-submit--danger"
+                          type="button"
+                          disabled={isDeletingMember}
+                          onClick={() => void handleDeleteMember(member)}
+                        >
+                          {isDeletingMember
+                            ? appText.settings.deletingMemberAction
+                            : appText.settings.deleteMemberAction}
+                        </button>
+                      </div>
                     </article>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 <div className="settings-side">

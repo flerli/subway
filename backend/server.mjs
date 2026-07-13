@@ -2771,6 +2771,14 @@ const updateFamilyMemberRecord = (ownerUserId, firstName, color, updatedAt, memb
     `)
     .run(firstName, color, updatedAt, ownerUserId, memberId)
 
+const deleteFamilyMemberRecord = (ownerUserId, memberId) =>
+  db
+    .prepare(`
+      DELETE FROM family_members
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(ownerUserId, memberId)
+
 const updateWidgetRecord = (ownerUserId, widget, updatedAt) =>
   db
     .prepare(`
@@ -5161,6 +5169,29 @@ const server = createServer(async (request, response) => {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
       return
     }
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    requestUrl.pathname.startsWith('/api/family-members/')
+  ) {
+    const memberId = requestUrl.pathname.replace('/api/family-members/', '')
+
+    if (!memberId) {
+      sendJson(response, 400, { error: 'Missing member id.' })
+      return
+    }
+
+    const currentMember = selectFamilyMemberById(ownerUserId, memberId)
+
+    if (!currentMember) {
+      sendJson(response, 404, { error: 'Family member not found.' })
+      return
+    }
+
+    deleteFamilyMemberRecord(ownerUserId, memberId)
+    sendJson(response, 200, { deletedMemberId: memberId })
+    return
   }
 
   if (

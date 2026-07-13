@@ -70,6 +70,9 @@ export interface AppTextBundle {
     addMemberKicker: string
     addMemberTitle: string
     addMemberAction: string
+    deleteMemberAction: string
+    deletingMemberAction: string
+    deleteMemberConfirm: string
   }
   boardHost: {
     expandAction: string
@@ -158,6 +161,7 @@ export interface AppTextBundle {
     todoLoadFailed: string
     familyMemberPersistFailed: string
     familyMemberCreateFailed: string
+    familyMemberDeleteFailed: string
     todoUpdateFailed: string
     widgetSettingsSaveFailed: string
     widgetMetadataSaveFailed: string
@@ -245,6 +249,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       addMemberKicker: 'Add member',
       addMemberTitle: 'New roster entry',
       addMemberAction: 'Add family member',
+      deleteMemberAction: 'Delete family member',
+      deletingMemberAction: 'Deleting...',
+      deleteMemberConfirm:
+        'Delete {firstName} from the family roster? This cannot be undone.',
     },
     boardHost: {
       expandAction: 'Expand',
@@ -340,6 +348,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       todoLoadFailed: 'Failed to load todo items from the backend todo widget path.',
       familyMemberPersistFailed: 'Failed to persist family-member changes to the backend.',
       familyMemberCreateFailed: 'Failed to create the family member in the backend.',
+      familyMemberDeleteFailed: 'Failed to delete the family member in the backend.',
       todoUpdateFailed: 'Failed to update todo item state in the backend.',
       widgetSettingsSaveFailed: 'Failed to persist widget settings to the backend.',
       widgetMetadataSaveFailed: 'Failed to persist widget metadata to the backend.',
@@ -428,6 +437,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       addMemberKicker: 'Mitglied hinzufuegen',
       addMemberTitle: 'Neuer Eintrag',
       addMemberAction: 'Familienmitglied hinzufuegen',
+      deleteMemberAction: 'Familienmitglied loeschen',
+      deletingMemberAction: 'Wird geloescht...',
+      deleteMemberConfirm:
+        '{firstName} aus der Familienliste loeschen? Dies kann nicht rueckgaengig gemacht werden.',
     },
     boardHost: {
       expandAction: 'Oeffnen',
@@ -527,6 +540,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'Aenderungen am Familienmitglied konnten nicht im Backend gespeichert werden.',
       familyMemberCreateFailed:
         'Das Familienmitglied konnte nicht im Backend erstellt werden.',
+      familyMemberDeleteFailed:
+        'Das Familienmitglied konnte nicht im Backend geloescht werden.',
       todoUpdateFailed:
         'Der Todo-Status konnte nicht im Backend aktualisiert werden.',
       widgetSettingsSaveFailed:
@@ -618,6 +633,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       addMemberKicker: 'Ajouter un membre',
       addMemberTitle: 'Nouvelle entree',
       addMemberAction: 'Ajouter un membre de la famille',
+      deleteMemberAction: 'Supprimer le membre',
+      deletingMemberAction: 'Suppression...',
+      deleteMemberConfirm:
+        'Supprimer {firstName} de la liste familiale ? Cette action est definitive.',
     },
     boardHost: {
       expandAction: 'Etendre',
@@ -717,6 +736,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'Impossible d enregistrer les modifications du membre de la famille dans le backend.',
       familyMemberCreateFailed:
         'Impossible de creer le membre de la famille dans le backend.',
+      familyMemberDeleteFailed:
+        'Impossible de supprimer le membre de la famille dans le backend.',
       todoUpdateFailed:
         'Impossible de mettre a jour l etat du todo dans le backend.',
       widgetSettingsSaveFailed:
@@ -808,6 +829,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       addMemberKicker: 'Agregar miembro',
       addMemberTitle: 'Nueva entrada',
       addMemberAction: 'Agregar miembro de la familia',
+      deleteMemberAction: 'Eliminar miembro de la familia',
+      deletingMemberAction: 'Eliminando...',
+      deleteMemberConfirm:
+        'Eliminar a {firstName} de la lista familiar? Esta accion no se puede deshacer.',
     },
     boardHost: {
       expandAction: 'Expandir',
@@ -907,6 +932,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'No se pudieron guardar en el backend los cambios del miembro de la familia.',
       familyMemberCreateFailed:
         'No se pudo crear el miembro de la familia en el backend.',
+      familyMemberDeleteFailed:
+        'No se pudo eliminar el miembro de la familia en el backend.',
       todoUpdateFailed:
         'No se pudo actualizar el estado del todo en el backend.',
       widgetSettingsSaveFailed:

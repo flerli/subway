@@ -1746,6 +1746,11 @@ select {
   align-items: end;
 }
 
+.member-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .settings-card-head {
   display: grid;
   gap: 4px;

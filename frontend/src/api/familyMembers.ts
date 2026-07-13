@@ -90,3 +90,13 @@ export const updateFamilyMember = async (
 
   return familyMember
 }
+
+export const deleteFamilyMember = async (memberId: string) => {
+  const response = await fetchApi(`/family-members/${memberId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to delete family member in backend.')
+  }
+}
