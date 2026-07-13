@@ -10,6 +10,7 @@ interface FrontendRuntimeInfo {
 
 interface BackendRuntimeInfo {
   instanceId: string
+  startedAt: string
 }
 
 const normalizeFrontendRuntimeInfo = (value: unknown): FrontendRuntimeInfo | null => {
@@ -29,14 +30,21 @@ const normalizeFrontendRuntimeInfo = (value: unknown): FrontendRuntimeInfo | nul
 const normalizeBackendRuntimeInfo = (value: unknown): BackendRuntimeInfo | null => {
   const candidate = value as {
     instanceId?: unknown
+    startedAt?: unknown
   }
 
-  if (!value || typeof value !== 'object' || typeof candidate.instanceId !== 'string') {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    typeof candidate.instanceId !== 'string' ||
+    typeof candidate.startedAt !== 'string'
+  ) {
     return null
   }
 
   return {
     instanceId: candidate.instanceId,
+    startedAt: candidate.startedAt,
   }
 }
 

@@ -43,6 +43,12 @@ export interface AppTextBundle {
     firstNameLabel: string
     firstNamePlaceholder: string
     colorLabel: string
+    systemKicker: string
+    systemTitle: string
+    systemDescription: string
+    buildVersionLabel: string
+    latestDeploymentLabel: string
+    runtimeUnavailableValue: string
     languageKicker: string
     languageTitle: string
     languageDescription: string
@@ -218,6 +224,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNameLabel: 'Forename',
       firstNamePlaceholder: 'Forename',
       colorLabel: 'Color',
+      systemKicker: 'System',
+      systemTitle: 'Build and deployment',
+      systemDescription:
+        'Reference details for the version currently running on this screen and the most recent deployment detected by the app runtime.',
+      buildVersionLabel: 'Build ID',
+      latestDeploymentLabel: 'Latest deployment',
+      runtimeUnavailableValue: 'n/a',
       languageKicker: 'Language',
       languageTitle: 'Display language',
       languageDescription:
@@ -405,6 +418,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNameLabel: 'Vorname',
       firstNamePlaceholder: 'Vorname',
       colorLabel: 'Farbe',
+      systemKicker: 'System',
+      systemTitle: 'Build und Deployment',
+      systemDescription:
+        'Referenzdaten fuer die Version, die aktuell auf diesem Bildschirm laeuft, sowie fuer das zuletzt von der App-Laufzeit erkannte Deployment.',
+      buildVersionLabel: 'Build-ID',
+      latestDeploymentLabel: 'Letztes Deployment',
+      runtimeUnavailableValue: 'k. A.',
       languageKicker: 'Sprache',
       languageTitle: 'Anzeigesprache',
       languageDescription:
@@ -601,6 +621,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNameLabel: 'Prenom',
       firstNamePlaceholder: 'Prenom',
       colorLabel: 'Couleur',
+      systemKicker: 'Systeme',
+      systemTitle: 'Build et deploiement',
+      systemDescription:
+        'Informations de reference sur la version actuellement executee sur cet ecran et sur le deploiement le plus recent detecte par le runtime de l application.',
+      buildVersionLabel: 'ID du build',
+      latestDeploymentLabel: 'Dernier deploiement',
+      runtimeUnavailableValue: 'n/d',
       languageKicker: 'Langue',
       languageTitle: 'Langue d affichage',
       languageDescription:
@@ -797,6 +824,13 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       firstNameLabel: 'Nombre',
       firstNamePlaceholder: 'Nombre',
       colorLabel: 'Color',
+      systemKicker: 'Sistema',
+      systemTitle: 'Build y despliegue',
+      systemDescription:
+        'Detalles de referencia de la version que se esta ejecutando en esta pantalla y del despliegue mas reciente detectado por el runtime de la aplicacion.',
+      buildVersionLabel: 'ID de build',
+      latestDeploymentLabel: 'Ultimo despliegue',
+      runtimeUnavailableValue: 'n/d',
       languageKicker: 'Idioma',
       languageTitle: 'Idioma de pantalla',
       languageDescription:

@@ -1751,6 +1751,36 @@ select {
   justify-content: flex-end;
 }
 
+.settings-runtime-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-runtime-row {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-runtime-row span {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-runtime-value {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.settings-runtime-value--mono {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+
 .settings-card-head {
   display: grid;
   gap: 4px;

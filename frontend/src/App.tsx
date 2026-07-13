@@ -128,6 +128,55 @@ const addLocalDays = (value: Date, dayCount: number) => {
   return nextDate
 }
 
+const isValidDateValue = (value: string | null) => {
+  if (!value) {
+    return false
+  }
+
+  return !Number.isNaN(new Date(value).getTime())
+}
+
+const resolveLatestDeploymentAt = (
+  frontendBuildId: string,
+  backendStartedAt: string | null,
+) => {
+  const candidates = [frontendBuildId, backendStartedAt].filter(
+    (value): value is string => isValidDateValue(value),
+  )
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  return candidates.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0]
+}
+
+const formatRuntimeTimestamp = (
+  value: string | null,
+  languageCode: SupportedLanguageCode,
+  fallback: string,
+) => {
+  if (!value) {
+    return fallback
+  }
+
+  const timestamp = new Date(value)
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(languageCode, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(timestamp)
+}
+
 type ViewMode = 'board' | 'settings'
 type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
 type AppPreferencesErrorKey = 'load-failed' | 'save-failed'
@@ -478,6 +527,7 @@ function App() {
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberColor, setNewMemberColor] = useState(DEFAULT_NEW_MEMBER_COLOR)
   const [deletingFamilyMemberId, setDeletingFamilyMemberId] = useState<string | null>(null)
+  const [backendRuntimeStartedAt, setBackendRuntimeStartedAt] = useState<string | null>(null)
   const [familyMembersErrorKey, setFamilyMembersErrorKey] =
     useState<AppTextMessageKey | null>(null)
   const [widgetMetadataErrorKey, setWidgetMetadataErrorKey] =
@@ -533,6 +583,12 @@ function App() {
   )
   const normalizedCountryCodeDraft = countryCodeDraft.trim().toUpperCase()
   const isCountryCodeDraftValid = /^[A-Z]{2}$/.test(normalizedCountryCodeDraft)
+  const settingsBuildIdLabel = currentFrontendBuildId.replace(/\.\d{3}Z$/, 'Z')
+  const latestDeploymentLabel = formatRuntimeTimestamp(
+    resolveLatestDeploymentAt(currentFrontendBuildId, backendRuntimeStartedAt),
+    selectedLanguageCode,
+    appText.settings.runtimeUnavailableValue,
+  )
   const appPreferencesError =
     appPreferencesErrorKey === 'load-failed'
       ? appText.settings.languageLoadFailed
@@ -943,6 +999,7 @@ function App() {
         }
 
         backendRuntimeInstanceIdRef.current = backendRuntimeInfo.instanceId
+        setBackendRuntimeStartedAt(backendRuntimeInfo.startedAt)
       } catch {
         // Ignore transient polling failures; a later poll can still trigger the reload.
       }
@@ -2424,6 +2481,29 @@ function App() {
                 </div>
 
                 <div className="settings-side">
+                  <article className="settings-card">
+                    <div className="settings-card-head">
+                      <p className="widget-kicker">{appText.settings.systemKicker}</p>
+                      <h3>{appText.settings.systemTitle}</h3>
+                    </div>
+
+                    <p className="settings-copy">{appText.settings.systemDescription}</p>
+
+                    <div className="settings-runtime-list">
+                      <div className="settings-runtime-row">
+                        <span>{appText.settings.buildVersionLabel}</span>
+                        <strong className="settings-runtime-value settings-runtime-value--mono">
+                          {settingsBuildIdLabel}
+                        </strong>
+                      </div>
+
+                      <div className="settings-runtime-row">
+                        <span>{appText.settings.latestDeploymentLabel}</span>
+                        <strong className="settings-runtime-value">{latestDeploymentLabel}</strong>
+                      </div>
+                    </div>
+                  </article>
+
                   <article className="settings-card">
                     <div className="settings-card-head">
                       <p className="widget-kicker">{appText.settings.languageKicker}</p>
