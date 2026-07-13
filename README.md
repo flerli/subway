@@ -48,13 +48,20 @@ In a second terminal:
 npm --prefix frontend run dev
 ```
 
-Bring integration development requires a third process and one server-side secret:
+Bring and Roborock integration development require sidecar processes and server-side secrets:
 
 ```bash
 python3 -m venv backend/bring_sidecar/.venv
 source backend/bring_sidecar/.venv/bin/activate
 pip install -r backend/bring_sidecar/requirements.txt
-BRING_CREDENTIAL_ENCRYPTION_KEY=change-me python3 backend/bring_sidecar/server.py
+python3 backend/bring_sidecar/server.py
+
+python3 -m venv backend/roborock_sidecar/.venv
+source backend/roborock_sidecar/.venv/bin/activate
+pip install -r backend/roborock_sidecar/requirements.txt
+python3 backend/roborock_sidecar/server.py
+
+BRING_CREDENTIAL_ENCRYPTION_KEY=change-me ROBOROCK_SESSION_ENCRYPTION_KEY=change-me npm --prefix backend run dev
 ```
 
 Local development access:
@@ -62,6 +69,7 @@ Local development access:
 - Frontend dev server: `http://localhost:5173`
 - Backend API: `http://127.0.0.1:8787`
 - Bring sidecar: `http://127.0.0.1:8788`
+- Roborock sidecar: `http://127.0.0.1:8789`
 
 The app bootstraps through `GET /api/auth/session`. All non-auth `/api/*` routes require a valid session cookie.
 
@@ -86,6 +94,8 @@ docker compose down
 The Dockerized backend now stores its runtime SQLite data in Docker-managed persistent storage mounted at `/app/data`.
 
 If you want to use the Bring settings flow in Docker, provide `BRING_CREDENTIAL_ENCRYPTION_KEY` in the compose environment before starting the stack. Without it, the Bring settings routes return a configuration error instead of storing credentials.
+
+If you want to use the Roborock settings flow in Docker, provide `ROBOROCK_SESSION_ENCRYPTION_KEY` in the compose environment before starting the stack. Without it, the Roborock settings routes return a configuration error instead of storing encrypted session data.
 
 For local development, the backend data is kept in the named Docker volume:
 

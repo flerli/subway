@@ -94,6 +94,14 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
     userScope: createScope('all'),
     placementZones: [createPlacement('service-board', 2)],
   }),
+  normalizeWidgetEntity({
+    id: 'roborock',
+    title: 'Roborock',
+    subwayColor: '#ff6b35',
+    sourceLocation: 'roborock',
+    userScope: createScope('all'),
+    placementZones: [],
+  }),
 ]
 
 export const mergeWidgetEntitiesWithSeed = (

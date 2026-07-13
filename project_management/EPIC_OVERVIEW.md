@@ -114,3 +114,17 @@ Issues:
 | 008_BRING_INTEGRATION__ISSUE_DEFINITION__002_SELECTED_LIST_CACHE_AND_ITEM_CRUD_API.md | Add selected-list snapshot caching, stale-read fallback, and authenticated item CRUD endpoints while following the upstream Bring API constraints. | implemented |
 | 008_BRING_INTEGRATION__ISSUE_DEFINITION__003_MINI_SHOPPING_LIST_WIDGET.md | Implement the compact Bring widget with open-item preview, remaining-count meta, stale-state visibility, and entry into the extended view. | implemented |
 | 008_BRING_INTEGRATION__ISSUE_DEFINITION__004_EXTENDED_SHOPPING_LIST_VIEW_AND_COMPLETION_WORKFLOWS.md | Build the extended Bring list experience with add, spec update, complete, delete, reconnect guidance, and reopen-through-readd workflow. | implemented |
+
+## 009 ROBOROCK INTEGRATION
+
+Description:
+Integrate Roborock robot vacuums into Subway through the upstream `python-roborock` Python library behind the existing authenticated Node backend, with per-user email-code connection setup, persisted selected robot and default routine configuration, a compact one-tap start widget, and an extended status view that surfaces live cleaning state and optional device telemetry when the selected model exposes it.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__001_PYTHON_SIDECAR_AND_EMAIL_CODE_CONNECTION_FOUNDATION.md | Establish the internal Python Roborock bridge, per-user email-code connection flow, encrypted session persistence, and widget settings foundation. | implemented |
+| 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__002_DEVICE_SELECTION_DEFAULT_ROUTINE_AND_STATUS_API.md | Add robot discovery, selected-device and default-routine persistence, capability-aware status snapshots, and authenticated Roborock command endpoints. | implemented |
+| 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__003_MINI_START_WIDGET.md | Implement the compact Roborock widget with one-tap start behavior, configuration awareness, and localized widget-owned status copy. | planned |
+| 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__004_EXTENDED_STATUS_AND_LOCATION_VIEW.md | Build the extended Roborock experience with live state, battery, elapsed and remaining time, optional location or room details, and reconnect guidance. | planned |

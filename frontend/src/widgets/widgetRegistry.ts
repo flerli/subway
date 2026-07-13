@@ -45,6 +45,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   bring: {
     widgetNumber: 8,
   },
+  roborock: {
+    widgetNumber: 9,
+  },
 }
 
 export const buildWidgetRegistry = (

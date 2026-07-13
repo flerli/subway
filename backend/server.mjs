@@ -38,11 +38,23 @@ const BRING_SIDECAR_REQUEST_TIMEOUT_MS = Number.parseInt(
   process.env.BRING_SIDECAR_REQUEST_TIMEOUT_MS ?? '15000',
   10,
 )
+const ROBOROCK_SIDECAR_URL =
+  process.env.ROBOROCK_SIDECAR_URL ?? 'http://127.0.0.1:8789'
+const ROBOROCK_SIDECAR_REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.ROBOROCK_SIDECAR_REQUEST_TIMEOUT_MS ?? '15000',
+  10,
+)
 const BRING_CREDENTIAL_ENCRYPTION_SECRET =
   process.env.BRING_CREDENTIAL_ENCRYPTION_KEY ?? ''
 const bringCredentialEncryptionKey =
   BRING_CREDENTIAL_ENCRYPTION_SECRET.trim().length > 0
     ? createHash('sha256').update(BRING_CREDENTIAL_ENCRYPTION_SECRET).digest()
+    : null
+const ROBOROCK_SESSION_ENCRYPTION_SECRET =
+  process.env.ROBOROCK_SESSION_ENCRYPTION_KEY ?? ''
+const roborockSessionEncryptionKey =
+  ROBOROCK_SESSION_ENCRYPTION_SECRET.trim().length > 0
+    ? createHash('sha256').update(ROBOROCK_SESSION_ENCRYPTION_SECRET).digest()
     : null
 const INITIAL_USER_ID = process.env.INITIAL_USER_ID ?? 'user-flerlage'
 const INITIAL_USER_USERNAME = process.env.INITIAL_USER_USERNAME ?? 'flerlage'
@@ -246,6 +258,79 @@ const sanitizeBringUsername = (value) => {
   }
 
   return value.trim().slice(0, 320)
+}
+
+const sanitizeRoborockEmail = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 320)
+}
+
+const sanitizeRoborockVerificationCode = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 32)
+}
+
+const sanitizeRoborockBaseUrl = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 320)
+}
+
+const normalizeRoborockDeviceDuid = (value) =>
+  typeof value === 'string' ? value.trim().slice(0, 160) : ''
+
+const sanitizeRoborockDeviceName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 160)
+}
+
+const sanitizeRoborockDeviceModel = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 160)
+}
+
+const normalizeRoborockRoutineId = (value) => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsedValue = Number.parseInt(value.trim(), 10)
+
+    return Number.isInteger(parsedValue) ? parsedValue : null
+  }
+
+  return null
+}
+
+const sanitizeRoborockRoutineName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 160)
+}
+
+const normalizeRoborockConnectionStatus = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : ''
+
+  return normalizedValue === 'connected' || normalizedValue === 'reconnect_required'
+    ? normalizedValue
+    : 'not_configured'
 }
 
 const sanitizeBringPassword = (value) =>
@@ -827,6 +912,25 @@ const createBringIntegrationsTableSql = `
   )
 `
 
+const createRoborockIntegrationsTableSql = `
+  CREATE TABLE IF NOT EXISTS roborock_integrations (
+    owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
+    roborock_email TEXT NOT NULL,
+    encrypted_session_json TEXT,
+    base_url TEXT,
+    selected_device_duid TEXT,
+    selected_device_name TEXT,
+    selected_device_model TEXT,
+    selected_routine_id INTEGER,
+    selected_routine_name TEXT,
+    connection_status TEXT NOT NULL DEFAULT 'not_configured',
+    last_connected_at TEXT,
+    last_validated_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`
+
 const createBringListSnapshotsTableSql = `
   CREATE TABLE IF NOT EXISTS bring_list_snapshots (
     owner_user_id TEXT NOT NULL PRIMARY KEY REFERENCES users(id),
@@ -912,6 +1016,7 @@ migrateOwnedTable({
 db.exec(createAppPreferencesTableSql)
 db.exec(createAudioVisualRecordingsTableSql)
 db.exec(createBringIntegrationsTableSql)
+db.exec(createRoborockIntegrationsTableSql)
 db.exec(createBringListSnapshotsTableSql)
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
@@ -1064,9 +1169,42 @@ const migrateAppPreferencesFoundation = () => {
     .run()
 }
 
+const migrateRoborockIntegrationsFoundation = () => {
+  if (!hasColumn('roborock_integrations', 'selected_device_duid')) {
+    db.exec('ALTER TABLE roborock_integrations ADD COLUMN selected_device_duid TEXT')
+  }
+
+  if (!hasColumn('roborock_integrations', 'selected_device_name')) {
+    db.exec('ALTER TABLE roborock_integrations ADD COLUMN selected_device_name TEXT')
+  }
+
+  if (!hasColumn('roborock_integrations', 'selected_device_model')) {
+    db.exec('ALTER TABLE roborock_integrations ADD COLUMN selected_device_model TEXT')
+  }
+
+  if (!hasColumn('roborock_integrations', 'selected_routine_id')) {
+    db.exec('ALTER TABLE roborock_integrations ADD COLUMN selected_routine_id INTEGER')
+  }
+
+  if (!hasColumn('roborock_integrations', 'selected_routine_name')) {
+    db.exec('ALTER TABLE roborock_integrations ADD COLUMN selected_routine_name TEXT')
+  }
+
+  db
+    .prepare(`
+      UPDATE roborock_integrations
+      SET connection_status = 'not_configured'
+      WHERE connection_status IS NULL
+        OR TRIM(connection_status) = ''
+        OR connection_status NOT IN ('not_configured', 'connected', 'reconnect_required')
+    `)
+    .run()
+}
+
 migrateCalendarEventsFoundation()
 migrateCalendarEventsExcludedDatesAndCancelled()
 migrateAppPreferencesFoundation()
+migrateRoborockIntegrationsFoundation()
 
 const todayIsoDate = getTodayIsoDate()
 
@@ -1152,6 +1290,15 @@ const seedWidgets = [
     sourceLocation: 'bring',
     userScope: { mode: 'all', memberIds: [] },
     placementZones: [{ zoneId: 'service-board', order: 2 }],
+  },
+  {
+    id: 'roborock',
+    title: 'Roborock',
+    subwayLetter: 'R',
+    subwayColor: '#ff6b35',
+    sourceLocation: 'roborock',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [],
   },
 ]
 
@@ -1531,6 +1678,137 @@ const upsertBringIntegration = (
       selectedListName,
       timestamp,
       timestamp,
+    )
+
+const selectRoborockIntegrationRow = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT
+        roborock_email,
+        encrypted_session_json,
+        base_url,
+        selected_device_duid,
+        selected_device_name,
+        selected_device_model,
+        selected_routine_id,
+        selected_routine_name,
+        connection_status,
+        last_connected_at,
+        last_validated_at,
+        updated_at
+      FROM roborock_integrations
+      WHERE owner_user_id = ?
+    `)
+    .get(ownerUserId)
+
+const selectRoborockSettings = (ownerUserId) => {
+  const row = selectRoborockIntegrationRow(ownerUserId)
+
+  return {
+    email: sanitizeRoborockEmail(row?.roborock_email),
+    hasStoredSession:
+      typeof row?.encrypted_session_json === 'string' && row.encrypted_session_json.length > 0,
+    baseUrl: sanitizeRoborockBaseUrl(row?.base_url),
+    selectedDeviceDuid: normalizeRoborockDeviceDuid(row?.selected_device_duid),
+    selectedDeviceName: sanitizeRoborockDeviceName(row?.selected_device_name),
+    selectedDeviceModel: sanitizeRoborockDeviceModel(row?.selected_device_model),
+    selectedRoutineId: normalizeRoborockRoutineId(row?.selected_routine_id),
+    selectedRoutineName: sanitizeRoborockRoutineName(row?.selected_routine_name),
+    connectionStatus: normalizeRoborockConnectionStatus(row?.connection_status),
+    lastConnectedAt:
+      typeof row?.last_connected_at === 'string' ? row.last_connected_at : null,
+    lastValidatedAt:
+      typeof row?.last_validated_at === 'string' ? row.last_validated_at : null,
+    updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
+  }
+}
+
+const upsertRoborockIntegration = (
+  ownerUserId,
+  roborockEmail,
+  encryptedSessionJson,
+  baseUrl,
+  connectionStatus,
+  lastConnectedAt,
+  lastValidatedAt,
+  timestamp,
+) =>
+  db
+    .prepare(`
+      INSERT INTO roborock_integrations (
+        owner_user_id,
+        roborock_email,
+        encrypted_session_json,
+        base_url,
+        connection_status,
+        last_connected_at,
+        last_validated_at,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(owner_user_id) DO UPDATE SET
+        roborock_email = excluded.roborock_email,
+        encrypted_session_json = excluded.encrypted_session_json,
+        base_url = excluded.base_url,
+        connection_status = excluded.connection_status,
+        last_connected_at = excluded.last_connected_at,
+        last_validated_at = excluded.last_validated_at,
+        updated_at = excluded.updated_at
+    `)
+    .run(
+      ownerUserId,
+      roborockEmail,
+      encryptedSessionJson,
+      baseUrl,
+      connectionStatus,
+      lastConnectedAt,
+      lastValidatedAt,
+      timestamp,
+      timestamp,
+    )
+
+const updateRoborockConnectionStatus = (
+  ownerUserId,
+  connectionStatus,
+  lastValidatedAt,
+) =>
+  db
+    .prepare(`
+      UPDATE roborock_integrations
+      SET connection_status = ?, last_validated_at = ?, updated_at = ?
+      WHERE owner_user_id = ?
+    `)
+    .run(connectionStatus, lastValidatedAt, lastValidatedAt, ownerUserId)
+
+const updateRoborockSelection = (
+  ownerUserId,
+  selectedDeviceDuid,
+  selectedDeviceName,
+  selectedDeviceModel,
+  selectedRoutineId,
+  selectedRoutineName,
+  timestamp,
+) =>
+  db
+    .prepare(`
+      UPDATE roborock_integrations
+      SET selected_device_duid = ?,
+          selected_device_name = ?,
+          selected_device_model = ?,
+          selected_routine_id = ?,
+          selected_routine_name = ?,
+          updated_at = ?
+      WHERE owner_user_id = ?
+    `)
+    .run(
+      selectedDeviceDuid,
+      selectedDeviceName,
+      selectedDeviceModel,
+      selectedRoutineId,
+      selectedRoutineName,
+      timestamp,
+      ownerUserId,
     )
 
 const normalizeBringSnapshotItem = (value) => {
@@ -2652,6 +2930,469 @@ class BringIntegrationError extends Error {
   }
 }
 
+class RoborockIntegrationError extends Error {
+  constructor(message, statusCode, errorCode) {
+    super(message)
+    this.name = 'RoborockIntegrationError'
+    this.statusCode = statusCode
+    this.errorCode = errorCode
+  }
+}
+
+const ensureRoborockSessionEncryptionConfigured = () => {
+  if (!roborockSessionEncryptionKey) {
+    throw new RoborockIntegrationError(
+      'Roborock integration is not configured on the server.',
+      503,
+      'roborock_configuration_missing',
+    )
+  }
+}
+
+const encryptRoborockSessionPayload = (sessionPayloadJson) => {
+  ensureRoborockSessionEncryptionConfigured()
+
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', roborockSessionEncryptionKey, iv)
+  const encryptedValue = Buffer.concat([
+    cipher.update(sessionPayloadJson, 'utf8'),
+    cipher.final(),
+  ])
+  const authTag = cipher.getAuthTag()
+
+  return JSON.stringify({
+    iv: iv.toString('base64'),
+    value: encryptedValue.toString('base64'),
+    authTag: authTag.toString('base64'),
+  })
+}
+
+const decryptRoborockSessionPayload = (encryptedSessionJson) => {
+  ensureRoborockSessionEncryptionConfigured()
+
+  let parsedValue
+
+  try {
+    parsedValue = JSON.parse(encryptedSessionJson)
+  } catch {
+    throw new RoborockIntegrationError(
+      'Stored Roborock session data is invalid.',
+      500,
+      'roborock_session_invalid',
+    )
+  }
+
+  if (
+    !parsedValue ||
+    typeof parsedValue !== 'object' ||
+    typeof parsedValue.iv !== 'string' ||
+    typeof parsedValue.value !== 'string' ||
+    typeof parsedValue.authTag !== 'string'
+  ) {
+    throw new RoborockIntegrationError(
+      'Stored Roborock session data is invalid.',
+      500,
+      'roborock_session_invalid',
+    )
+  }
+
+  try {
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      roborockSessionEncryptionKey,
+      Buffer.from(parsedValue.iv, 'base64'),
+    )
+    decipher.setAuthTag(Buffer.from(parsedValue.authTag, 'base64'))
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(parsedValue.value, 'base64')),
+      decipher.final(),
+    ]).toString('utf8')
+  } catch {
+    throw new RoborockIntegrationError(
+      'Stored Roborock session data cannot be decrypted.',
+      500,
+      'roborock_session_invalid',
+    )
+  }
+}
+
+const normalizeRoborockSessionPayload = (value) => {
+  const candidate = value && typeof value === 'object' ? value : null
+  const userData =
+    candidate?.userData && typeof candidate.userData === 'object' ? candidate.userData : null
+
+  if (!userData) {
+    throw new RoborockIntegrationError(
+      'Stored Roborock session data is invalid.',
+      500,
+      'roborock_session_invalid',
+    )
+  }
+
+  return {
+    userData,
+    baseUrl: sanitizeRoborockBaseUrl(candidate.baseUrl),
+  }
+}
+
+const normalizeRoborockDeviceEntry = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const duid = normalizeRoborockDeviceDuid(candidate.duid)
+  const name = sanitizeRoborockDeviceName(candidate.name)
+  const model = sanitizeRoborockDeviceModel(candidate.model)
+
+  if (!duid || !name || !model) {
+    return null
+  }
+
+  return {
+    duid,
+    name,
+    model,
+    productName: sanitizeRoborockDeviceName(candidate.productName),
+    online: candidate.online === true,
+    supportsRoutineSelection: candidate.supportsRoutineSelection === true,
+    supportsQuickStart: candidate.supportsQuickStart !== false,
+  }
+}
+
+const normalizeRoborockRoutineEntry = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const routineId = normalizeRoborockRoutineId(candidate.id)
+  const name = sanitizeRoborockRoutineName(candidate.name)
+
+  if (routineId === null || !name) {
+    return null
+  }
+
+  return {
+    id: routineId,
+    name,
+  }
+}
+
+const normalizeRoborockStatusPayload = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const capabilities =
+    candidate.capabilities && typeof candidate.capabilities === 'object'
+      ? candidate.capabilities
+      : {}
+
+  return {
+    state: typeof candidate.state === 'number' ? candidate.state : null,
+    stateName:
+      typeof candidate.stateName === 'string' && candidate.stateName.trim().length > 0
+        ? candidate.stateName.trim()
+        : null,
+    battery: typeof candidate.battery === 'number' ? candidate.battery : null,
+    cleanTimeSeconds:
+      typeof candidate.cleanTimeSeconds === 'number' ? candidate.cleanTimeSeconds : null,
+    cleanAreaSquareMeters:
+      typeof candidate.cleanAreaSquareMeters === 'number'
+        ? candidate.cleanAreaSquareMeters
+        : null,
+    cleanPercent: typeof candidate.cleanPercent === 'number' ? candidate.cleanPercent : null,
+    currentMapId: typeof candidate.currentMapId === 'number' ? candidate.currentMapId : null,
+    dockState:
+      typeof candidate.dockState === 'string' && candidate.dockState.trim().length > 0
+        ? candidate.dockState.trim()
+        : null,
+    errorCodeName:
+      typeof candidate.errorCodeName === 'string' && candidate.errorCodeName.trim().length > 0
+        ? candidate.errorCodeName.trim()
+        : null,
+    capabilities: {
+      supportsElapsedTime: capabilities.supportsElapsedTime === true,
+      supportsCleaningArea: capabilities.supportsCleaningArea === true,
+      supportsCleaningPercent: capabilities.supportsCleaningPercent === true,
+      supportsCurrentMap: capabilities.supportsCurrentMap === true,
+      supportsLocation: capabilities.supportsLocation === true,
+      supportsRemainingTime: capabilities.supportsRemainingTime === true,
+    },
+  }
+}
+
+const callRoborockSidecar = async (pathname, payload) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ROBOROCK_SIDECAR_REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(`${ROBOROCK_SIDECAR_URL}${pathname}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+
+    let responseBody = {}
+
+    try {
+      responseBody = await response.json()
+    } catch {
+      responseBody = {}
+    }
+
+    if (!response.ok) {
+      throw new RoborockIntegrationError(
+        typeof responseBody.error === 'string'
+          ? responseBody.error
+          : 'Roborock integration request failed.',
+        response.status,
+        typeof responseBody.errorCode === 'string'
+          ? responseBody.errorCode
+          : 'roborock_sidecar_error',
+      )
+    }
+
+    return responseBody
+  } catch (error) {
+    if (error instanceof RoborockIntegrationError) {
+      throw error
+    }
+
+    throw new RoborockIntegrationError(
+      'Roborock integration is temporarily unavailable.',
+      503,
+      'roborock_sidecar_unavailable',
+    )
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const callRoborockStoredSessionSidecar = async (ownerUserId, pathname, payload = {}) => {
+  const { email, sessionPayload } = resolveRoborockStoredSession(ownerUserId)
+  const validatedAt = new Date().toISOString()
+
+  try {
+    const responseBody = await callRoborockSidecar(pathname, {
+      email,
+      sessionPayload,
+      ...payload,
+    })
+
+    updateRoborockConnectionStatus(ownerUserId, 'connected', validatedAt)
+    return responseBody
+  } catch (error) {
+    if (
+      error instanceof RoborockIntegrationError &&
+      error.errorCode === 'roborock_session_invalid'
+    ) {
+      updateRoborockConnectionStatus(ownerUserId, 'reconnect_required', validatedAt)
+    }
+
+    throw error
+  }
+}
+
+const resolveRoborockStoredSession = (ownerUserId) => {
+  const currentIntegration = selectRoborockIntegrationRow(ownerUserId)
+  const email = sanitizeRoborockEmail(currentIntegration?.roborock_email)
+
+  if (!email) {
+    throw new RoborockIntegrationError(
+      'Roborock email is not configured.',
+      400,
+      'roborock_email_missing',
+    )
+  }
+
+  if (
+    typeof currentIntegration?.encrypted_session_json !== 'string' ||
+    currentIntegration.encrypted_session_json.length === 0
+  ) {
+    throw new RoborockIntegrationError(
+      'Roborock session is not configured.',
+      400,
+      'roborock_session_missing',
+    )
+  }
+
+  return {
+    email,
+    sessionPayload: (() => {
+      try {
+        return normalizeRoborockSessionPayload(
+          JSON.parse(decryptRoborockSessionPayload(currentIntegration.encrypted_session_json)),
+        )
+      } catch (error) {
+        if (error instanceof RoborockIntegrationError) {
+          throw error
+        }
+
+        throw new RoborockIntegrationError(
+          'Stored Roborock session data is invalid.',
+          500,
+          'roborock_session_invalid',
+        )
+      }
+    })(),
+  }
+}
+
+const requestRoborockLoginCode = async (email) => {
+  await callRoborockSidecar('/request-code', { email })
+}
+
+const loginRoborockAccount = async (email, verificationCode) => {
+  const responseBody = await callRoborockSidecar('/login', {
+    email,
+    verificationCode,
+  })
+  const sessionPayload = normalizeRoborockSessionPayload(responseBody.sessionPayload)
+
+  return sessionPayload
+}
+
+const loadRoborockDeviceDiscovery = async (ownerUserId, selectedDeviceDuid = '') => {
+  const responseBody = await callRoborockStoredSessionSidecar(ownerUserId, '/devices', {
+    selectedDeviceDuid: normalizeRoborockDeviceDuid(selectedDeviceDuid),
+  })
+
+  const devices = Array.isArray(responseBody.devices)
+    ? responseBody.devices
+        .map(normalizeRoborockDeviceEntry)
+        .filter((entry) => entry !== null)
+    : []
+  const routines = Array.isArray(responseBody.routines)
+    ? responseBody.routines
+        .map(normalizeRoborockRoutineEntry)
+        .filter((entry) => entry !== null)
+    : []
+  const resolvedSelectedDeviceDuid = normalizeRoborockDeviceDuid(responseBody.selectedDeviceDuid)
+
+  return {
+    devices,
+    selectedDeviceDuid: resolvedSelectedDeviceDuid,
+    routines,
+  }
+}
+
+const resolveRoborockSelectedDeviceDuid = (ownerUserId, overrideValue = undefined) => {
+  const currentIntegration = selectRoborockIntegrationRow(ownerUserId)
+  const selectedDeviceDuid = normalizeRoborockDeviceDuid(
+    overrideValue ?? currentIntegration?.selected_device_duid,
+  )
+
+  if (!selectedDeviceDuid) {
+    throw new RoborockIntegrationError(
+      'No Roborock device is selected.',
+      400,
+      'roborock_selected_device_missing',
+    )
+  }
+
+  return selectedDeviceDuid
+}
+
+const resolveRoborockSelectedRoutineId = (ownerUserId, overrideValue = undefined) => {
+  const currentIntegration = selectRoborockIntegrationRow(ownerUserId)
+
+  return normalizeRoborockRoutineId(overrideValue ?? currentIntegration?.selected_routine_id)
+}
+
+const fetchRoborockStatus = async (ownerUserId) => {
+  const selectedDeviceDuid = resolveRoborockSelectedDeviceDuid(ownerUserId)
+  const responseBody = await callRoborockStoredSessionSidecar(ownerUserId, '/status', {
+    deviceDuid: selectedDeviceDuid,
+  })
+  const device = normalizeRoborockDeviceEntry(responseBody.device)
+
+  if (!device) {
+    throw new RoborockIntegrationError(
+      'Roborock returned an invalid device payload.',
+      502,
+      'roborock_device_payload_invalid',
+    )
+  }
+
+  return {
+    device,
+    status: normalizeRoborockStatusPayload(responseBody.status),
+    quickStartMode:
+      resolveRoborockSelectedRoutineId(ownerUserId) === null ? 'standard' : 'routine',
+    refreshedAt: new Date().toISOString(),
+  }
+}
+
+const startRoborockQuickAction = async (ownerUserId) => {
+  const selectedDeviceDuid = resolveRoborockSelectedDeviceDuid(ownerUserId)
+  const selectedRoutineId = resolveRoborockSelectedRoutineId(ownerUserId)
+  const responseBody = await callRoborockStoredSessionSidecar(ownerUserId, '/quick-start', {
+    deviceDuid: selectedDeviceDuid,
+    routineId: selectedRoutineId,
+  })
+  const device = normalizeRoborockDeviceEntry(responseBody.device)
+
+  if (!device) {
+    throw new RoborockIntegrationError(
+      'Roborock returned an invalid device payload.',
+      502,
+      'roborock_device_payload_invalid',
+    )
+  }
+
+  return {
+    device,
+    status: normalizeRoborockStatusPayload(responseBody.status),
+    quickStartMode:
+      responseBody.startMode === 'routine' ? 'routine' : 'standard',
+    refreshedAt: new Date().toISOString(),
+  }
+}
+
+const validateRoborockStoredSession = async (ownerUserId) => {
+  const { email, sessionPayload } = resolveRoborockStoredSession(ownerUserId)
+  const validatedAt = new Date().toISOString()
+
+  try {
+    await callRoborockSidecar('/session-status', {
+      email,
+      sessionPayload,
+    })
+
+    updateRoborockConnectionStatus(ownerUserId, 'connected', validatedAt)
+
+    return {
+      healthy: true,
+      roborockSettings: selectRoborockSettings(ownerUserId),
+    }
+  } catch (error) {
+    if (
+      error instanceof RoborockIntegrationError &&
+      error.errorCode === 'roborock_session_invalid'
+    ) {
+      updateRoborockConnectionStatus(ownerUserId, 'reconnect_required', validatedAt)
+
+      return {
+        healthy: false,
+        roborockSettings: selectRoborockSettings(ownerUserId),
+      }
+    }
+
+    throw error
+  }
+}
+
+const sendRoborockIntegrationError = (response, error) => {
+  if (error instanceof RoborockIntegrationError) {
+    sendJson(response, error.statusCode, {
+      error: error.message,
+      errorCode: error.errorCode,
+    })
+    return
+  }
+
+  console.error('Unexpected Roborock integration failure.', error)
+  sendJson(response, 500, {
+    error: 'Roborock integration request failed.',
+    errorCode: 'roborock_unknown_error',
+  })
+}
+
 const ensureBringCredentialEncryptionConfigured = () => {
   if (!bringCredentialEncryptionKey) {
     throw new BringIntegrationError(
@@ -3486,6 +4227,22 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/roborock/settings') {
+    sendJson(response, 200, { roborockSettings: selectRoborockSettings(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/roborock/status') {
+    try {
+      const roborockStatus = await fetchRoborockStatus(ownerUserId)
+      sendJson(response, 200, { roborockStatus })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
+      return
+    }
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/bring/list') {
     try {
       const bringList = await getBringListWithFallback(ownerUserId)
@@ -3691,6 +4448,94 @@ const server = createServer(async (request, response) => {
       return
     } catch (error) {
       sendBringIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'POST' &&
+    requestUrl.pathname === '/api/roborock/settings/request-code'
+  ) {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const email = sanitizeRoborockEmail(body?.email)
+
+      if (!email) {
+        sendJson(response, 400, { error: 'email is required.' })
+        return
+      }
+
+      await requestRoborockLoginCode(email)
+      sendJson(response, 200, { ok: true })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'POST' &&
+    requestUrl.pathname === '/api/roborock/settings/session'
+  ) {
+    try {
+      const sessionStatus = await validateRoborockStoredSession(ownerUserId)
+      sendJson(response, 200, sessionStatus)
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'POST' &&
+    requestUrl.pathname === '/api/roborock/settings/devices'
+  ) {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const requestedSelectedDeviceDuid = normalizeRoborockDeviceDuid(body?.selectedDeviceDuid)
+      const discovery = await loadRoborockDeviceDiscovery(
+        ownerUserId,
+        requestedSelectedDeviceDuid,
+      )
+
+      sendJson(response, 200, {
+        devices: discovery.devices,
+        selectedDeviceDuid: discovery.selectedDeviceDuid,
+        routines: discovery.routines,
+        roborockSettings: selectRoborockSettings(ownerUserId),
+      })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/roborock/start') {
+    try {
+      const roborockStatus = await startRoborockQuickAction(ownerUserId)
+      sendJson(response, 200, { roborockStatus })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
       return
     }
   }
@@ -3933,6 +4778,131 @@ const server = createServer(async (request, response) => {
       return
     } catch {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    requestUrl.pathname === '/api/roborock/settings'
+  ) {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      ensureRoborockSessionEncryptionConfigured()
+
+      const email = sanitizeRoborockEmail(body?.email)
+      const verificationCode = sanitizeRoborockVerificationCode(body?.verificationCode)
+
+      if (!email) {
+        sendJson(response, 400, { error: 'email is required.' })
+        return
+      }
+
+      if (!verificationCode) {
+        sendJson(response, 400, { error: 'verificationCode is required.' })
+        return
+      }
+
+      const sessionPayload = await loginRoborockAccount(email, verificationCode)
+      const timestamp = new Date().toISOString()
+
+      upsertRoborockIntegration(
+        ownerUserId,
+        email,
+        encryptRoborockSessionPayload(JSON.stringify(sessionPayload)),
+        sessionPayload.baseUrl,
+        'connected',
+        timestamp,
+        timestamp,
+        timestamp,
+      )
+
+      updateRoborockSelection(ownerUserId, '', '', '', null, '', timestamp)
+
+      sendJson(response, 200, {
+        roborockSettings: selectRoborockSettings(ownerUserId),
+      })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    requestUrl.pathname === '/api/roborock/settings/selection'
+  ) {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const selectedDeviceDuid = normalizeRoborockDeviceDuid(body?.selectedDeviceDuid)
+      const selectedRoutineId = normalizeRoborockRoutineId(body?.selectedRoutineId)
+
+      if (!selectedDeviceDuid) {
+        sendJson(response, 400, { error: 'selectedDeviceDuid is required.' })
+        return
+      }
+
+      const discovery = await loadRoborockDeviceDiscovery(ownerUserId, selectedDeviceDuid)
+      const selectedDevice =
+        discovery.devices.find((device) => device.duid === selectedDeviceDuid) ?? null
+
+      if (!selectedDevice) {
+        sendJson(response, 400, {
+          error: 'selectedDeviceDuid must match one available Roborock device.',
+        })
+        return
+      }
+
+      const selectedRoutine =
+        selectedRoutineId === null
+          ? null
+          : discovery.routines.find((routine) => routine.id === selectedRoutineId) ?? null
+
+      if (selectedRoutineId !== null && !selectedRoutine) {
+        sendJson(response, 400, {
+          error: 'selectedRoutineId must match one available Roborock routine.',
+        })
+        return
+      }
+
+      const timestamp = new Date().toISOString()
+
+      updateRoborockSelection(
+        ownerUserId,
+        selectedDevice.duid,
+        selectedDevice.name,
+        selectedDevice.model,
+        selectedRoutine?.id ?? null,
+        selectedRoutine?.name ?? '',
+        timestamp,
+      )
+
+      sendJson(response, 200, {
+        roborockSettings: selectRoborockSettings(ownerUserId),
+        devices: discovery.devices,
+        routines: discovery.routines,
+        selectedDeviceDuid: selectedDevice.duid,
+      })
+      return
+    } catch (error) {
+      sendRoborockIntegrationError(response, error)
       return
     }
   }

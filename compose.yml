@@ -5,6 +5,7 @@ services:
     image: ${BACKEND_IMAGE:-subway-backend:local}
     depends_on:
       - bring-sidecar
+      - roborock-sidecar
     environment:
       HOST: 0.0.0.0
       PORT: 8787
@@ -13,6 +14,9 @@ services:
       WEATHER_LOCATION: ${WEATHER_LOCATION:-Berlin}
       WEATHER_TIMEZONE: ${WEATHER_TIMEZONE:-auto}
       BRING_SIDECAR_URL: ${BRING_SIDECAR_URL:-http://bring-sidecar:8788}
+      BRING_CREDENTIAL_ENCRYPTION_KEY: ${BRING_CREDENTIAL_ENCRYPTION_KEY:-}
+      ROBOROCK_SIDECAR_URL: ${ROBOROCK_SIDECAR_URL:-http://roborock-sidecar:8789}
+      ROBOROCK_SESSION_ENCRYPTION_KEY: ${ROBOROCK_SESSION_ENCRYPTION_KEY:-}
     volumes:
       - subway-data:/app/data
     restart: unless-stopped
@@ -36,6 +40,15 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8788
+    restart: unless-stopped
+
+  roborock-sidecar:
+    build:
+      context: ./backend/roborock_sidecar
+    image: ${ROBOROCK_SIDECAR_IMAGE:-subway-roborock-sidecar:local}
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8789
     restart: unless-stopped
 
   frontend:
