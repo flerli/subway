@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AppTextBundle } from '../i18n/appText'
+import { formatLocalizedText } from '../i18n/localization'
 import type { SupportedLanguageCode } from '../i18n/localization'
 import type { RegisteredWidget, WidgetSettingsValues } from './widgetTypes'
 import {
   getLocalizedSettingsDefinition,
   getWidgetBoardKicker,
+  resolveWidgetTitle,
 } from './widgetLocalization'
 
 interface WidgetSettingsHostProps {
@@ -18,7 +20,15 @@ interface WidgetSettingsHostProps {
   ) => Promise<void>
 }
 
-interface WidgetSettingsCardProps {
+interface WidgetSettingsLauncherCardProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
+  widget: RegisteredWidget
+  isExpanded: boolean
+  onToggleExpanded: (widgetId: string) => void
+}
+
+interface WidgetSettingsExpandedCardProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
   widget: RegisteredWidget
@@ -26,13 +36,105 @@ interface WidgetSettingsCardProps {
   onSave: (widgetId: string, settings: WidgetSettingsValues) => Promise<void>
 }
 
-function WidgetSettingsCard({
+const renderEmptyState = (title: string, copy: string) => (
+  <div className="empty-state empty-state--expanded">
+    <p className="empty-title">{title}</p>
+    <p className="empty-copy">{copy}</p>
+  </div>
+)
+
+const getWidgetSettingsSummary = (
+  widget: RegisteredWidget,
+  languageCode: SupportedLanguageCode,
+) => {
+  const localizedSettingsDefinition = getLocalizedSettingsDefinition(
+    widget.module,
+    languageCode,
+  )
+
+  if (localizedSettingsDefinition) {
+    return {
+      title: localizedSettingsDefinition.title,
+      description: localizedSettingsDefinition.description,
+    }
+  }
+
+  const settingsText = widget.module.getTranslation(languageCode).settings
+
+  return {
+    title: settingsText?.title ?? resolveWidgetTitle(widget, languageCode),
+    description: settingsText?.description ?? '',
+  }
+}
+
+function WidgetSettingsLauncherCard({
+  appText,
+  languageCode,
+  widget,
+  isExpanded,
+  onToggleExpanded,
+}: WidgetSettingsLauncherCardProps) {
+  const summary = getWidgetSettingsSummary(widget, languageCode)
+
+  return (
+    <article
+      className={`settings-card widget-settings-card widget-settings-card--compact${
+        isExpanded ? ' is-active' : ''
+      }`}
+    >
+      <div className="settings-card-head">
+        <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
+        <h3>{summary.title}</h3>
+      </div>
+
+      <div className="widget-settings-launcher-copy">
+        {summary.description ? <p>{summary.description}</p> : null}
+      </div>
+
+      <div className="widget-settings-actions widget-settings-actions--launcher">
+        <button
+          type="button"
+          className={`widget-action-button${isExpanded ? ' is-active' : ''}`}
+          aria-label={
+            isExpanded
+              ? formatLocalizedText(appText.boardHost.collapseAriaLabel, {
+                  title: resolveWidgetTitle(widget, languageCode),
+                })
+              : formatLocalizedText(appText.boardHost.expandAriaLabel, {
+                  title: resolveWidgetTitle(widget, languageCode),
+                })
+          }
+          aria-pressed={isExpanded}
+          onClick={() => onToggleExpanded(widget.entity.id)}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path
+              d="M4 8V4h4M12 4h4v4M4 12v4h4M16 12v4h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.5"
+            />
+          </svg>
+          <span>
+            {isExpanded
+              ? appText.boardHost.collapseAction
+              : appText.boardHost.expandAction}
+          </span>
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function WidgetSettingsExpandedCard({
   appText,
   languageCode,
   widget,
   initialSettings,
   onSave,
-}: WidgetSettingsCardProps) {
+}: WidgetSettingsExpandedCardProps) {
   const [draftSettings, setDraftSettings] = useState(initialSettings)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
@@ -67,7 +169,7 @@ function WidgetSettingsCard({
   }
 
   return (
-    <article className="settings-card widget-settings-card">
+    <article className="settings-card widget-settings-card widget-settings-card--expanded">
       <div className="settings-card-head">
         <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
         <h3>{settingsDefinition.title}</h3>
@@ -151,23 +253,71 @@ export function WidgetSettingsHost({
     () => registeredWidgets.filter((widget) => widget.module.hasSettingsPanel),
     [registeredWidgets],
   )
+  const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (settingsWidgets.length === 0) {
+      setExpandedWidgetId(null)
+      return
+    }
+
+    if (
+      expandedWidgetId &&
+      !settingsWidgets.some((widget) => widget.entity.id === expandedWidgetId)
+    ) {
+      setExpandedWidgetId(null)
+    }
+  }, [expandedWidgetId, settingsWidgets])
 
   if (settingsWidgets.length === 0) {
     return null
   }
 
+  const expandedWidget = expandedWidgetId
+    ? settingsWidgets.find((widget) => widget.entity.id === expandedWidgetId)
+    : undefined
+
+  const toggleExpandedWidget = (widgetId: string) => {
+    setExpandedWidgetId((currentWidgetId) =>
+      currentWidgetId === widgetId ? null : widgetId,
+    )
+  }
+
   return (
     <section className="widget-settings-host">
-      {settingsWidgets.map((widget) => (
-        <WidgetSettingsCard
-          key={widget.entity.id}
-          appText={appText}
-          languageCode={languageCode}
-          widget={widget}
-          initialSettings={widgetSettingsMap[widget.entity.id] ?? {}}
-          onSave={onSaveWidgetSettings}
-        />
-      ))}
+      <div className="widget-settings-grid">
+        {settingsWidgets.map((widget) => (
+          <WidgetSettingsLauncherCard
+            key={widget.entity.id}
+            appText={appText}
+            languageCode={languageCode}
+            widget={widget}
+            isExpanded={expandedWidgetId === widget.entity.id}
+            onToggleExpanded={toggleExpandedWidget}
+          />
+        ))}
+      </div>
+
+      <section
+        className="widget-zone widget-zone--expanded-stage"
+        aria-label={appText.widgetSettingsHost.expandedWidgetViewAriaLabel}
+      >
+        {expandedWidget ? (
+          <WidgetSettingsExpandedCard
+            key={expandedWidget.entity.id}
+            appText={appText}
+            languageCode={languageCode}
+            widget={expandedWidget}
+            initialSettings={widgetSettingsMap[expandedWidget.entity.id] ?? {}}
+            onSave={onSaveWidgetSettings}
+          />
+        ) : (
+          renderEmptyState(
+            appText.widgetSettingsHost.noExpandedWidgetTitle,
+            appText.widgetSettingsHost.noExpandedWidgetCopy,
+          )
+        )}
+      </section>
     </section>
   )
 }

@@ -2590,6 +2590,11 @@ select {
 
 .widget-settings-host {
   display: grid;
+  gap: 14px;
+}
+
+.widget-settings-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
@@ -2843,6 +2848,32 @@ select {
   gap: 14px;
 }
 
+.widget-settings-card--compact {
+  align-content: start;
+}
+
+.widget-settings-card--compact.is-active {
+  border-color: rgba(214, 232, 255, 0.32);
+  background: rgba(214, 232, 255, 0.07);
+}
+
+.widget-settings-card--expanded {
+  min-height: 100%;
+  align-content: start;
+}
+
+.widget-settings-launcher-copy {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.widget-settings-launcher-copy p {
+  margin: 0;
+  color: var(--muted-soft);
+  line-height: 1.45;
+}
+
 .widget-settings-fields {
   display: grid;
   gap: 12px;
@@ -2877,6 +2908,10 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.widget-settings-actions--launcher {
+  justify-content: flex-end;
 }
 
 .debug-overlay-backdrop {

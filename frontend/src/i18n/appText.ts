@@ -117,6 +117,9 @@ export interface AppTextBundle {
     savedState: string
     saveFailedState: string
     pendingChangesState: string
+    expandedWidgetViewAriaLabel: string
+    noExpandedWidgetTitle: string
+    noExpandedWidgetCopy: string
   }
   debug: {
     kicker: string
@@ -306,6 +309,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       savedState: 'Saved.',
       saveFailedState: 'Save failed.',
       pendingChangesState: 'Pending changes.',
+      expandedWidgetViewAriaLabel: 'Expanded widget settings view',
+      noExpandedWidgetTitle: 'No widget settings selected',
+      noExpandedWidgetCopy:
+        'Select Expand on a widget settings card to open its specific settings below.',
     },
     debug: {
       kicker: 'Maintenance',
@@ -501,6 +508,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       savedState: 'Gespeichert.',
       saveFailedState: 'Speichern fehlgeschlagen.',
       pendingChangesState: 'Aenderungen ausstehend.',
+      expandedWidgetViewAriaLabel: 'Erweiterte Widget-Einstellungsansicht',
+      noExpandedWidgetTitle: 'Keine Widget-Einstellungen ausgewaehlt',
+      noExpandedWidgetCopy:
+        'Waehle Erweitern auf einer Widget-Einstellungskarte, um die spezifischen Einstellungen unten zu oeffnen.',
     },
     debug: {
       kicker: 'Wartung',
@@ -704,6 +715,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       savedState: 'Enregistre.',
       saveFailedState: 'Echec de l enregistrement.',
       pendingChangesState: 'Modifications en attente.',
+      expandedWidgetViewAriaLabel: 'Vue detaillee des reglages du widget',
+      noExpandedWidgetTitle: 'Aucun reglage de widget selectionne',
+      noExpandedWidgetCopy:
+        'Selectionnez Etendre sur une carte de reglages du widget pour ouvrir ses reglages specifiques ci-dessous.',
     },
     debug: {
       kicker: 'Maintenance',
@@ -907,6 +922,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       savedState: 'Guardado.',
       saveFailedState: 'Error al guardar.',
       pendingChangesState: 'Cambios pendientes.',
+      expandedWidgetViewAriaLabel: 'Vista ampliada de configuracion del widget',
+      noExpandedWidgetTitle: 'No hay configuracion de widget seleccionada',
+      noExpandedWidgetCopy:
+        'Selecciona Expandir en una tarjeta de configuracion del widget para abrir abajo su configuracion especifica.',
     },
     debug: {
       kicker: 'Mantenimiento',
