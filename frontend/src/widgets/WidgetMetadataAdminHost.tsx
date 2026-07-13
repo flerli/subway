@@ -249,9 +249,11 @@ function WidgetMetadataCard({
         </div>
 
         <div className="widget-config-header-actions">
-          <p className={`widget-sync-state widget-sync-state--${syncState}`}>
-            {syncStateLabel}
-          </p>
+          {syncState !== 'idle' ? (
+            <p className={`widget-sync-state widget-sync-state--${syncState}`}>
+              {syncStateLabel}
+            </p>
+          ) : null}
 
           {widget.module.hasSettingsPanel ? (
             <button

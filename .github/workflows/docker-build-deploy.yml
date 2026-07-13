@@ -170,9 +170,11 @@ jobs:
           COMPOSE_PROJECT_NAME=subway
           BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}:${{ needs.build.outputs.image_tag }}
           BRING_SIDECAR_IMAGE=${{ needs.build.outputs.bring_sidecar_image }}:${{ needs.build.outputs.image_tag }}
+          BRING_CREDENTIAL_ENCRYPTION_KEY=${{ secrets.BRING_CREDENTIAL_ENCRYPTION_KEY }}
           FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}:${{ needs.build.outputs.image_tag }}
           APP_PORT=8081
           ROBOROCK_SIDECAR_IMAGE=${{ needs.build.outputs.roborock_sidecar_image }}:${{ needs.build.outputs.image_tag }}
+          ROBOROCK_SESSION_ENCRYPTION_KEY=${{ secrets.ROBOROCK_SESSION_ENCRYPTION_KEY }}
           EOF
 
       - name: Upload compose assets
