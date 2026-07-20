@@ -205,10 +205,22 @@ jobs:
             set -euo pipefail
             cd '${DEPLOY_PATH}'
 
-            volume_name='subway_subway-data'
+            compose_project_name=\$(awk -F= '/^COMPOSE_PROJECT_NAME=/{print \$2}' deploy.env)
+            if [[ -z \"\${compose_project_name}\" ]]; then
+              echo 'COMPOSE_PROJECT_NAME is missing from deploy.env.' >&2
+              exit 1
+            fi
+
+            volume_name=\"\${compose_project_name}_subway-data\"
             legacy_db='${DEPLOY_PATH}/backend/data/subway.sqlite'
             backup_dir='${DEPLOY_PATH}/backups'
             backup_name=\"subway-\$(date +%Y%m%d_%H%M%S).sqlite\"
+            recovery_db='${DEPLOY_PATH}/backups/subway-live-recovery.sqlite'
+            existing_backend_container=\$(docker compose -f compose.yml -f compose.vps.yml --env-file deploy.env ps -q backend 2>/dev/null | tail -n 1)
+
+            if [[ -z \"\${existing_backend_container}\" ]]; then
+              existing_backend_container=\$(docker ps --filter 'label=com.docker.compose.service=backend' --format '{{.ID}} {{.Names}}' | awk '\$2 ~ /subway/ { print \$1; exit }')
+            fi
 
             docker volume create \"\${volume_name}\" >/dev/null
 
@@ -218,13 +230,38 @@ jobs:
               alpine:3.20 \
               sh -c 'if [ -s /data/subway.sqlite ]; then cp /data/subway.sqlite \"/backup/'\"\${backup_name}\"'\"; fi'
 
-            docker run --rm \
-              -v \"\${volume_name}:/data\" \
-              -v \"${DEPLOY_PATH}/backend/data:/legacy\" \
-              alpine:3.20 \
-              sh -c 'if [ ! -s /data/subway.sqlite ] && [ -s /legacy/subway.sqlite ]; then cp /legacy/subway.sqlite /data/subway.sqlite; chmod 600 /data/subway.sqlite; fi'
+            volume_has_database=0
+            if docker run --rm -v \"\${volume_name}:/data\" alpine:3.20 sh -c 'test -s /data/subway.sqlite'; then
+              volume_has_database=1
+            fi
 
-            if [ ! -s \"\${legacy_db}\" ] && ! docker run --rm -v \"\${volume_name}:/data\" alpine:3.20 sh -c 'test -s /data/subway.sqlite'; then
+            if [[ \"\${volume_has_database}\" -eq 0 ]] && [[ ! -s \"\${legacy_db}\" ]] && [[ -n \"\${existing_backend_container}\" ]]; then
+              if docker exec \"\${existing_backend_container}\" test -s /app/data/subway.sqlite; then
+                docker cp \"\${existing_backend_container}:/app/data/subway.sqlite\" \"\${recovery_db}\"
+                cp \"\${recovery_db}\" \"\${legacy_db}\"
+                chmod 600 \"\${legacy_db}\"
+                rm -f \"\${recovery_db}\"
+              fi
+            fi
+
+            if [[ \"\${volume_has_database}\" -eq 0 ]] && [[ -s \"\${legacy_db}\" ]]; then
+              docker run --rm \
+                -v \"\${volume_name}:/data\" \
+                -v \"${DEPLOY_PATH}/backend/data:/legacy\" \
+                alpine:3.20 \
+                sh -c 'if [ ! -s /data/subway.sqlite ] && [ -s /legacy/subway.sqlite ]; then cp /legacy/subway.sqlite /data/subway.sqlite; chmod 600 /data/subway.sqlite; fi'
+            fi
+
+            if docker run --rm -v \"\${volume_name}:/data\" alpine:3.20 sh -c 'test -s /data/subway.sqlite'; then
+              volume_has_database=1
+            fi
+
+            if [[ -n \"\${existing_backend_container}\" ]] && [[ \"\${volume_has_database}\" -eq 0 ]]; then
+              echo 'An existing subway backend container was detected, but its database could not be recovered for deployment.' >&2
+              exit 1
+            fi
+
+            if [[ ! -s \"\${legacy_db}\" ]] && [[ \"\${volume_has_database}\" -eq 0 ]]; then
               echo 'No existing VPS database found in either the legacy host path or the Docker volume.'
               echo 'The deployment will proceed with a fresh database.'
             fi
