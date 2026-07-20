@@ -97,6 +97,8 @@ If you want to use the Bring settings flow in Docker, provide `BRING_CREDENTIAL_
 
 If you want to use the Roborock settings flow in Docker, provide `ROBOROCK_SESSION_ENCRYPTION_KEY` in the compose environment before starting the stack. Without it, the Roborock settings routes return a configuration error instead of storing encrypted session data.
 
+If you want to use the Assistant section in Docker, provide the `ASSISTANT_BACKEND_*` variables in the compose environment before starting the stack. The backend reads those values to seed one admin-managed assistant route and to connect to either LiteLLM or a direct custom backend.
+
 For local development, the backend data is kept in the named Docker volume:
 
 - `subway_subway-data`
@@ -139,6 +141,33 @@ What it does:
 Required GitHub secret:
 
 - `VPS_SSH_KEY`: private SSH key for `swaibian@client.scaico.com`
+
+Assistant deployment through GitHub Actions is also driven through GitHub secrets. For the current custom backend setup, add at least:
+
+- `ASSISTANT_BACKEND_ROUTE_ID`
+- `ASSISTANT_BACKEND_ROUTE_LABEL`
+- `ASSISTANT_BACKEND_KIND`
+- `ASSISTANT_BACKEND_BASE_URL`
+- `ASSISTANT_BACKEND_MODEL_IDENTIFIER`
+- `ASSISTANT_BACKEND_ENABLED`
+- `ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS`
+- `ASSISTANT_BACKEND_API_KEY`
+- `ASSISTANT_BACKEND_HEADERS_JSON`
+- `ASSISTANT_MCP_SERVERS_JSON`
+- `ASSISTANT_BACKEND_SUPPORTS_STREAMING`
+- `ASSISTANT_BACKEND_SUPPORTS_TOOLS`
+- `ASSISTANT_BACKEND_SUPPORTS_MARKDOWN`
+
+For your current custom assistant backend, the relevant values are:
+
+- `ASSISTANT_BACKEND_KIND=custom`
+- `ASSISTANT_BACKEND_BASE_URL=https://www.scaico.com/v1`
+- `ASSISTANT_BACKEND_MODEL_IDENTIFIER=subway/subway_assistant_team_mrtna741`
+- `ASSISTANT_BACKEND_SUPPORTS_STREAMING=false`
+- `ASSISTANT_BACKEND_SUPPORTS_TOOLS=false`
+- `ASSISTANT_BACKEND_SUPPORTS_MARKDOWN=true`
+
+Store the backend API key only in `ASSISTANT_BACKEND_API_KEY` as a GitHub secret and do not hardcode it into repository files.
 
 The VPS must already have Docker Engine with the Docker Compose v2 plugin installed.
 

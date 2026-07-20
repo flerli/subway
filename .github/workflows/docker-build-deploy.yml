@@ -169,6 +169,19 @@ jobs:
           cat > deploy.env <<EOF
           COMPOSE_PROJECT_NAME=subway
           BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}:${{ needs.build.outputs.image_tag }}
+          ASSISTANT_BACKEND_ROUTE_ID=${{ secrets.ASSISTANT_BACKEND_ROUTE_ID }}
+          ASSISTANT_BACKEND_ROUTE_LABEL=${{ secrets.ASSISTANT_BACKEND_ROUTE_LABEL }}
+          ASSISTANT_BACKEND_KIND=${{ secrets.ASSISTANT_BACKEND_KIND }}
+          ASSISTANT_BACKEND_BASE_URL=${{ secrets.ASSISTANT_BACKEND_BASE_URL }}
+          ASSISTANT_BACKEND_MODEL_IDENTIFIER=${{ secrets.ASSISTANT_BACKEND_MODEL_IDENTIFIER }}
+          ASSISTANT_BACKEND_ENABLED=${{ secrets.ASSISTANT_BACKEND_ENABLED }}
+          ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS=${{ secrets.ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS }}
+          ASSISTANT_BACKEND_API_KEY=${{ secrets.ASSISTANT_BACKEND_API_KEY }}
+          ASSISTANT_BACKEND_HEADERS_JSON=${{ secrets.ASSISTANT_BACKEND_HEADERS_JSON }}
+          ASSISTANT_MCP_SERVERS_JSON=${{ secrets.ASSISTANT_MCP_SERVERS_JSON }}
+          ASSISTANT_BACKEND_SUPPORTS_STREAMING=${{ secrets.ASSISTANT_BACKEND_SUPPORTS_STREAMING }}
+          ASSISTANT_BACKEND_SUPPORTS_TOOLS=${{ secrets.ASSISTANT_BACKEND_SUPPORTS_TOOLS }}
+          ASSISTANT_BACKEND_SUPPORTS_MARKDOWN=${{ secrets.ASSISTANT_BACKEND_SUPPORTS_MARKDOWN }}
           BRING_SIDECAR_IMAGE=${{ needs.build.outputs.bring_sidecar_image }}:${{ needs.build.outputs.image_tag }}
           BRING_CREDENTIAL_ENCRYPTION_KEY=${{ secrets.BRING_CREDENTIAL_ENCRYPTION_KEY }}
           FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}:${{ needs.build.outputs.image_tag }}
