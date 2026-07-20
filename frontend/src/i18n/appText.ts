@@ -24,10 +24,72 @@ export interface AppTextBundle {
   }
   shell: {
     familySettingsTitle: string
+    assistantTitle: string
     boardTab: string
+    assistantTab: string
     settingsTab: string
     signOutAction: string
     signingOutAction: string
+  }
+  assistant: {
+    kicker: string
+    title: string
+    introCopy: string
+    newThreadAction: string
+    creatingThreadAction: string
+    threadListTitle: string
+    threadListCopy: string
+    emptyThreadListTitle: string
+    emptyThreadListCopy: string
+    transcriptTitle: string
+    noThreadSelectedTitle: string
+    noThreadSelectedCopy: string
+    emptyTranscriptTitle: string
+    emptyTranscriptCopy: string
+    activeRouteLabel: string
+    backendKindLabel: string
+    streamingCapabilityLabel: string
+    toolsCapabilityLabel: string
+    markdownCapabilityLabel: string
+    enabledValue: string
+    disabledValue: string
+    availabilityAvailable: string
+    availabilityNotConfigured: string
+    availabilityDisabled: string
+    availabilityUnavailable: string
+    availabilityTitle: string
+    notConfiguredCopy: string
+    disabledCopy: string
+    unavailableCopy: string
+    openThreadAriaLabel: string
+    routeUnknownValue: string
+    modelSelectionManagedCopy: string
+    untitledThreadTitle: string
+    messageCountMeta: string
+    composerLabel: string
+    composerPlaceholder: string
+    composerNoThreadCopy: string
+    composerUnavailableCopy: string
+    turnStatusLabel: string
+    turnStateIdle: string
+    turnStateSending: string
+    turnStateStreaming: string
+    turnStateCompleted: string
+    turnStateFailed: string
+    sendAction: string
+    roleUser: string
+    roleAssistant: string
+    roleSystem: string
+    roleTool: string
+    toolActivityTitle: string
+    toolArgumentsLabel: string
+    toolResultLabel: string
+    toolErrorLabel: string
+    toolServerLabel: string
+    toolStatusRunning: string
+    toolStatusCompleted: string
+    toolStatusError: string
+    toolRedactedValue: string
   }
   filters: {
     allLabel: string
@@ -183,6 +245,9 @@ export interface AppTextBundle {
     todoUpdateFailed: string
     widgetSettingsSaveFailed: string
     widgetMetadataSaveFailed: string
+    assistantLoadFailed: string
+    assistantCreateThreadFailed: string
+    assistantSendFailed: string
   }
 }
 
@@ -216,10 +281,82 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     },
     shell: {
       familySettingsTitle: 'Family settings',
+      assistantTitle: 'Assistant',
       boardTab: 'Board',
+      assistantTab: 'Assistant',
       settingsTab: 'Settings',
       signOutAction: 'Log out',
       signingOutAction: 'Signing out...',
+    },
+    assistant: {
+      kicker: 'AI section',
+      title: 'Assistant threads',
+      introCopy:
+        'This section owns persistent per-user AI conversations outside the widget board. Provider routing stays admin-managed.',
+      newThreadAction: 'New conversation',
+      creatingThreadAction: 'Creating...',
+      threadListTitle: 'Saved conversations',
+      threadListCopy:
+        'Threads are stored per authenticated user and reopen from the backend transcript store.',
+      emptyThreadListTitle: 'No conversations yet',
+      emptyThreadListCopy:
+        'Create the first assistant thread now. Message sending arrives in the next issue.',
+      transcriptTitle: 'Transcript',
+      noThreadSelectedTitle: 'No conversation selected',
+      noThreadSelectedCopy:
+        'Choose a saved conversation on the left or create a new one to reserve its transcript.',
+      emptyTranscriptTitle: 'Transcript is empty',
+      emptyTranscriptCopy:
+        'This thread exists and is persisted, but no messages have been written yet.',
+      activeRouteLabel: 'Active route',
+      backendKindLabel: 'Backend kind',
+      streamingCapabilityLabel: 'Streaming',
+      toolsCapabilityLabel: 'Tools',
+      markdownCapabilityLabel: 'Markdown',
+      enabledValue: 'Enabled',
+      disabledValue: 'Disabled',
+      availabilityAvailable: 'Available',
+      availabilityNotConfigured: 'Not configured',
+      availabilityDisabled: 'Disabled',
+      availabilityUnavailable: 'Unavailable',
+      availabilityTitle: 'Assistant availability',
+      notConfiguredCopy:
+        'No admin-managed assistant route is active yet. Add an assistant backend route in server configuration first.',
+      disabledCopy:
+        'An assistant route exists but is disabled by configuration. End users can view threads but cannot use the runtime yet.',
+      unavailableCopy:
+        'An assistant route exists but is incomplete or unavailable. Check the admin-managed server configuration.',
+      openThreadAriaLabel: 'Open conversation {title}',
+      routeUnknownValue: 'n/a',
+      modelSelectionManagedCopy:
+        'Model and backend selection are managed centrally by admins and are not exposed in this user view.',
+      untitledThreadTitle: 'Untitled conversation',
+      messageCountMeta: '{count} messages',
+      composerLabel: 'Message',
+      composerPlaceholder: 'Write a message to the assistant...',
+      composerNoThreadCopy: 'Select or create a conversation before sending a message.',
+      composerUnavailableCopy:
+        'Assistant message sending is unavailable until a working admin-managed route is active.',
+      turnStatusLabel: 'Turn status',
+      turnStateIdle: 'Idle',
+      turnStateSending: 'Sending',
+      turnStateStreaming: 'Streaming',
+      turnStateCompleted: 'Completed',
+      turnStateFailed: 'Failed',
+      sendAction: 'Send message',
+      roleUser: 'You',
+      roleAssistant: 'Assistant',
+      roleSystem: 'System',
+      roleTool: 'Tool',
+      toolActivityTitle: 'Tool activity',
+      toolArgumentsLabel: 'Arguments',
+      toolResultLabel: 'Result',
+      toolErrorLabel: 'Error',
+      toolServerLabel: 'Server',
+      toolStatusRunning: 'Running',
+      toolStatusCompleted: 'Completed',
+      toolStatusError: 'Error',
+      toolRedactedValue: '[redacted]',
     },
     filters: {
       allLabel: 'All',
@@ -393,6 +530,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       todoUpdateFailed: 'Failed to update todo item state in the backend.',
       widgetSettingsSaveFailed: 'Failed to persist widget settings to the backend.',
       widgetMetadataSaveFailed: 'Failed to persist widget metadata to the backend.',
+      assistantLoadFailed: 'Failed to load the assistant foundation from the backend.',
+      assistantCreateThreadFailed: 'Failed to create a new assistant conversation.',
+      assistantSendFailed: 'Failed to send the assistant message.',
     },
   },
   de: {
@@ -425,10 +565,83 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     },
     shell: {
       familySettingsTitle: 'Familieneinstellungen',
+      assistantTitle: 'Assistent',
       boardTab: 'Board',
+      assistantTab: 'Assistent',
       settingsTab: 'Einstellungen',
       signOutAction: 'Abmelden',
       signingOutAction: 'Abmeldung laeuft...',
+    },
+    assistant: {
+      kicker: 'KI Bereich',
+      title: 'Assistent Threads',
+      introCopy:
+        'Dieser Bereich verwaltet persistente KI Gesprache pro Benutzer ausserhalb des Widget Boards. Das Routing bleibt adminverwaltet.',
+      newThreadAction: 'Neue Unterhaltung',
+      creatingThreadAction: 'Wird erstellt...',
+      threadListTitle: 'Gespeicherte Unterhaltungen',
+      threadListCopy:
+        'Threads werden pro angemeldetem Benutzer gespeichert und aus dem Backend wieder geoffnet.',
+      emptyThreadListTitle: 'Noch keine Unterhaltungen',
+      emptyThreadListCopy:
+        'Erstelle jetzt den ersten Assistenten Thread. Das Senden von Nachrichten kommt im nachsten Issue.',
+      transcriptTitle: 'Transkript',
+      noThreadSelectedTitle: 'Keine Unterhaltung ausgewahlt',
+      noThreadSelectedCopy:
+        'Wahle links eine gespeicherte Unterhaltung oder erstelle eine neue, um das Transkript zu reservieren.',
+      emptyTranscriptTitle: 'Transkript ist leer',
+      emptyTranscriptCopy:
+        'Dieser Thread existiert und ist gespeichert, aber es wurden noch keine Nachrichten geschrieben.',
+      activeRouteLabel: 'Aktive Route',
+      backendKindLabel: 'Backend Typ',
+      streamingCapabilityLabel: 'Streaming',
+      toolsCapabilityLabel: 'Tools',
+      markdownCapabilityLabel: 'Markdown',
+      enabledValue: 'Aktiv',
+      disabledValue: 'Deaktiviert',
+      availabilityAvailable: 'Verfugbar',
+      availabilityNotConfigured: 'Nicht konfiguriert',
+      availabilityDisabled: 'Deaktiviert',
+      availabilityUnavailable: 'Nicht verfugbar',
+      availabilityTitle: 'Assistent Verfugbarkeit',
+      notConfiguredCopy:
+        'Noch keine adminverwaltete Assistent Route aktiv. Zuerst eine Assistant Backend Route in der Serverkonfiguration hinterlegen.',
+      disabledCopy:
+        'Eine Assistent Route existiert, ist aber per Konfiguration deaktiviert. Benutzer konnen Threads sehen, aber die Laufzeit noch nicht verwenden.',
+      unavailableCopy:
+        'Eine Assistent Route existiert, ist aber unvollstandig oder nicht verfugbar. Bitte die adminverwaltete Serverkonfiguration prufen.',
+      openThreadAriaLabel: 'Unterhaltung {title} offnen',
+      routeUnknownValue: 'k. A.',
+      modelSelectionManagedCopy:
+        'Modell und Backend Auswahl werden zentral von Admins verwaltet und in dieser Benutzeransicht nicht angeboten.',
+      untitledThreadTitle: 'Unbenannte Unterhaltung',
+      messageCountMeta: '{count} Nachrichten',
+      composerLabel: 'Nachricht',
+      composerPlaceholder: 'Schreibe eine Nachricht an den Assistenten...',
+      composerNoThreadCopy:
+        'Waehle oder erstelle zuerst eine Unterhaltung, bevor du eine Nachricht sendest.',
+      composerUnavailableCopy:
+        'Assistent Nachrichten sind erst verfuegbar, wenn eine funktionierende adminverwaltete Route aktiv ist.',
+      turnStatusLabel: 'Turn Status',
+      turnStateIdle: 'Leerlauf',
+      turnStateSending: 'Wird gesendet',
+      turnStateStreaming: 'Streaming',
+      turnStateCompleted: 'Abgeschlossen',
+      turnStateFailed: 'Fehlgeschlagen',
+      sendAction: 'Nachricht senden',
+      roleUser: 'Du',
+      roleAssistant: 'Assistent',
+      roleSystem: 'System',
+      roleTool: 'Tool',
+      toolActivityTitle: 'Tool Aktivitat',
+      toolArgumentsLabel: 'Argumente',
+      toolResultLabel: 'Ergebnis',
+      toolErrorLabel: 'Fehler',
+      toolServerLabel: 'Server',
+      toolStatusRunning: 'Lauft',
+      toolStatusCompleted: 'Abgeschlossen',
+      toolStatusError: 'Fehler',
+      toolRedactedValue: '[redacted]',
     },
     filters: {
       allLabel: 'Alle',
@@ -613,6 +826,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'Widget-Einstellungen konnten nicht im Backend gespeichert werden.',
       widgetMetadataSaveFailed:
         'Widget-Metadaten konnten nicht im Backend gespeichert werden.',
+      assistantLoadFailed:
+        'Die Assistent Grundlage konnte nicht aus dem Backend geladen werden.',
+      assistantCreateThreadFailed:
+        'Die neue Assistent Unterhaltung konnte nicht erstellt werden.',
+      assistantSendFailed:
+        'Die Nachricht an den Assistenten konnte nicht gesendet werden.',
     },
   },
   fr: {
@@ -645,10 +864,83 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     },
     shell: {
       familySettingsTitle: 'Reglages de la famille',
+      assistantTitle: 'Assistant',
       boardTab: 'Tableau',
+      assistantTab: 'Assistant',
       settingsTab: 'Reglages',
       signOutAction: 'Se deconnecter',
       signingOutAction: 'Deconnexion...',
+    },
+    assistant: {
+      kicker: 'Section IA',
+      title: 'Conversations assistant',
+      introCopy:
+        'Cette section gere des conversations IA persistantes par utilisateur en dehors du tableau de widgets. Le routage reste gere par les admins.',
+      newThreadAction: 'Nouvelle conversation',
+      creatingThreadAction: 'Creation...',
+      threadListTitle: 'Conversations enregistrees',
+      threadListCopy:
+        'Les conversations sont stockees par utilisateur authentifie et rouvertes depuis le backend.',
+      emptyThreadListTitle: 'Aucune conversation pour le moment',
+      emptyThreadListCopy:
+        'Creez maintenant la premiere conversation assistant. L envoi des messages arrive dans la prochaine issue.',
+      transcriptTitle: 'Transcription',
+      noThreadSelectedTitle: 'Aucune conversation selectionnee',
+      noThreadSelectedCopy:
+        'Choisissez une conversation sauvegardee a gauche ou creez en une nouvelle pour reserver sa transcription.',
+      emptyTranscriptTitle: 'La transcription est vide',
+      emptyTranscriptCopy:
+        'Cette conversation existe et est persistante, mais aucun message n a encore ete ecrit.',
+      activeRouteLabel: 'Route active',
+      backendKindLabel: 'Type de backend',
+      streamingCapabilityLabel: 'Streaming',
+      toolsCapabilityLabel: 'Outils',
+      markdownCapabilityLabel: 'Markdown',
+      enabledValue: 'Active',
+      disabledValue: 'Desactive',
+      availabilityAvailable: 'Disponible',
+      availabilityNotConfigured: 'Non configure',
+      availabilityDisabled: 'Desactive',
+      availabilityUnavailable: 'Indisponible',
+      availabilityTitle: 'Disponibilite assistant',
+      notConfiguredCopy:
+        'Aucune route assistant geree par admin n est encore active. Ajoutez d abord une route backend assistant dans la configuration du serveur.',
+      disabledCopy:
+        'Une route assistant existe mais elle est desactivee par configuration. Les utilisateurs peuvent voir les conversations mais pas encore utiliser le runtime.',
+      unavailableCopy:
+        'Une route assistant existe mais elle est incomplete ou indisponible. Verifiez la configuration serveur geree par admin.',
+      openThreadAriaLabel: 'Ouvrir la conversation {title}',
+      routeUnknownValue: 'n/d',
+      modelSelectionManagedCopy:
+        'La selection du modele et du backend est geree centralement par les admins et n est pas exposee dans cette vue utilisateur.',
+      untitledThreadTitle: 'Conversation sans titre',
+      messageCountMeta: '{count} messages',
+      composerLabel: 'Message',
+      composerPlaceholder: 'Ecrivez un message a l assistant...',
+      composerNoThreadCopy:
+        'Selectionnez ou creez d abord une conversation avant d envoyer un message.',
+      composerUnavailableCopy:
+        'L envoi de messages assistant reste indisponible tant qu une route admin valide n est pas active.',
+      turnStatusLabel: 'Etat du tour',
+      turnStateIdle: 'Inactif',
+      turnStateSending: 'Envoi',
+      turnStateStreaming: 'Streaming',
+      turnStateCompleted: 'Termine',
+      turnStateFailed: 'Echec',
+      sendAction: 'Envoyer le message',
+      roleUser: 'Vous',
+      roleAssistant: 'Assistant',
+      roleSystem: 'Systeme',
+      roleTool: 'Outil',
+      toolActivityTitle: 'Activite outil',
+      toolArgumentsLabel: 'Arguments',
+      toolResultLabel: 'Resultat',
+      toolErrorLabel: 'Erreur',
+      toolServerLabel: 'Serveur',
+      toolStatusRunning: 'En cours',
+      toolStatusCompleted: 'Termine',
+      toolStatusError: 'Erreur',
+      toolRedactedValue: '[redacted]',
     },
     filters: {
       allLabel: 'Tous',
@@ -834,6 +1126,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'Impossible d enregistrer les reglages du widget dans le backend.',
       widgetMetadataSaveFailed:
         'Impossible d enregistrer les metadonnees du widget dans le backend.',
+      assistantLoadFailed:
+        'Impossible de charger la fondation assistant depuis le backend.',
+      assistantCreateThreadFailed:
+        'Impossible de creer une nouvelle conversation assistant.',
+      assistantSendFailed:
+        'Impossible d envoyer le message assistant.',
     },
   },
   es: {
@@ -866,10 +1164,83 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     },
     shell: {
       familySettingsTitle: 'Configuracion familiar',
+      assistantTitle: 'Asistente',
       boardTab: 'Tablero',
+      assistantTab: 'Asistente',
       settingsTab: 'Configuracion',
       signOutAction: 'Cerrar sesion',
       signingOutAction: 'Cerrando sesion...',
+    },
+    assistant: {
+      kicker: 'Seccion IA',
+      title: 'Conversaciones del asistente',
+      introCopy:
+        'Esta seccion gestiona conversaciones IA persistentes por usuario fuera del tablero de widgets. El enrutamiento sigue siendo administrado por admins.',
+      newThreadAction: 'Nueva conversacion',
+      creatingThreadAction: 'Creando...',
+      threadListTitle: 'Conversaciones guardadas',
+      threadListCopy:
+        'Las conversaciones se guardan por usuario autenticado y se vuelven a abrir desde el backend.',
+      emptyThreadListTitle: 'Todavia no hay conversaciones',
+      emptyThreadListCopy:
+        'Crea ahora la primera conversacion del asistente. El envio de mensajes llega en el siguiente issue.',
+      transcriptTitle: 'Transcripcion',
+      noThreadSelectedTitle: 'No hay conversacion seleccionada',
+      noThreadSelectedCopy:
+        'Elige una conversacion guardada a la izquierda o crea una nueva para reservar su transcripcion.',
+      emptyTranscriptTitle: 'La transcripcion esta vacia',
+      emptyTranscriptCopy:
+        'Esta conversacion existe y esta guardada, pero todavia no tiene mensajes.',
+      activeRouteLabel: 'Ruta activa',
+      backendKindLabel: 'Tipo de backend',
+      streamingCapabilityLabel: 'Streaming',
+      toolsCapabilityLabel: 'Herramientas',
+      markdownCapabilityLabel: 'Markdown',
+      enabledValue: 'Activo',
+      disabledValue: 'Desactivado',
+      availabilityAvailable: 'Disponible',
+      availabilityNotConfigured: 'No configurado',
+      availabilityDisabled: 'Desactivado',
+      availabilityUnavailable: 'No disponible',
+      availabilityTitle: 'Disponibilidad del asistente',
+      notConfiguredCopy:
+        'Todavia no hay una ruta del asistente administrada por admin activa. Primero anade una ruta backend del asistente en la configuracion del servidor.',
+      disabledCopy:
+        'Existe una ruta del asistente, pero esta desactivada por configuracion. Los usuarios pueden ver conversaciones, pero todavia no usar el runtime.',
+      unavailableCopy:
+        'Existe una ruta del asistente, pero esta incompleta o no disponible. Revisa la configuracion del servidor administrada por admin.',
+      openThreadAriaLabel: 'Abrir conversacion {title}',
+      routeUnknownValue: 'n/d',
+      modelSelectionManagedCopy:
+        'La seleccion de modelo y backend se administra de forma central por admins y no se expone en esta vista de usuario.',
+      untitledThreadTitle: 'Conversacion sin titulo',
+      messageCountMeta: '{count} mensajes',
+      composerLabel: 'Mensaje',
+      composerPlaceholder: 'Escribe un mensaje para el asistente...',
+      composerNoThreadCopy:
+        'Selecciona o crea primero una conversacion antes de enviar un mensaje.',
+      composerUnavailableCopy:
+        'El envio de mensajes del asistente no estara disponible hasta que exista una ruta admin funcional.',
+      turnStatusLabel: 'Estado del turno',
+      turnStateIdle: 'En espera',
+      turnStateSending: 'Enviando',
+      turnStateStreaming: 'Streaming',
+      turnStateCompleted: 'Completado',
+      turnStateFailed: 'Fallido',
+      sendAction: 'Enviar mensaje',
+      roleUser: 'Tu',
+      roleAssistant: 'Asistente',
+      roleSystem: 'Sistema',
+      roleTool: 'Herramienta',
+      toolActivityTitle: 'Actividad de herramientas',
+      toolArgumentsLabel: 'Argumentos',
+      toolResultLabel: 'Resultado',
+      toolErrorLabel: 'Error',
+      toolServerLabel: 'Servidor',
+      toolStatusRunning: 'Ejecutando',
+      toolStatusCompleted: 'Completado',
+      toolStatusError: 'Error',
+      toolRedactedValue: '[redacted]',
     },
     filters: {
       allLabel: 'Todos',
@@ -1054,6 +1425,12 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
         'No se pudo guardar la configuracion del widget en el backend.',
       widgetMetadataSaveFailed:
         'No se pudieron guardar los metadatos del widget en el backend.',
+      assistantLoadFailed:
+        'No se pudo cargar la base del asistente desde el backend.',
+      assistantCreateThreadFailed:
+        'No se pudo crear una nueva conversacion del asistente.',
+      assistantSendFailed:
+        'No se pudo enviar el mensaje del asistente.',
     },
   },
 })

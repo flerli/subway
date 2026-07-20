@@ -44,6 +44,28 @@ const ROBOROCK_SIDECAR_REQUEST_TIMEOUT_MS = Number.parseInt(
   process.env.ROBOROCK_SIDECAR_REQUEST_TIMEOUT_MS ?? '15000',
   10,
 )
+const ASSISTANT_BACKEND_ROUTE_ID =
+  process.env.ASSISTANT_BACKEND_ROUTE_ID ?? 'assistant-default-route'
+const ASSISTANT_BACKEND_ROUTE_LABEL =
+  process.env.ASSISTANT_BACKEND_ROUTE_LABEL ?? ''
+const ASSISTANT_BACKEND_KIND = process.env.ASSISTANT_BACKEND_KIND ?? ''
+const ASSISTANT_BACKEND_BASE_URL = process.env.ASSISTANT_BACKEND_BASE_URL ?? ''
+const ASSISTANT_BACKEND_MODEL_IDENTIFIER =
+  process.env.ASSISTANT_BACKEND_MODEL_IDENTIFIER ?? ''
+const ASSISTANT_BACKEND_ENABLED = process.env.ASSISTANT_BACKEND_ENABLED !== 'false'
+const ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS ?? '30000',
+  10,
+)
+const ASSISTANT_BACKEND_API_KEY = process.env.ASSISTANT_BACKEND_API_KEY ?? ''
+const ASSISTANT_BACKEND_HEADERS_JSON = process.env.ASSISTANT_BACKEND_HEADERS_JSON ?? ''
+const ASSISTANT_MCP_SERVERS_JSON = process.env.ASSISTANT_MCP_SERVERS_JSON ?? ''
+const ASSISTANT_BACKEND_SUPPORTS_STREAMING =
+  process.env.ASSISTANT_BACKEND_SUPPORTS_STREAMING !== 'false'
+const ASSISTANT_BACKEND_SUPPORTS_TOOLS =
+  process.env.ASSISTANT_BACKEND_SUPPORTS_TOOLS !== 'false'
+const ASSISTANT_BACKEND_SUPPORTS_MARKDOWN =
+  process.env.ASSISTANT_BACKEND_SUPPORTS_MARKDOWN !== 'false'
 const BRING_CREDENTIAL_ENCRYPTION_SECRET =
   process.env.BRING_CREDENTIAL_ENCRYPTION_KEY ?? ''
 const bringCredentialEncryptionKey =
@@ -82,6 +104,16 @@ const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 const TIME_LABEL_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 const supportedLanguageCodeSet = new Set(SUPPORTED_LANGUAGE_CODES)
+const ASSISTANT_BACKEND_KINDS = new Set(['litellm', 'custom'])
+const ASSISTANT_AVAILABILITY_STATUSES = new Set([
+  'available',
+  'not_configured',
+  'disabled',
+  'unavailable',
+])
+const ASSISTANT_THREAD_STATES = new Set(['active', 'archived'])
+const ASSISTANT_MESSAGE_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
+const ASSISTANT_MESSAGE_EVENT_TYPES = new Set(['tool_call'])
 const supportedRecurrenceFrequencySet = new Set([
   'none',
   'daily',
@@ -302,6 +334,197 @@ const sanitizeRoborockDeviceModel = (value) => {
   }
 
   return value.trim().slice(0, 160)
+}
+
+const sanitizeAssistantThreadTitle = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().replace(/\s+/g, ' ').slice(0, 120)
+}
+
+const sanitizeAssistantMessageContent = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 40000)
+}
+
+const sanitizeAssistantRouteLabel = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().replace(/\s+/g, ' ').slice(0, 120)
+}
+
+const sanitizeAssistantBaseUrl = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 500)
+}
+
+const sanitizeAssistantModelIdentifier = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 200)
+}
+
+const normalizeAssistantBackendKind = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : ''
+
+  return ASSISTANT_BACKEND_KINDS.has(normalizedValue) ? normalizedValue : ''
+}
+
+const normalizeAssistantThreadState = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : 'active'
+
+  return ASSISTANT_THREAD_STATES.has(normalizedValue) ? normalizedValue : 'active'
+}
+
+const normalizeAssistantMessageRole = (value) => {
+  const normalizedValue = typeof value === 'string' ? value.trim().toLowerCase() : 'assistant'
+
+  return ASSISTANT_MESSAGE_ROLES.has(normalizedValue) ? normalizedValue : 'assistant'
+}
+
+const normalizeAssistantBooleanFlag = (value) => (value ? 1 : 0)
+
+const parseAssistantConfiguredHeaders = (value) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return {}
+  }
+
+  try {
+    const parsedValue = JSON.parse(value)
+
+    if (!parsedValue || typeof parsedValue !== 'object' || Array.isArray(parsedValue)) {
+      return {}
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsedValue).filter(
+        ([headerName, headerValue]) =>
+          typeof headerName === 'string' &&
+          headerName.trim().length > 0 &&
+          typeof headerValue === 'string' &&
+          headerValue.trim().length > 0,
+      ),
+    )
+  } catch {
+    return {}
+  }
+}
+
+const sanitizeAssistantToolName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 160)
+}
+
+const sanitizeAssistantMcpServerName = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 120)
+}
+
+const parseAssistantMcpServers = (value) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return []
+  }
+
+  try {
+    const parsedValue = JSON.parse(value)
+
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue
+      .map((entry) => {
+        const candidate = entry && typeof entry === 'object' ? entry : {}
+        const name = sanitizeAssistantMcpServerName(candidate.name)
+        const baseUrl = sanitizeAssistantBaseUrl(candidate.baseUrl)
+        const headers = parseAssistantConfiguredHeaders(
+          typeof candidate.headersJson === 'string'
+            ? candidate.headersJson
+            : JSON.stringify(candidate.headers ?? {}),
+        )
+        const tools = Array.isArray(candidate.tools)
+          ? candidate.tools
+              .map((toolEntry) => {
+                const toolCandidate = toolEntry && typeof toolEntry === 'object' ? toolEntry : {}
+                const toolName = sanitizeAssistantToolName(toolCandidate.name)
+
+                if (!toolName) {
+                  return null
+                }
+
+                return {
+                  name: toolName,
+                  redactArguments: toolCandidate.redactArguments !== false,
+                  redactResults: toolCandidate.redactResults !== false,
+                }
+              })
+              .filter(Boolean)
+          : []
+
+        if (!name || !baseUrl) {
+          return null
+        }
+
+        return {
+          name,
+          baseUrl,
+          headers,
+          tools,
+        }
+      })
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+const configuredAssistantMcpServers = parseAssistantMcpServers(ASSISTANT_MCP_SERVERS_JSON)
+
+const isAssistantRouteConfigured = (route) => {
+  if (!route) {
+    return false
+  }
+
+  if (!sanitizeAssistantRouteLabel(route.label)) {
+    return false
+  }
+
+  const backendKind = normalizeAssistantBackendKind(route.backendKind)
+
+  if (!backendKind) {
+    return false
+  }
+
+  if (!sanitizeAssistantBaseUrl(route.baseUrl)) {
+    return false
+  }
+
+  if (
+    backendKind === 'litellm' &&
+    !sanitizeAssistantModelIdentifier(route.modelIdentifier)
+  ) {
+    return false
+  }
+
+  return true
 }
 
 const normalizeRoborockRoutineId = (value) => {
@@ -943,6 +1166,74 @@ const createBringListSnapshotsTableSql = `
   )
 `
 
+const createAssistantBackendRoutesTableSql = `
+  CREATE TABLE IF NOT EXISTS assistant_backend_routes (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    backend_kind TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    model_identifier TEXT NOT NULL,
+    is_enabled INTEGER NOT NULL DEFAULT 1,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    supports_streaming INTEGER NOT NULL DEFAULT 1,
+    supports_tools INTEGER NOT NULL DEFAULT 1,
+    supports_markdown INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'not_configured',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`
+
+const createAssistantThreadsTableSql = `
+  CREATE TABLE IF NOT EXISTS assistant_threads (
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    id TEXT NOT NULL,
+    route_id TEXT REFERENCES assistant_backend_routes(id),
+    title TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, id)
+  )
+`
+
+const createAssistantMessagesTableSql = `
+  CREATE TABLE IF NOT EXISTS assistant_messages (
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sequence_index INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, id),
+    FOREIGN KEY (owner_user_id, thread_id)
+      REFERENCES assistant_threads(owner_user_id, id)
+      ON DELETE CASCADE
+  )
+`
+
+const createAssistantMessageEventsTableSql = `
+  CREATE TABLE IF NOT EXISTS assistant_message_events (
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    message_id TEXT,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, id),
+    FOREIGN KEY (owner_user_id, thread_id)
+      REFERENCES assistant_threads(owner_user_id, id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id, message_id)
+      REFERENCES assistant_messages(owner_user_id, id)
+      ON DELETE CASCADE
+  )
+`
+
 const defaultAppUserId = ensureInitialUserRecord()
 
 migrateOwnedTable({
@@ -1019,9 +1310,25 @@ db.exec(createAudioVisualRecordingsTableSql)
 db.exec(createBringIntegrationsTableSql)
 db.exec(createRoborockIntegrationsTableSql)
 db.exec(createBringListSnapshotsTableSql)
+db.exec(createAssistantBackendRoutesTableSql)
+db.exec(createAssistantThreadsTableSql)
+db.exec(createAssistantMessagesTableSql)
+db.exec(createAssistantMessageEventsTableSql)
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
   ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
+`)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_threads_owner_updated_idx
+  ON assistant_threads(owner_user_id, updated_at)
+`)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_messages_owner_thread_sequence_idx
+  ON assistant_messages(owner_user_id, thread_id, sequence_index)
+`)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_message_events_owner_thread_created_idx
+  ON assistant_message_events(owner_user_id, thread_id, created_at)
 `)
 
 const migrateCalendarEventsFoundation = () => {
@@ -1680,6 +1987,1315 @@ const upsertBringIntegration = (
       timestamp,
       timestamp,
     )
+
+const buildAssistantRoutePayload = (route) => {
+  if (!route) {
+    return null
+  }
+
+  return {
+    id: route.id,
+    label: sanitizeAssistantRouteLabel(route.label),
+    backendKind: normalizeAssistantBackendKind(route.backendKind),
+    supportsStreaming: Boolean(route.supportsStreaming),
+    supportsTools: Boolean(route.supportsTools),
+    supportsMarkdown: Boolean(route.supportsMarkdown),
+    enabled: Boolean(route.enabled),
+  }
+}
+
+const buildAssistantAvailabilityFromRoute = (route) => {
+  const fallbackStatus = ASSISTANT_AVAILABILITY_STATUSES.has(route?.status)
+    ? route.status
+    : null
+
+  if (!route) {
+    return {
+      status: 'not_configured',
+      activeRoute: null,
+    }
+  }
+
+  if (!route.enabled) {
+    return {
+      status: 'disabled',
+      activeRoute: buildAssistantRoutePayload(route),
+    }
+  }
+
+  if (!isAssistantRouteConfigured(route)) {
+    return {
+      status: fallbackStatus === 'disabled' ? 'disabled' : 'unavailable',
+      activeRoute: buildAssistantRoutePayload(route),
+    }
+  }
+
+  return {
+    status: fallbackStatus && fallbackStatus !== 'not_configured' ? fallbackStatus : 'available',
+    activeRoute: buildAssistantRoutePayload(route),
+  }
+}
+
+const selectActiveAssistantBackendRouteRow = () =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        label,
+        backend_kind AS backendKind,
+        base_url AS baseUrl,
+        model_identifier AS modelIdentifier,
+        is_enabled AS enabled,
+        is_active AS isActive,
+        supports_streaming AS supportsStreaming,
+        supports_tools AS supportsTools,
+        supports_markdown AS supportsMarkdown,
+        status,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_backend_routes
+      WHERE is_active = 1
+      ORDER BY updated_at DESC, id ASC
+      LIMIT 1
+    `)
+    .get()
+
+const upsertAssistantBackendRoute = (route, timestamp) =>
+  db
+    .prepare(`
+      INSERT INTO assistant_backend_routes (
+        id,
+        label,
+        backend_kind,
+        base_url,
+        model_identifier,
+        is_enabled,
+        is_active,
+        supports_streaming,
+        supports_tools,
+        supports_markdown,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        label = excluded.label,
+        backend_kind = excluded.backend_kind,
+        base_url = excluded.base_url,
+        model_identifier = excluded.model_identifier,
+        is_enabled = excluded.is_enabled,
+        is_active = excluded.is_active,
+        supports_streaming = excluded.supports_streaming,
+        supports_tools = excluded.supports_tools,
+        supports_markdown = excluded.supports_markdown,
+        status = excluded.status,
+        updated_at = excluded.updated_at
+    `)
+    .run(
+      route.id,
+      route.label,
+      route.backendKind,
+      route.baseUrl,
+      route.modelIdentifier,
+      normalizeAssistantBooleanFlag(route.enabled),
+      normalizeAssistantBooleanFlag(route.isActive),
+      normalizeAssistantBooleanFlag(route.supportsStreaming),
+      normalizeAssistantBooleanFlag(route.supportsTools),
+      normalizeAssistantBooleanFlag(route.supportsMarkdown),
+      route.status,
+      timestamp,
+      timestamp,
+    )
+
+const resolveConfiguredAssistantBackendRoute = () => {
+  const route = {
+    id: sanitizeAssistantThreadTitle(ASSISTANT_BACKEND_ROUTE_ID) || 'assistant-default-route',
+    label: sanitizeAssistantRouteLabel(ASSISTANT_BACKEND_ROUTE_LABEL),
+    backendKind: normalizeAssistantBackendKind(ASSISTANT_BACKEND_KIND),
+    baseUrl: sanitizeAssistantBaseUrl(ASSISTANT_BACKEND_BASE_URL),
+    modelIdentifier: sanitizeAssistantModelIdentifier(ASSISTANT_BACKEND_MODEL_IDENTIFIER),
+    enabled: ASSISTANT_BACKEND_ENABLED,
+    isActive: true,
+    supportsStreaming: ASSISTANT_BACKEND_SUPPORTS_STREAMING,
+    supportsTools: ASSISTANT_BACKEND_SUPPORTS_TOOLS,
+    supportsMarkdown: ASSISTANT_BACKEND_SUPPORTS_MARKDOWN,
+    status: 'not_configured',
+  }
+
+  if (!route.label && !route.backendKind && !route.baseUrl && !route.modelIdentifier) {
+    return null
+  }
+
+  route.status = route.enabled
+    ? isAssistantRouteConfigured(route)
+      ? 'available'
+      : 'unavailable'
+    : 'disabled'
+
+  return route
+}
+
+const ensureConfiguredAssistantBackendRoutePresent = () => {
+  const configuredRoute = resolveConfiguredAssistantBackendRoute()
+
+  if (!configuredRoute) {
+    return
+  }
+
+  const timestamp = new Date().toISOString()
+
+  db.exec('BEGIN')
+
+  try {
+    db.prepare('UPDATE assistant_backend_routes SET is_active = 0').run()
+    upsertAssistantBackendRoute(configuredRoute, timestamp)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+const selectAssistantAvailability = () =>
+  buildAssistantAvailabilityFromRoute(selectActiveAssistantBackendRouteRow())
+
+const selectAssistantThreads = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT
+        assistant_threads.id,
+        assistant_threads.route_id AS routeId,
+        assistant_threads.title,
+        assistant_threads.state,
+        assistant_threads.created_at AS createdAt,
+        assistant_threads.updated_at AS updatedAt,
+        COUNT(assistant_messages.id) AS messageCount
+      FROM assistant_threads
+      LEFT JOIN assistant_messages
+        ON assistant_messages.owner_user_id = assistant_threads.owner_user_id
+       AND assistant_messages.thread_id = assistant_threads.id
+      WHERE assistant_threads.owner_user_id = ?
+      GROUP BY assistant_threads.owner_user_id, assistant_threads.id
+      ORDER BY assistant_threads.updated_at DESC, assistant_threads.id DESC
+    `)
+    .all(ownerUserId)
+    .map((row) => ({
+      id: row.id,
+      routeId: typeof row.routeId === 'string' && row.routeId.length > 0 ? row.routeId : null,
+      title: sanitizeAssistantThreadTitle(row.title),
+      state: normalizeAssistantThreadState(row.state),
+      messageCount: Number(row.messageCount) || 0,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }))
+
+const selectAssistantThreadById = (ownerUserId, threadId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        route_id AS routeId,
+        title,
+        state,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_threads
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .get(ownerUserId, threadId)
+
+const selectAssistantBackendRouteById = (routeId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        label,
+        backend_kind AS backendKind,
+        base_url AS baseUrl,
+        model_identifier AS modelIdentifier,
+        is_enabled AS enabled,
+        is_active AS isActive,
+        supports_streaming AS supportsStreaming,
+        supports_tools AS supportsTools,
+        supports_markdown AS supportsMarkdown,
+        status,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_backend_routes
+      WHERE id = ?
+      LIMIT 1
+    `)
+    .get(routeId)
+
+const selectAssistantMessagesByThreadId = (ownerUserId, threadId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        thread_id AS threadId,
+        role,
+        content,
+        sequence_index AS sequenceIndex,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_messages
+      WHERE owner_user_id = ? AND thread_id = ?
+      ORDER BY sequence_index ASC, created_at ASC, id ASC
+    `)
+    .all(ownerUserId, threadId)
+    .map((row) => ({
+      id: row.id,
+      threadId: row.threadId,
+      role: normalizeAssistantMessageRole(row.role),
+      content: typeof row.content === 'string' ? row.content : '',
+      sequenceIndex: Number(row.sequenceIndex) || 0,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }))
+
+const selectAssistantMessageEventsByThreadId = (ownerUserId, threadId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        thread_id AS threadId,
+        message_id AS messageId,
+        event_type AS eventType,
+        payload_json AS payloadJson,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_message_events
+      WHERE owner_user_id = ? AND thread_id = ?
+      ORDER BY created_at ASC, id ASC
+    `)
+    .all(ownerUserId, threadId)
+    .map((row) => {
+      let payload = {}
+
+      try {
+        payload = JSON.parse(row.payloadJson)
+      } catch {
+        payload = {}
+      }
+
+      return {
+        id: row.id,
+        threadId: row.threadId,
+        messageId: typeof row.messageId === 'string' && row.messageId.length > 0 ? row.messageId : null,
+        eventType: ASSISTANT_MESSAGE_EVENT_TYPES.has(row.eventType) ? row.eventType : 'tool_call',
+        payload,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }
+    })
+
+const selectNextAssistantMessageSequenceIndex = (ownerUserId, threadId) => {
+  const result = db
+    .prepare(`
+      SELECT COALESCE(MAX(sequence_index), -1) AS lastSequenceIndex
+      FROM assistant_messages
+      WHERE owner_user_id = ? AND thread_id = ?
+    `)
+    .get(ownerUserId, threadId)
+
+  return Number(result?.lastSequenceIndex ?? -1) + 1
+}
+
+const insertAssistantThread = (ownerUserId, thread, createdAt, updatedAt) =>
+  db
+    .prepare(`
+      INSERT INTO assistant_threads (
+        owner_user_id,
+        id,
+        route_id,
+        title,
+        state,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      ownerUserId,
+      thread.id,
+      thread.routeId,
+      thread.title,
+      thread.state,
+      createdAt,
+      updatedAt,
+    )
+
+const insertAssistantMessage = (ownerUserId, message, createdAt, updatedAt) =>
+  db
+    .prepare(`
+      INSERT INTO assistant_messages (
+        owner_user_id,
+        id,
+        thread_id,
+        role,
+        content,
+        sequence_index,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      ownerUserId,
+      message.id,
+      message.threadId,
+      message.role,
+      message.content,
+      message.sequenceIndex,
+      createdAt,
+      updatedAt,
+    )
+
+const insertAssistantMessageEvent = (ownerUserId, event, createdAt, updatedAt) =>
+  db
+    .prepare(`
+      INSERT INTO assistant_message_events (
+        owner_user_id,
+        id,
+        thread_id,
+        message_id,
+        event_type,
+        payload_json,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      ownerUserId,
+      event.id,
+      event.threadId,
+      event.messageId,
+      event.eventType,
+      event.payloadJson,
+      createdAt,
+      updatedAt,
+    )
+
+const updateAssistantThreadRuntimeState = (
+  ownerUserId,
+  threadId,
+  routeId,
+  title,
+  updatedAt,
+) =>
+  db
+    .prepare(`
+      UPDATE assistant_threads
+      SET route_id = ?,
+          title = ?,
+          updated_at = ?
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(routeId, title, updatedAt, ownerUserId, threadId)
+
+const updateAssistantBackendRouteStatus = (routeId, status, updatedAt) =>
+  db
+    .prepare(`
+      UPDATE assistant_backend_routes
+      SET status = ?,
+          updated_at = ?
+      WHERE id = ?
+    `)
+    .run(status, updatedAt, routeId)
+
+const buildAssistantThreadPayload = (thread) => ({
+  id: thread.id,
+  routeId: typeof thread.routeId === 'string' && thread.routeId.length > 0 ? thread.routeId : null,
+  title: sanitizeAssistantThreadTitle(thread.title),
+  state: normalizeAssistantThreadState(thread.state),
+  createdAt: thread.createdAt,
+  updatedAt: thread.updatedAt,
+})
+
+const buildAssistantMessagePayload = (message) => ({
+  id: message.id,
+  threadId: message.threadId,
+  role: normalizeAssistantMessageRole(message.role),
+  content: typeof message.content === 'string' ? message.content : '',
+  sequenceIndex: Number(message.sequenceIndex) || 0,
+  createdAt: message.createdAt,
+  updatedAt: message.updatedAt,
+})
+
+const buildAssistantMessageEventPayload = (event) => ({
+  id: event.id,
+  threadId: event.threadId,
+  messageId: event.messageId,
+  eventType: event.eventType,
+  payload: event.payload,
+  createdAt: event.createdAt,
+  updatedAt: event.updatedAt,
+})
+
+const splitAssistantStreamingChunks = (content) => {
+  const normalizedContent = typeof content === 'string' ? content : ''
+
+  if (!normalizedContent) {
+    return ['']
+  }
+
+  const tokenChunks = normalizedContent.match(/\S+\s*|\n+/g) ?? []
+
+  if (tokenChunks.length > 0) {
+    return tokenChunks
+  }
+
+  const fallbackChunks = []
+
+  for (let index = 0; index < normalizedContent.length; index += 24) {
+    fallbackChunks.push(normalizedContent.slice(index, index + 24))
+  }
+
+  return fallbackChunks.length > 0 ? fallbackChunks : ['']
+}
+
+const deriveAssistantThreadTitleFromPrompt = (content) =>
+  sanitizeAssistantThreadTitle(content.split(/\r?\n/, 1)[0] ?? '')
+
+class AssistantRuntimeError extends Error {
+  constructor(message, statusCode, errorCode, providerStatusCode = null) {
+    super(message)
+    this.name = 'AssistantRuntimeError'
+    this.statusCode = statusCode
+    this.errorCode = errorCode
+    this.providerStatusCode = providerStatusCode
+  }
+}
+
+const redactAssistantToolValue = (value) => {
+  if (value === null || value === undefined) {
+    return value ?? null
+  }
+
+  if (typeof value === 'string') {
+    return '[redacted]'
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return '[redacted]'
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactAssistantToolValue(entry))
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, redactAssistantToolValue(nestedValue)]),
+    )
+  }
+
+  return '[redacted]'
+}
+
+const buildAssistantToolDisplayPayload = (value, shouldRedact) =>
+  shouldRedact ? redactAssistantToolValue(value) : value
+
+const resolveAssistantMcpToolConfig = (toolName) => {
+  for (const server of configuredAssistantMcpServers) {
+    const matchedTool = server.tools.find((tool) => tool.name === toolName) ?? null
+
+    if (matchedTool) {
+      return {
+        server,
+        tool: matchedTool,
+      }
+    }
+  }
+
+  return null
+}
+
+const normalizeAssistantToolCallEntry = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const toolName = sanitizeAssistantToolName(
+    candidate.name ?? candidate.toolName ?? candidate.function?.name,
+  )
+  const argumentsValue =
+    candidate.arguments ?? candidate.input ?? candidate.function?.arguments ?? {}
+
+  if (!toolName) {
+    return null
+  }
+
+  return {
+    id:
+      typeof candidate.id === 'string' && candidate.id.trim().length > 0
+        ? candidate.id.trim()
+        : `tool-call-${randomUUID()}`,
+    toolName,
+    arguments: argumentsValue && typeof argumentsValue === 'object'
+      ? argumentsValue
+      : typeof argumentsValue === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(argumentsValue)
+            } catch {
+              return { value: argumentsValue }
+            }
+          })()
+        : {},
+  }
+}
+
+const normalizeAssistantProviderToolCalls = (responseBody) => {
+  const candidate = responseBody && typeof responseBody === 'object' ? responseBody : {}
+  const choices = Array.isArray(candidate.choices) ? candidate.choices : []
+  const firstChoice = choices[0] && typeof choices[0] === 'object' ? choices[0] : {}
+  const message =
+    firstChoice.message && typeof firstChoice.message === 'object'
+      ? firstChoice.message
+      : {}
+  const rawToolCalls = Array.isArray(message.tool_calls)
+    ? message.tool_calls
+    : Array.isArray(candidate.toolCalls)
+      ? candidate.toolCalls
+      : Array.isArray(candidate.tools)
+        ? candidate.tools
+        : []
+
+  return rawToolCalls
+    .map(normalizeAssistantToolCallEntry)
+    .filter((entry) => entry !== null)
+}
+
+const normalizeAssistantToolResultPayload = (value) => {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeAssistantToolResultPayload(entry))
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, normalizeAssistantToolResultPayload(nestedValue)]),
+    )
+  }
+
+  return null
+}
+
+const callAssistantMcpTool = async (toolCall) => {
+  const resolvedToolConfig = resolveAssistantMcpToolConfig(toolCall.toolName)
+
+  if (!resolvedToolConfig) {
+    throw new AssistantRuntimeError(
+      `Assistant MCP tool ${toolCall.toolName} is not configured.`,
+      400,
+      'assistant_tool_not_found',
+    )
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(resolvedToolConfig.server.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...resolvedToolConfig.server.headers,
+      },
+      body: JSON.stringify({
+        toolName: toolCall.toolName,
+        arguments: toolCall.arguments,
+      }),
+      signal: controller.signal,
+    })
+
+    let responseBody = {}
+
+    try {
+      responseBody = await response.json()
+    } catch {
+      responseBody = {}
+    }
+
+    if (!response.ok) {
+      throw new AssistantRuntimeError(
+        typeof responseBody.error === 'string'
+          ? responseBody.error
+          : 'Assistant MCP tool execution failed.',
+        response.status >= 500 ? 503 : 502,
+        response.status === 404
+          ? 'assistant_tool_not_found'
+          : response.status >= 500
+            ? 'assistant_mcp_unavailable'
+            : 'assistant_tool_execution_failed',
+      )
+    }
+
+    const normalizedResult = normalizeAssistantToolResultPayload(
+      responseBody.result ?? responseBody.output ?? responseBody,
+    )
+
+    if (normalizedResult === null) {
+      throw new AssistantRuntimeError(
+        'Assistant MCP tool returned an invalid result payload.',
+        502,
+        'assistant_tool_result_invalid',
+      )
+    }
+
+    return {
+      serverName: resolvedToolConfig.server.name,
+      toolName: toolCall.toolName,
+      toolId: toolCall.id,
+      arguments: toolCall.arguments,
+      result: normalizedResult,
+      redactArguments: resolvedToolConfig.tool.redactArguments,
+      redactResults: resolvedToolConfig.tool.redactResults,
+    }
+  } catch (error) {
+    if (error instanceof AssistantRuntimeError) {
+      throw error
+    }
+
+    if (error?.name === 'AbortError') {
+      throw new AssistantRuntimeError(
+        'Assistant MCP server is temporarily unavailable.',
+        503,
+        'assistant_mcp_unavailable',
+      )
+    }
+
+    throw new AssistantRuntimeError(
+      'Assistant MCP server is temporarily unavailable.',
+      503,
+      'assistant_mcp_unavailable',
+    )
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const buildAssistantToolEventRecord = (
+  ownerUserId,
+  threadId,
+  assistantMessageId,
+  toolExecution,
+  phase,
+  error = null,
+) => {
+  const timestamp = new Date().toISOString()
+  const payload = {
+    toolCallId: toolExecution.toolId,
+    serverName: toolExecution.serverName,
+    toolName: toolExecution.toolName,
+    status: error ? 'error' : phase,
+    displayArguments: buildAssistantToolDisplayPayload(
+      toolExecution.arguments,
+      toolExecution.redactArguments,
+    ),
+    displayResult: error
+      ? null
+      : buildAssistantToolDisplayPayload(toolExecution.result, toolExecution.redactResults),
+    redactArguments: toolExecution.redactArguments,
+    redactResults: toolExecution.redactResults,
+    error: error
+      ? {
+          message: error.message,
+          errorCode: error.errorCode,
+        }
+      : null,
+  }
+
+  return {
+    id: `assistant-event-${randomUUID()}`,
+    threadId,
+    messageId: assistantMessageId,
+    eventType: 'tool_call',
+    payloadJson: JSON.stringify(payload),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+}
+
+const buildAssistantProviderEndpointUrl = (route) => {
+  const baseUrl = sanitizeAssistantBaseUrl(route.baseUrl)
+
+  if (!baseUrl) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route is not configured.',
+      503,
+      'assistant_route_invalid',
+    )
+  }
+
+  if (route.backendKind === 'litellm') {
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+
+    return new URL('chat/completions', normalizedBaseUrl).toString()
+  }
+
+  return baseUrl
+}
+
+const buildAssistantProviderHeaders = () => {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...parseAssistantConfiguredHeaders(ASSISTANT_BACKEND_HEADERS_JSON),
+  }
+
+  if (ASSISTANT_BACKEND_API_KEY && typeof headers.Authorization !== 'string') {
+    headers.Authorization = `Bearer ${ASSISTANT_BACKEND_API_KEY}`
+  }
+
+  return headers
+}
+
+const normalizeAssistantUsagePayload = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const promptTokens = Number(
+    candidate.prompt_tokens ?? candidate.promptTokens ?? Number.NaN,
+  )
+  const completionTokens = Number(
+    candidate.completion_tokens ?? candidate.completionTokens ?? Number.NaN,
+  )
+  const totalTokens = Number(candidate.total_tokens ?? candidate.totalTokens ?? Number.NaN)
+
+  if (
+    Number.isNaN(promptTokens) &&
+    Number.isNaN(completionTokens) &&
+    Number.isNaN(totalTokens)
+  ) {
+    return null
+  }
+
+  return {
+    promptTokens: Number.isNaN(promptTokens) ? null : promptTokens,
+    completionTokens: Number.isNaN(completionTokens) ? null : completionTokens,
+    totalTokens: Number.isNaN(totalTokens) ? null : totalTokens,
+  }
+}
+
+const normalizeAssistantProviderContent = (value) => {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (!Array.isArray(value)) {
+    return ''
+  }
+
+  return value
+    .map((part) => {
+      if (typeof part === 'string') {
+        return part
+      }
+
+      if (!part || typeof part !== 'object') {
+        return ''
+      }
+
+      if (typeof part.text === 'string') {
+        return part.text
+      }
+
+      if (part.type === 'text' && typeof part.text?.value === 'string') {
+        return part.text.value
+      }
+
+      return ''
+    })
+    .filter((part) => part.length > 0)
+    .join('\n\n')
+    .trim()
+}
+
+const normalizeLiteLlmAssistantResponse = (responseBody, streamRequested) => {
+  const candidate = responseBody && typeof responseBody === 'object' ? responseBody : {}
+  const choices = Array.isArray(candidate.choices) ? candidate.choices : []
+  const firstChoice = choices[0] && typeof choices[0] === 'object' ? choices[0] : {}
+  const message =
+    firstChoice.message && typeof firstChoice.message === 'object'
+      ? firstChoice.message
+      : {}
+  const content = normalizeAssistantProviderContent(message.content)
+
+  if (!content) {
+    throw new AssistantRuntimeError(
+      'Assistant provider returned an invalid response payload.',
+      502,
+      'assistant_provider_payload_invalid',
+    )
+  }
+
+  return {
+    providerMessageId: typeof candidate.id === 'string' ? candidate.id : null,
+    role: 'assistant',
+    content,
+    toolCalls: normalizeAssistantProviderToolCalls(candidate),
+    finishReason:
+      typeof firstChoice.finish_reason === 'string' ? firstChoice.finish_reason : null,
+    usage: normalizeAssistantUsagePayload(candidate.usage),
+    streaming: {
+      requested: streamRequested,
+      delivered: false,
+    },
+  }
+}
+
+const normalizeCustomAssistantResponse = (responseBody, streamRequested) => {
+  const candidate = responseBody && typeof responseBody === 'object' ? responseBody : {}
+
+  if (Array.isArray(candidate.choices)) {
+    return normalizeLiteLlmAssistantResponse(candidate, streamRequested)
+  }
+
+  const content = normalizeAssistantProviderContent(
+    candidate.message?.content ??
+      candidate.outputText ??
+      candidate.content ??
+      candidate.reply ??
+      '',
+  )
+
+  if (!content) {
+    throw new AssistantRuntimeError(
+      'Assistant provider returned an invalid response payload.',
+      502,
+      'assistant_provider_payload_invalid',
+    )
+  }
+
+  return {
+    providerMessageId: typeof candidate.id === 'string' ? candidate.id : null,
+    role: 'assistant',
+    content,
+    toolCalls: normalizeAssistantProviderToolCalls(candidate),
+    finishReason:
+      typeof candidate.finishReason === 'string'
+        ? candidate.finishReason
+        : typeof candidate.finish_reason === 'string'
+          ? candidate.finish_reason
+          : null,
+    usage: normalizeAssistantUsagePayload(candidate.usage ?? candidate.tokenUsage),
+    streaming: {
+      requested: streamRequested,
+      delivered: false,
+    },
+  }
+}
+
+const normalizeAssistantProviderResponse = (route, responseBody, streamRequested) => {
+  if (route.backendKind === 'litellm') {
+    return normalizeLiteLlmAssistantResponse(responseBody, streamRequested)
+  }
+
+  return normalizeCustomAssistantResponse(responseBody, streamRequested)
+}
+
+const buildAssistantProviderRequestPayload = (route, executionRequest) => {
+  const transcriptMessages = executionRequest.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }))
+
+  if (route.backendKind === 'litellm') {
+    return {
+      model: route.modelIdentifier,
+      messages: transcriptMessages,
+      stream: executionRequest.streamRequested,
+      metadata: {
+        source: 'subway',
+        ownerUserId: executionRequest.ownerUserId,
+        threadId: executionRequest.threadId,
+        routeId: route.id,
+      },
+      user: executionRequest.ownerUserId,
+    }
+  }
+
+  return {
+    modelIdentifier: sanitizeAssistantModelIdentifier(route.modelIdentifier),
+    messages: transcriptMessages,
+    stream: executionRequest.streamRequested,
+    requestedTools: executionRequest.toolsRequested,
+    metadata: {
+      source: 'subway',
+      ownerUserId: executionRequest.ownerUserId,
+      threadId: executionRequest.threadId,
+      routeId: route.id,
+    },
+  }
+}
+
+const mapAssistantProviderFailure = (statusCode) => {
+  if (statusCode === 401 || statusCode === 403) {
+    return {
+      message: 'Assistant provider authentication failed.',
+      errorCode: 'assistant_provider_auth_failed',
+      responseStatusCode: 502,
+    }
+  }
+
+  if (statusCode === 408 || statusCode === 429 || statusCode === 504) {
+    return {
+      message: 'Assistant provider timed out or is rate limited.',
+      errorCode: 'assistant_provider_timeout',
+      responseStatusCode: 503,
+    }
+  }
+
+  if (statusCode >= 500) {
+    return {
+      message: 'Assistant provider is temporarily unavailable.',
+      errorCode: 'assistant_provider_unavailable',
+      responseStatusCode: 503,
+    }
+  }
+
+  return {
+    message: 'Assistant provider request failed.',
+    errorCode: 'assistant_provider_request_failed',
+    responseStatusCode: 502,
+  }
+}
+
+const callAssistantProviderRoute = async (route, executionRequest) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(buildAssistantProviderEndpointUrl(route), {
+      method: 'POST',
+      headers: buildAssistantProviderHeaders(),
+      body: JSON.stringify(buildAssistantProviderRequestPayload(route, executionRequest)),
+      signal: controller.signal,
+    })
+
+    let responseBody = {}
+
+    try {
+      responseBody = await response.json()
+    } catch {
+      responseBody = {}
+    }
+
+    if (!response.ok) {
+      const mappedFailure = mapAssistantProviderFailure(response.status)
+
+      throw new AssistantRuntimeError(
+        mappedFailure.message,
+        mappedFailure.responseStatusCode,
+        mappedFailure.errorCode,
+        response.status,
+      )
+    }
+
+    return normalizeAssistantProviderResponse(
+      route,
+      responseBody,
+      executionRequest.streamRequested,
+    )
+  } catch (error) {
+    if (error instanceof AssistantRuntimeError) {
+      throw error
+    }
+
+    if (error?.name === 'AbortError') {
+      throw new AssistantRuntimeError(
+        'Assistant provider timed out or is rate limited.',
+        503,
+        'assistant_provider_timeout',
+      )
+    }
+
+    throw new AssistantRuntimeError(
+      'Assistant provider is temporarily unavailable.',
+      503,
+      'assistant_provider_unavailable',
+    )
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const resolveAssistantExecutionRoute = (thread, options = {}) => {
+  const threadRouteId = typeof thread.routeId === 'string' ? thread.routeId : ''
+  const route = threadRouteId
+    ? selectAssistantBackendRouteById(threadRouteId) ?? selectActiveAssistantBackendRouteRow()
+    : selectActiveAssistantBackendRouteRow()
+
+  if (!route) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route is not configured.',
+      503,
+      'assistant_route_missing',
+    )
+  }
+
+  if (!route.enabled) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route is disabled.',
+      503,
+      'assistant_route_disabled',
+    )
+  }
+
+  if (!isAssistantRouteConfigured(route)) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route is not configured.',
+      503,
+      'assistant_route_invalid',
+    )
+  }
+
+  if (options.streamRequested && !route.supportsStreaming) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route does not support streaming.',
+      400,
+      'assistant_streaming_unsupported',
+    )
+  }
+
+  if (options.toolsRequested && !route.supportsTools) {
+    throw new AssistantRuntimeError(
+      'Assistant runtime route does not support tool calling.',
+      400,
+      'assistant_tools_unsupported',
+    )
+  }
+
+  return route
+}
+
+const updateAssistantRouteHealthFromResult = (routeId, error = null) => {
+  if (!routeId) {
+    return
+  }
+
+  const timestamp = new Date().toISOString()
+
+  if (!error) {
+    updateAssistantBackendRouteStatus(routeId, 'available', timestamp)
+    return
+  }
+
+  if (
+    error instanceof AssistantRuntimeError &&
+    error.errorCode !== 'assistant_route_disabled'
+  ) {
+    updateAssistantBackendRouteStatus(routeId, 'unavailable', timestamp)
+  }
+}
+
+const executeAssistantTurn = async (
+  ownerUserId,
+  threadId,
+  promptContent,
+  options = {},
+) => {
+  const thread = selectAssistantThreadById(ownerUserId, threadId)
+
+  if (!thread) {
+    throw new AssistantRuntimeError(
+      'Assistant thread not found.',
+      404,
+      'assistant_thread_not_found',
+    )
+  }
+
+  const content = sanitizeAssistantMessageContent(promptContent)
+
+  if (!content) {
+    throw new AssistantRuntimeError(
+      'Assistant message content is required.',
+      400,
+      'assistant_message_content_missing',
+    )
+  }
+
+  const route = resolveAssistantExecutionRoute(thread, options)
+  const threadTitle =
+    sanitizeAssistantThreadTitle(thread.title) || deriveAssistantThreadTitleFromPrompt(content)
+  const userMessageTimestamp = new Date().toISOString()
+  const userMessage = {
+    id: `assistant-message-${randomUUID()}`,
+    threadId,
+    role: 'user',
+    content,
+    sequenceIndex: selectNextAssistantMessageSequenceIndex(ownerUserId, threadId),
+    createdAt: userMessageTimestamp,
+    updatedAt: userMessageTimestamp,
+  }
+
+  insertAssistantMessage(ownerUserId, userMessage, userMessageTimestamp, userMessageTimestamp)
+  updateAssistantThreadRuntimeState(
+    ownerUserId,
+    threadId,
+    route.id,
+    threadTitle,
+    userMessageTimestamp,
+  )
+
+  try {
+    const providerResponse = await callAssistantProviderRoute(route, {
+      ownerUserId,
+      threadId,
+      messages: [
+        ...selectAssistantMessagesByThreadId(ownerUserId, threadId).map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      ],
+      streamRequested: options.streamRequested === true,
+      toolsRequested: options.toolsRequested === true,
+    })
+
+    const assistantMessageTimestamp = new Date().toISOString()
+    const assistantMessageId = `assistant-message-${randomUUID()}`
+    const assistantMessage = {
+      id: assistantMessageId,
+      threadId,
+      role: 'assistant',
+      content: providerResponse.content,
+      sequenceIndex: selectNextAssistantMessageSequenceIndex(ownerUserId, threadId),
+      createdAt: assistantMessageTimestamp,
+      updatedAt: assistantMessageTimestamp,
+    }
+    const toolEvents = []
+
+    insertAssistantMessage(
+      ownerUserId,
+      assistantMessage,
+      assistantMessageTimestamp,
+      assistantMessageTimestamp,
+    )
+
+    if (options.toolsRequested === true && providerResponse.toolCalls.length > 0) {
+      for (const toolCall of providerResponse.toolCalls) {
+        const resolvedToolConfig = resolveAssistantMcpToolConfig(toolCall.toolName)
+        const startedToolExecution = {
+          serverName: resolvedToolConfig?.server.name ?? 'mcp',
+          toolName: toolCall.toolName,
+          toolId: toolCall.id,
+          arguments: toolCall.arguments,
+          result: null,
+          redactArguments: resolvedToolConfig?.tool.redactArguments !== false,
+          redactResults: resolvedToolConfig?.tool.redactResults !== false,
+        }
+        const startedEvent = buildAssistantToolEventRecord(
+          ownerUserId,
+          threadId,
+          assistantMessageId,
+          startedToolExecution,
+          'running',
+        )
+        insertAssistantMessageEvent(
+          ownerUserId,
+          startedEvent,
+          startedEvent.createdAt,
+          startedEvent.updatedAt,
+        )
+        toolEvents.push(startedEvent)
+
+        try {
+          const toolExecution = await callAssistantMcpTool(toolCall)
+          const completedEvent = buildAssistantToolEventRecord(
+            ownerUserId,
+            threadId,
+            assistantMessageId,
+            toolExecution,
+            'completed',
+          )
+          insertAssistantMessageEvent(
+            ownerUserId,
+            completedEvent,
+            completedEvent.createdAt,
+            completedEvent.updatedAt,
+          )
+          toolEvents.push(completedEvent)
+        } catch (error) {
+          if (!(error instanceof AssistantRuntimeError)) {
+            throw error
+          }
+
+          const errorEvent = buildAssistantToolEventRecord(
+            ownerUserId,
+            threadId,
+            assistantMessageId,
+            startedToolExecution,
+            'running',
+            error,
+          )
+          insertAssistantMessageEvent(
+            ownerUserId,
+            errorEvent,
+            errorEvent.createdAt,
+            errorEvent.updatedAt,
+          )
+          toolEvents.push(errorEvent)
+        }
+      }
+    }
+
+    updateAssistantThreadRuntimeState(
+      ownerUserId,
+      threadId,
+      route.id,
+      threadTitle,
+      assistantMessageTimestamp,
+    )
+    updateAssistantRouteHealthFromResult(route.id)
+
+    return {
+      thread: buildAssistantThreadPayload(selectAssistantThreadById(ownerUserId, threadId)),
+      userMessage: buildAssistantMessagePayload(userMessage),
+      assistantMessage: buildAssistantMessagePayload(assistantMessage),
+      events: toolEvents.map((event) =>
+        buildAssistantMessageEventPayload({
+          ...event,
+          payload: JSON.parse(event.payloadJson),
+        }),
+      ),
+      runtime: {
+        route: buildAssistantRoutePayload(route),
+        providerMessageId: providerResponse.providerMessageId,
+        finishReason: providerResponse.finishReason,
+        usage: providerResponse.usage,
+        streaming: {
+          requested: options.streamRequested === true,
+          supported: Boolean(route.supportsStreaming),
+          delivered: providerResponse.streaming.delivered === true,
+        },
+      },
+    }
+  } catch (error) {
+    updateAssistantRouteHealthFromResult(route.id, error)
+    throw error
+  }
+}
+
+const sendAssistantRuntimeError = (response, error) => {
+  if (error instanceof AssistantRuntimeError) {
+    sendJson(response, error.statusCode, {
+      error: error.message,
+      errorCode: error.errorCode,
+    })
+    return
+  }
+
+  console.error('Unexpected assistant runtime failure.', error)
+  sendJson(response, 500, {
+    error: 'Assistant runtime request failed.',
+    errorCode: 'assistant_runtime_unknown_error',
+  })
+}
 
 const selectRoborockIntegrationRow = (ownerUserId) =>
   db
@@ -3830,6 +5446,8 @@ ensureSeedWidgetsPresent(defaultAppUserId)
 
 ensureBringWidgetDefaultPlacement()
 
+ensureConfiguredAssistantBackendRoutePresent()
+
 deleteUnsupportedWidgets()
 
 migrateLegacyMockCalendarEvents(defaultAppUserId)
@@ -3859,6 +5477,65 @@ const sendJson = (response, statusCode, payload, extraHeaders = {}) => {
     ...extraHeaders,
   })
   response.end(JSON.stringify(payload))
+}
+
+const writeAssistantStreamEvent = (response, payload) => {
+  response.write(`${JSON.stringify(payload)}\n`)
+}
+
+const streamAssistantTurnResponse = async (response, assistantTurn) => {
+  const completeRuntime = {
+    ...assistantTurn.runtime,
+    streaming: {
+      ...assistantTurn.runtime.streaming,
+      delivered: true,
+    },
+  }
+
+  response.writeHead(200, {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store',
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'X-Accel-Buffering': 'no',
+  })
+
+  writeAssistantStreamEvent(response, {
+    type: 'started',
+    thread: assistantTurn.thread,
+    userMessage: assistantTurn.userMessage,
+    runtime: completeRuntime,
+  })
+
+  const chunks = splitAssistantStreamingChunks(assistantTurn.assistantMessage.content)
+  let accumulatedContent = ''
+
+  for (const chunk of chunks) {
+    accumulatedContent += chunk
+
+    writeAssistantStreamEvent(response, {
+      type: 'chunk',
+      delta: chunk,
+      content: accumulatedContent,
+      messageId: assistantTurn.assistantMessage.id,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 12))
+  }
+
+  writeAssistantStreamEvent(response, {
+    type: 'complete',
+    thread: assistantTurn.thread,
+    userMessage: assistantTurn.userMessage,
+    assistantMessage: {
+      ...assistantTurn.assistantMessage,
+      content: accumulatedContent,
+    },
+    runtime: completeRuntime,
+  })
+
+  response.end()
 }
 
 const sendBinary = (response, statusCode, body, extraHeaders = {}) => {
@@ -4239,6 +5916,44 @@ const server = createServer(async (request, response) => {
 
   if (request.method === 'GET' && requestUrl.pathname === '/api/roborock/settings') {
     sendJson(response, 200, { roborockSettings: selectRoborockSettings(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/availability') {
+    sendJson(response, 200, { assistant: selectAssistantAvailability() })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/threads') {
+    sendJson(response, 200, { threads: selectAssistantThreads(ownerUserId) })
+    return
+  }
+
+  if (
+    request.method === 'GET' &&
+    requestUrl.pathname.startsWith('/api/assistant/threads/')
+  ) {
+    const threadId = requestUrl.pathname.replace('/api/assistant/threads/', '')
+
+    if (!threadId) {
+      sendJson(response, 400, { error: 'Missing assistant thread id.' })
+      return
+    }
+
+    const thread = selectAssistantThreadById(ownerUserId, threadId)
+
+    if (!thread) {
+      sendJson(response, 404, { error: 'Assistant thread not found.' })
+      return
+    }
+
+    sendJson(response, 200, {
+      thread: buildAssistantThreadPayload(thread),
+      messages: selectAssistantMessagesByThreadId(ownerUserId, threadId),
+      events: selectAssistantMessageEventsByThreadId(ownerUserId, threadId).map(
+        buildAssistantMessageEventPayload,
+      ),
+    })
     return
   }
 
@@ -4729,6 +6444,83 @@ const server = createServer(async (request, response) => {
       return
     } catch {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/assistant/threads') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const activeRoute = selectActiveAssistantBackendRouteRow()
+    const title = sanitizeAssistantThreadTitle(body?.title)
+    const timestamp = new Date().toISOString()
+    const threadId = `assistant-thread-${randomUUID()}`
+
+    insertAssistantThread(
+      ownerUserId,
+      {
+        id: threadId,
+        routeId: activeRoute?.id ?? null,
+        title,
+        state: 'active',
+      },
+      timestamp,
+      timestamp,
+    )
+
+    const createdThread = selectAssistantThreadById(ownerUserId, threadId)
+
+    sendJson(response, 201, {
+      thread: buildAssistantThreadPayload(createdThread),
+      messages: [],
+    })
+    return
+  }
+
+  if (
+    request.method === 'POST' &&
+    /^\/api\/assistant\/threads\/[^/]+\/messages$/.test(requestUrl.pathname)
+  ) {
+    const threadId = requestUrl.pathname
+      .replace('/api/assistant/threads/', '')
+      .replace('/messages', '')
+
+    if (!threadId) {
+      sendJson(response, 400, { error: 'Missing assistant thread id.' })
+      return
+    }
+
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const assistantTurn = await executeAssistantTurn(ownerUserId, threadId, body?.content, {
+        streamRequested: body?.stream === true,
+        toolsRequested: body?.requestedTools === true,
+      })
+
+      if (body?.stream === true) {
+        await streamAssistantTurnResponse(response, assistantTurn)
+        return
+      }
+
+      sendJson(response, 201, assistantTurn)
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
       return
     }
   }

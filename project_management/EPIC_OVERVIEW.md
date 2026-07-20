@@ -128,3 +128,18 @@ Issues:
 | 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__002_DEVICE_SELECTION_DEFAULT_ROUTINE_AND_STATUS_API.md | Add robot discovery, selected-device and default-routine persistence, capability-aware status snapshots, and authenticated Roborock command endpoints. | implemented |
 | 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__003_MINI_START_WIDGET.md | Implement the compact Roborock widget with one-tap start behavior, configuration awareness, and localized widget-owned status copy. | planned |
 | 009_ROBOROCK_INTEGRATION__ISSUE_DEFINITION__004_EXTENDED_STATUS_AND_LOCATION_VIEW.md | Build the extended Roborock experience with live state, battery, elapsed and remaining time, optional location or room details, and reconnect guidance. | planned |
+
+## 010 AI ASSISTANT PLATFORM
+
+Description:
+Introduce a Subway-owned AI assistant section with persistent per-user chat threads, admin-managed LLM routing, LiteLLM-backed upstream model access, direct custom backend support, MCP-based tool execution, tool-call rendering, and rich markdown response presentation.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__001_CHAT_DOMAIN_AND_ADMIN_MANAGED_BACKEND_REGISTRY_FOUNDATION.md | Define the assistant chat domain, persistent ownership model, and admin-managed backend registry and routing contract. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__002_LITELLM_WRAPPER_AND_CUSTOM_BACKEND_CONNECTOR_RUNTIME.md | Implement the internal provider runtime that routes through LiteLLM and direct custom backends behind one normalized Subway contract. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__003_PERSISTENT_AGENT_CHAT_SECTION_AND_STREAMING_THREADS.md | Build the authenticated assistant section with persistent threads, streaming message flow, and end-user chat UX without provider selection controls. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__004_MCP_TOOL_EXECUTION_ORCHESTRATION_AND_RENDERING.md | Add MCP-only tool execution, persisted tool-call event records, and structured tool activity rendering in the chat transcript. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__005_MARKDOWN_TRANSCRIPT_RENDERING_AND_RESPONSE_PRESENTATION.md | Render assistant responses with safe rich markdown, syntax-highlighted code fences, tables, and task lists. | implemented |
