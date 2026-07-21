@@ -127,7 +127,6 @@ interface WidgetBoardHostProps {
     onDraftChange: (value: string) => void
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
     onComposerKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void
-    onOpenSettings: () => void
   }
 }
 
@@ -1040,10 +1039,8 @@ export function WidgetBoardHost({
           children: (
             <AssistantCompactCard
               appText={appText}
-              availability={assistantState.availability}
               threads={assistantState.threads}
               selectedThread={assistantState.selectedThread}
-              turnState={assistantState.turnState}
             />
           ),
         })
@@ -1169,7 +1166,6 @@ export function WidgetBoardHost({
                     onDraftChange: assistantActions.onDraftChange,
                     onSubmit: assistantActions.onSubmit,
                     onComposerKeyDown: assistantActions.onComposerKeyDown,
-                    onOpenSettings: assistantActions.onOpenSettings,
                   }
               : null
 

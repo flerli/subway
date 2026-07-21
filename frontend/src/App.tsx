@@ -971,13 +971,6 @@ function App() {
     setSelectedAssistantThreadId(threadId)
   }
 
-  const handleOpenAssistantSettings = () => {
-    setExpandedWidgetId(null)
-    setExpandedSettingsHubPanelId(null)
-    setExpandedWidgetSettingsId('assistant')
-    setViewMode('settings')
-  }
-
   const handleDeleteAssistantThread = async (threadId: string) => {
     const thread = assistantThreads.find((entry) => entry.id === threadId)
     const threadTitle = thread?.title || appText.assistant.untitledThreadTitle
@@ -3284,7 +3277,6 @@ function App() {
                 onDraftChange: setAssistantDraft,
                 onSubmit: handleAssistantSubmit,
                 onComposerKeyDown: handleAssistantComposerKeyDown,
-                onOpenSettings: handleOpenAssistantSettings,
               }}
             />
           ) : (

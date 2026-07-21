@@ -33,30 +33,11 @@ export interface AssistantDetailViewData {
   onDraftChange: (value: string) => void
   onSubmit: FormEventHandler<HTMLFormElement>
   onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
-  onOpenSettings: () => void
 }
 
 interface AssistantDetailPanelProps {
   data: AssistantDetailViewData
   languageCode: SupportedLanguageCode
-}
-
-const getTurnStateLabel = (
-  appText: AppTextBundle,
-  turnState: AssistantDetailViewData['turnState'],
-) => {
-  switch (turnState) {
-    case 'sending':
-      return appText.assistant.turnStateSending
-    case 'streaming':
-      return appText.assistant.turnStateStreaming
-    case 'completed':
-      return appText.assistant.turnStateCompleted
-    case 'failed':
-      return appText.assistant.turnStateFailed
-    default:
-      return appText.assistant.turnStateIdle
-  }
 }
 
 const getMessageRoleLabel = (
@@ -132,7 +113,6 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
     onDraftChange,
     onSubmit,
     onComposerKeyDown,
-    onOpenSettings,
   } = data
 
   const displayedMessages = selectedThread
@@ -162,9 +142,6 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                   ? appText.assistant.creatingThreadAction
                   : appText.assistant.newThreadAction}
               </span>
-            </button>
-            <button type="button" className="widget-action-button" onClick={onOpenSettings}>
-              <span>{appText.widgetAdmin.openSettingsAction}</span>
             </button>
           </div>
 
@@ -207,7 +184,7 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                       disabled={isTurnBusy}
                       onClick={() => onDeleteThread(thread.id)}
                     >
-                      Delete
+                      {appText.assistant.deleteConversationAction}
                     </button>
                   </div>
                 )
@@ -335,11 +312,6 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
 
             <div className="assistant-composer-footer">
               <div className="assistant-turn-meta">
-                <p className={`assistant-turn-state assistant-turn-state--${turnState}`}>
-                  <span>{appText.assistant.turnStatusLabel}</span>
-                  <strong>{getTurnStateLabel(appText, turnState)}</strong>
-                </p>
-
                 {turnError ? (
                   <p className="settings-note settings-note--warning">{turnError}</p>
                 ) : !selectedThreadId ? (

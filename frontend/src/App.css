@@ -1711,13 +1711,14 @@ select {
 
 .assistant-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(220px, 0.62fr) minmax(0, 1.38fr);
   gap: 16px;
   min-height: 60svh;
 }
 
 .assistant-column {
   align-content: start;
+  min-height: 0;
 }
 
 .assistant-card {
@@ -1801,12 +1802,18 @@ select {
 
 .assistant-transcript-card {
   min-height: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .assistant-message-list {
   max-height: 58svh;
   overflow-y: auto;
   align-content: start;
+  min-height: 0;
+  padding: 0 10px 4px;
+  gap: 12px;
 }
 
 .assistant-composer {
@@ -1854,6 +1861,47 @@ select {
 
 .assistant-send-button {
   min-width: 180px;
+}
+
+.assistant-compact {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-compact-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant-compact-thread h3,
+.assistant-compact-footer {
+  margin: 0;
+}
+
+.assistant-compact-conversation {
+  display: grid;
+  gap: 8px;
+}
+
+.assistant-compact-bubble {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.assistant-compact-bubble--user {
+  margin-left: auto;
+  border-color: rgba(126, 240, 200, 0.26);
+  background: linear-gradient(180deg, rgba(126, 240, 200, 0.16) 0%, rgba(86, 182, 255, 0.08) 100%);
+}
+
+.assistant-compact-bubble--assistant,
+.assistant-compact-bubble--system,
+.assistant-compact-bubble--tool {
+  margin-right: auto;
 }
 
 .assistant-markdown {
@@ -2083,6 +2131,7 @@ select {
 
 .assistant-message--user {
   margin-left: auto;
+  margin-right: 4%;
   border-color: rgba(126, 240, 200, 0.26);
   background: linear-gradient(180deg, rgba(126, 240, 200, 0.16) 0%, rgba(86, 182, 255, 0.08) 100%);
 }
@@ -2091,6 +2140,7 @@ select {
 .assistant-message--system,
 .assistant-message--tool {
   margin-right: auto;
+  margin-left: 4%;
   border-color: rgba(126, 240, 200, 0.18);
   background: rgba(255, 255, 255, 0.05);
 }
