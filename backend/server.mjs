@@ -2709,6 +2709,33 @@ const selectAssistantBackendRouteById = (ownerUserId, routeId) =>
     `)
     .get(ownerUserId, routeId)
 
+const selectAnyAssistantBackendRouteById = (routeId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        owner_user_id AS ownerUserId,
+        label,
+        backend_kind AS backendKind,
+        base_url AS baseUrl,
+        model_identifier AS modelIdentifier,
+        api_key AS apiKey,
+        headers_json AS headersJson,
+        is_enabled AS enabled,
+        is_default AS isDefault,
+        is_active AS isActive,
+        supports_streaming AS supportsStreaming,
+        supports_tools AS supportsTools,
+        supports_markdown AS supportsMarkdown,
+        status,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_backend_routes
+      WHERE id = ?
+      LIMIT 1
+    `)
+    .get(routeId)
+
 const selectAssistantSettings = (ownerUserId) => {
   const route = selectActiveAssistantBackendRouteRow(ownerUserId)
 
@@ -2934,7 +2961,23 @@ const updateAssistantRoute = (ownerUserId, routeId, input) => {
   const currentRoute = selectAssistantBackendRouteById(ownerUserId, routeId)
 
   if (!currentRoute) {
-    throw new AssistantRuntimeError('Assistant route not found.', 404, 'assistant_route_not_found')
+    const conflictingRoute = selectAnyAssistantBackendRouteById(routeId)
+    const fallbackRouteId = conflictingRoute ? `${routeId}--${ownerUserId}` : routeId
+
+    return createAssistantRoute(ownerUserId, {
+      routeId: fallbackRouteId,
+      label: input.label ?? '',
+      backendKind: input.backendKind ?? 'custom',
+      baseUrl: input.baseUrl ?? '',
+      modelIdentifier: input.modelIdentifier ?? '',
+      apiKey: typeof input.apiKey === 'string' ? input.apiKey : '',
+      headersJson: input.headersJson ?? '{}',
+      enabled: input.enabled ?? true,
+      isDefault: input.isDefault ?? false,
+      supportsStreaming: input.supportsStreaming ?? false,
+      supportsTools: input.supportsTools ?? false,
+      supportsMarkdown: input.supportsMarkdown ?? true,
+    })
   }
 
   const label = sanitizeAssistantRouteLabel(input.label ?? currentRoute.label)
