@@ -310,9 +310,6 @@ const renderEmptyState = (title: string, copy: string, className?: string) => (
   </div>
 )
 
-const hasMetaContent = (meta: ReactNode) =>
-  meta !== null && meta !== undefined && meta !== false && meta !== ''
-
 const formatForecastDayLabel = (
   day: string,
   languageCode: SupportedLanguageCode,
@@ -558,13 +555,13 @@ export function WidgetBoardHost({
   const renderWidgetFrame = ({
     widget,
     badgeStyle,
-    meta,
+    meta: _meta,
     mode,
     children,
   }: {
     widget: RegisteredWidget
     badgeStyle: ReturnType<typeof buildWidgetBadgeStyle>
-    meta: ReactNode
+    meta?: ReactNode
     mode: WidgetRenderMode
     children: ReactNode
   }) => (
@@ -581,7 +578,6 @@ export function WidgetBoardHost({
           </span>
           <div className="widget-title-stack">
             <h2>{resolveWidgetTitle(widget, languageCode)}</h2>
-            {hasMetaContent(meta) ? <p className="widget-meta">{meta}</p> : null}
           </div>
         </div>
         <div className="widget-head-side">{renderExpandControl(widget)}</div>

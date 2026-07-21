@@ -436,9 +436,9 @@ select {
 }
 
 .route-bullet--large {
-  width: 2.9rem;
-  height: 2.9rem;
-  font-size: 1.15rem;
+  width: 3.48rem;
+  height: 3.48rem;
+  font-size: 1.38rem;
 }
 
 .route-bullet--small {
@@ -508,7 +508,7 @@ select {
 
 .widget-zone--cell > * {
   min-width: 0;
-  align-self: start;
+  align-self: stretch;
   min-height: 100%;
 }
 
@@ -553,6 +553,11 @@ select {
   padding: 20px;
   display: grid;
   gap: 16px;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  overflow: hidden;
 }
 
 .widget--span-6 {
@@ -614,8 +619,12 @@ select {
 
 .board-head h2,
 .widget h2 {
-  font-size: 1.45rem;
+  font-size: 1.74rem;
   letter-spacing: -0.03em;
+}
+
+.widget-meta {
+  display: none;
 }
 
 .happening-copy,
@@ -1908,11 +1917,16 @@ select {
 .assistant-compact {
   display: grid;
   gap: 10px;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .assistant-compact-thread {
   display: grid;
   gap: 10px;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .assistant-compact-thread h3,
@@ -1923,8 +1937,10 @@ select {
 .assistant-compact-conversation {
   display: grid;
   gap: 8px;
-  max-height: 18rem;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
+  align-content: start;
 }
 
 .assistant-compact-bubble {
@@ -2193,6 +2209,9 @@ select {
 
 .assistant-empty-state {
   padding: 18px;
+  min-height: 0;
+  height: 100%;
+  align-content: start;
 }
 
 .assistant-message-role {
@@ -3690,7 +3709,7 @@ select {
   .board-head h2,
   .widget h2,
   .settings-panel h2 {
-    font-size: 1.35rem;
+    font-size: 1.62rem;
   }
 
   .arrival-strip {
