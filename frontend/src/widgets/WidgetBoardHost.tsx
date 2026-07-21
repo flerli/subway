@@ -6,6 +6,13 @@ import {
   type ReactNode,
 } from 'react'
 import type { AppTextBundle } from '../i18n/appText'
+import type {
+  AssistantAvailabilityRecord,
+  AssistantMessageEventRecord,
+  AssistantMessageRecord,
+  AssistantThreadDetail,
+  AssistantThreadSummary,
+} from '../api/assistant'
 import {
   formatLocalizedText,
   type SupportedLanguageCode,
@@ -33,6 +40,7 @@ import type {
   WidgetPlacementZoneId,
   WidgetSettingsValues,
 } from './widgetTypes'
+import { AssistantCompactCard } from './assistant/AssistantCompactCard'
 import {
   resolveWidgetTitle,
 } from './widgetLocalization'
@@ -95,6 +103,30 @@ interface WidgetBoardHostProps {
     widgetId: string,
     settings: WidgetSettingsValues,
   ) => Promise<void>
+  assistantState: {
+    availability: AssistantAvailabilityRecord
+    threads: AssistantThreadSummary[]
+    selectedThreadId: string | null
+    selectedThread: AssistantThreadDetail | null
+    loading: boolean
+    detailLoading: boolean
+    creatingThread: boolean
+    error: string | null
+    draft: string
+    turnState: 'idle' | 'sending' | 'streaming' | 'completed' | 'failed'
+    turnError: string | null
+    pendingUserMessage: AssistantMessageRecord | null
+    streamingMessage: AssistantMessageRecord | null
+    streamingEvents: AssistantMessageEventRecord[]
+    isTurnBusy: boolean
+  }
+  assistantActions: {
+    onCreateThread: () => void
+    onSelectThread: (threadId: string) => void
+    onDraftChange: (value: string) => void
+    onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+    onOpenSettings: () => void
+  }
 }
 
 interface WidgetZoneEntry {
@@ -331,6 +363,8 @@ export function WidgetBoardHost({
   onCalendarDataChanged,
   onOpenCalendarEvent,
   onSaveWidgetSettings,
+  assistantState,
+  assistantActions,
 }: WidgetBoardHostProps) {
   const [youtubeQuery, setYoutubeQuery] = useState('')
   const [youtubeResults, setYoutubeResults] = useState<YoutubeVideo[]>([])
@@ -992,6 +1026,26 @@ export function WidgetBoardHost({
           ),
         })
       }
+      case 'assistant': {
+        return renderWidgetFrame({
+          widget,
+          badgeStyle,
+          meta:
+            assistantState.availability.status === 'available'
+              ? assistantState.availability.activeRoute?.label ?? null
+              : assistantState.error,
+          mode,
+          children: (
+            <AssistantCompactCard
+              appText={appText}
+              availability={assistantState.availability}
+              threads={assistantState.threads}
+              selectedThread={assistantState.selectedThread}
+              turnState={assistantState.turnState}
+            />
+          ),
+        })
+      }
       case 'youtube': {
         const youtubeWidgetText = widget.module.getTranslation(
           languageCode,
@@ -1089,6 +1143,30 @@ export function WidgetBoardHost({
                   onSelectNext: handleSelectNextYoutubeResult,
                   onToggleFullscreen: toggleYoutubeFullscreen,
                 }
+              : widget.entity.id === 'assistant'
+                ? {
+                    appText,
+                    availability: assistantState.availability,
+                    threads: assistantState.threads,
+                    selectedThreadId: assistantState.selectedThreadId,
+                    selectedThread: assistantState.selectedThread,
+                    loading: assistantState.loading,
+                    detailLoading: assistantState.detailLoading,
+                    creatingThread: assistantState.creatingThread,
+                    error: assistantState.error,
+                    draft: assistantState.draft,
+                    turnState: assistantState.turnState,
+                    turnError: assistantState.turnError,
+                    pendingUserMessage: assistantState.pendingUserMessage,
+                    streamingMessage: assistantState.streamingMessage,
+                    streamingEvents: assistantState.streamingEvents,
+                    isTurnBusy: assistantState.isTurnBusy,
+                    onCreateThread: assistantActions.onCreateThread,
+                    onSelectThread: assistantActions.onSelectThread,
+                    onDraftChange: assistantActions.onDraftChange,
+                    onSubmit: assistantActions.onSubmit,
+                    onOpenSettings: assistantActions.onOpenSettings,
+                  }
               : null
 
       if (!detailData) {
@@ -1096,6 +1174,7 @@ export function WidgetBoardHost({
       }
 
       const detailContent = widget.module.renderDetailView({
+        appText,
         widget,
         data: detailData,
         languageCode,
@@ -1111,6 +1190,9 @@ export function WidgetBoardHost({
         const bringWidgetText = widget.module.getTranslation?.(
           languageCode,
         ) as BringWidgetTranslation | undefined
+        const assistantWidgetText = widget.module.getTranslation?.(
+          languageCode,
+        ) as { title: string } | undefined
 
         return renderWidgetFrame({
           widget,
@@ -1136,6 +1218,8 @@ export function WidgetBoardHost({
                     : bringData.status === 'not-configured'
                       ? bringWidgetText?.copy.notConfiguredTitle ?? null
                       : null
+                : widget.entity.id === 'assistant'
+                  ? assistantState.selectedThread?.title || assistantWidgetText?.title || null
                 : widget.entity.id === 'youtube'
                   ? null
                   : null,

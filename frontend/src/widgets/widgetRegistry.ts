@@ -48,6 +48,9 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   roborock: {
     widgetNumber: 9,
   },
+  assistant: {
+    widgetNumber: 10,
+  },
 }
 
 export const buildWidgetRegistry = (

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { AppTextBundle } from '../i18n/appText'
 import type { SupportedLanguageCode } from '../i18n/localization'
 
 export type WidgetId = string
@@ -54,11 +55,13 @@ export interface WidgetDetailViewContext {
   widget: RegisteredWidget
   data: unknown
   languageCode: SupportedLanguageCode
+  appText: AppTextBundle
 }
 
 export interface WidgetSettingsPanelContext {
   widget: RegisteredWidget
   languageCode: SupportedLanguageCode
+  appText: AppTextBundle
   initialSettings: WidgetSettingsValues
   onSave: (widgetId: string, settings: WidgetSettingsValues) => Promise<void>
 }

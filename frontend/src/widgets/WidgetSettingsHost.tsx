@@ -54,6 +54,7 @@ function WidgetSettingsExpandedCard({
 
   if (widget.module.renderSettingsPanel) {
     return widget.module.renderSettingsPanel({
+      appText,
       widget,
       languageCode,
       initialSettings,

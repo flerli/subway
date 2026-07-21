@@ -1608,6 +1608,15 @@ const seedWidgets = [
     userScope: { mode: 'all', memberIds: [] },
     placementZones: [],
   },
+  {
+    id: 'assistant',
+    title: 'Assistant',
+    subwayLetter: 'A',
+    subwayColor: '#7ef0c8',
+    sourceLocation: 'assistant',
+    userScope: { mode: 'all', memberIds: [] },
+    placementZones: [{ zoneId: 'service-board', order: 3 }],
+  },
 ]
 
 const allowedWidgetSourceLocations = new Set(

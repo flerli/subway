@@ -66,7 +66,6 @@ import {
   SoftwareKeyboardOverlay,
   type SoftwareKeyboardTarget,
 } from './keyboard/softwareKeyboard'
-import { AssistantMarkdown } from './assistant/AssistantMarkdown'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import {
@@ -191,7 +190,7 @@ const formatRuntimeTimestamp = (
   }).format(timestamp)
 }
 
-type ViewMode = 'board' | 'assistant' | 'settings'
+type ViewMode = 'board' | 'settings'
 type SettingsHubPanelId = 'system' | 'family'
 type AuthStatus = 'bootstrapping' | 'unauthenticated' | 'authenticated'
 type AppPreferencesErrorKey = 'load-failed' | 'save-failed'
@@ -568,7 +567,6 @@ function App() {
   const [selectedAssistantThreadId, setSelectedAssistantThreadId] = useState<string | null>(null)
   const [selectedAssistantThread, setSelectedAssistantThread] =
     useState<AssistantThreadDetail | null>(null)
-  const [assistantLoaded, setAssistantLoaded] = useState(false)
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantDetailLoading, setAssistantDetailLoading] = useState(false)
   const [assistantCreatingThread, setAssistantCreatingThread] = useState(false)
@@ -699,7 +697,6 @@ function App() {
     setAssistantThreads([])
     setSelectedAssistantThreadId(null)
     setSelectedAssistantThread(null)
-    setAssistantLoaded(false)
     setAssistantLoading(false)
     setAssistantDetailLoading(false)
     setAssistantCreatingThread(false)
@@ -954,8 +951,8 @@ function App() {
       })
       setSelectedAssistantThreadId(createdThread.id)
       setSelectedAssistantThread(createdThread)
-      setViewMode('assistant')
-      setAssistantLoaded(true)
+      setViewMode('board')
+      setExpandedWidgetId('assistant')
     } catch (error) {
       if (isAuthRequiredError(error)) {
         handleAuthRequired()
@@ -966,6 +963,18 @@ function App() {
     } finally {
       setAssistantCreatingThread(false)
     }
+  }
+
+  const handleSelectAssistantThread = (threadId: string) => {
+    setSelectedAssistantThread(null)
+    setSelectedAssistantThreadId(threadId)
+  }
+
+  const handleOpenAssistantSettings = () => {
+    setExpandedWidgetId(null)
+    setExpandedSettingsHubPanelId(null)
+    setExpandedWidgetSettingsId('assistant')
+    setViewMode('settings')
   }
 
   const playbackAssistantPreview = async (
@@ -1331,7 +1340,7 @@ function App() {
   ])
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || viewMode !== 'assistant') {
+    if (authStatus !== 'authenticated') {
       return
     }
 
@@ -1360,7 +1369,6 @@ function App() {
 
           return threads[0]?.id ?? null
         })
-        setAssistantLoaded(true)
       } catch (error) {
         if (cancelled) {
           return
@@ -1384,14 +1392,10 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authStatus, viewMode])
+  }, [authStatus])
 
   useEffect(() => {
-    if (
-      authStatus !== 'authenticated' ||
-      viewMode !== 'assistant' ||
-      !selectedAssistantThreadId
-    ) {
+    if (authStatus !== 'authenticated' || !selectedAssistantThreadId) {
       return
     }
 
@@ -1431,7 +1435,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authStatus, viewMode, selectedAssistantThreadId])
+  }, [authStatus, selectedAssistantThreadId])
 
   useEffect(() => {
     assistantTurnRunIdRef.current += 1
@@ -2353,410 +2357,6 @@ function App() {
     )
   }
 
-  const getAssistantAvailabilityLabel = () => {
-    switch (assistantAvailability.status) {
-      case 'available':
-        return appText.assistant.availabilityAvailable
-      case 'disabled':
-        return appText.assistant.availabilityDisabled
-      case 'unavailable':
-        return appText.assistant.availabilityUnavailable
-      default:
-        return appText.assistant.availabilityNotConfigured
-    }
-  }
-
-  const getAssistantAvailabilityCopy = () => {
-    switch (assistantAvailability.status) {
-      case 'disabled':
-        return appText.assistant.disabledCopy
-      case 'unavailable':
-        return appText.assistant.unavailableCopy
-      case 'available':
-        return appText.assistant.modelSelectionManagedCopy
-      default:
-        return appText.assistant.notConfiguredCopy
-    }
-  }
-
-  const getAssistantTurnStateLabel = () => {
-    switch (assistantTurnState) {
-      case 'sending':
-        return appText.assistant.turnStateSending
-      case 'streaming':
-        return appText.assistant.turnStateStreaming
-      case 'completed':
-        return appText.assistant.turnStateCompleted
-      case 'failed':
-        return appText.assistant.turnStateFailed
-      default:
-        return appText.assistant.turnStateIdle
-    }
-  }
-
-  const getAssistantMessageRoleLabel = (role: AssistantMessageRecord['role']) => {
-    switch (role) {
-      case 'user':
-        return appText.assistant.roleUser
-      case 'system':
-        return appText.assistant.roleSystem
-      case 'tool':
-        return appText.assistant.roleTool
-      default:
-        return appText.assistant.roleAssistant
-    }
-  }
-
-  const getAssistantToolEventStatusLabel = (
-    status: AssistantMessageEventRecord['payload']['status'],
-  ) => {
-    switch (status) {
-      case 'completed':
-        return appText.assistant.toolStatusCompleted
-      case 'error':
-        return appText.assistant.toolStatusError
-      default:
-        return appText.assistant.toolStatusRunning
-    }
-  }
-
-  const formatAssistantToolValue = (value: unknown) => {
-    if (value === null || value === undefined) {
-      return appText.assistant.toolRedactedValue
-    }
-
-    if (typeof value === 'string') {
-      return value
-    }
-
-    try {
-      return JSON.stringify(value, null, 2)
-    } catch {
-      return appText.assistant.toolRedactedValue
-    }
-  }
-
-  const shouldRenderAssistantMarkdown = (message: AssistantMessageRecord) =>
-    message.role === 'assistant' || message.role === 'system'
-
-  const renderAssistantSection = () => (
-    <section className="assistant-page">
-      <article className="assistant-panel">
-        <div className="widget-head assistant-panel-head">
-          <div className="widget-flag">
-            <span className="route-bullet route-bullet--large" style={badgeStyle('#7ef0c8')}>
-              A
-            </span>
-            <div>
-              <p className="widget-kicker">{appText.assistant.kicker}</p>
-              <h2>{appText.assistant.title}</h2>
-            </div>
-          </div>
-          <div className="widget-head-side assistant-head-actions">
-            <button
-              type="button"
-              className="settings-submit assistant-create-button"
-              onClick={() => {
-                void handleCreateAssistantThread()
-              }}
-              disabled={assistantCreatingThread}
-            >
-              {assistantCreatingThread
-                ? appText.assistant.creatingThreadAction
-                : appText.assistant.newThreadAction}
-            </button>
-          </div>
-        </div>
-
-        <p className="settings-copy">{appText.assistant.introCopy}</p>
-
-        {assistantError ? (
-          <p className="settings-note settings-note--warning">{assistantError}</p>
-        ) : null}
-
-        <div className="assistant-layout">
-          <aside className="assistant-column assistant-column--sidebar">
-            <article className="settings-card assistant-card assistant-status-card">
-              <div className="settings-card-head">
-                <p className="widget-kicker">{appText.assistant.availabilityTitle}</p>
-                <h3>{getAssistantAvailabilityLabel()}</h3>
-              </div>
-
-              <p className="settings-copy">{getAssistantAvailabilityCopy()}</p>
-
-              <div className="assistant-capability-list" role="list">
-                <p className="assistant-meta-row" role="listitem">
-                  <span>{appText.assistant.activeRouteLabel}</span>
-                  <strong>
-                    {assistantAvailability.activeRoute?.label ?? appText.assistant.routeUnknownValue}
-                  </strong>
-                </p>
-                <p className="assistant-meta-row" role="listitem">
-                  <span>{appText.assistant.backendKindLabel}</span>
-                  <strong>
-                    {assistantAvailability.activeRoute?.backendKind || appText.assistant.routeUnknownValue}
-                  </strong>
-                </p>
-                <p className="assistant-meta-row" role="listitem">
-                  <span>{appText.assistant.streamingCapabilityLabel}</span>
-                  <strong>
-                    {assistantAvailability.activeRoute?.supportsStreaming
-                      ? appText.assistant.enabledValue
-                      : appText.assistant.disabledValue}
-                  </strong>
-                </p>
-                <p className="assistant-meta-row" role="listitem">
-                  <span>{appText.assistant.toolsCapabilityLabel}</span>
-                  <strong>
-                    {assistantAvailability.activeRoute?.supportsTools
-                      ? appText.assistant.enabledValue
-                      : appText.assistant.disabledValue}
-                  </strong>
-                </p>
-                <p className="assistant-meta-row" role="listitem">
-                  <span>{appText.assistant.markdownCapabilityLabel}</span>
-                  <strong>
-                    {assistantAvailability.activeRoute?.supportsMarkdown
-                      ? appText.assistant.enabledValue
-                      : appText.assistant.disabledValue}
-                  </strong>
-                </p>
-              </div>
-            </article>
-
-            <article className="settings-card assistant-card assistant-thread-list-card">
-              <div className="settings-card-head">
-                <p className="widget-kicker">{appText.assistant.threadListTitle}</p>
-                <h3>{assistantThreads.length}</h3>
-              </div>
-
-              <p className="settings-copy">{appText.assistant.threadListCopy}</p>
-
-              {assistantLoading && !assistantLoaded ? (
-                <p className="settings-note">{appText.auth.authenticatedSessionCopy}</p>
-              ) : assistantThreads.length === 0 ? (
-                <div className="empty-state assistant-empty-state">
-                  <h3 className="empty-title">{appText.assistant.emptyThreadListTitle}</h3>
-                  <p className="empty-copy">{appText.assistant.emptyThreadListCopy}</p>
-                </div>
-              ) : (
-                <div className="assistant-thread-list">
-                  {assistantThreads.map((thread) => {
-                    const threadTitle = thread.title || appText.assistant.untitledThreadTitle
-
-                    return (
-                      <button
-                        key={thread.id}
-                        type="button"
-                        className={`assistant-thread-card${thread.id === selectedAssistantThreadId ? ' is-active' : ''}`}
-                        aria-label={formatLocalizedText(appText.assistant.openThreadAriaLabel, {
-                          title: threadTitle,
-                        })}
-                        disabled={isAssistantTurnBusy}
-                        onClick={() => {
-                          setSelectedAssistantThread(null)
-                          setSelectedAssistantThreadId(thread.id)
-                        }}
-                      >
-                        <strong>{threadTitle}</strong>
-                        <span>
-                          {formatLocalizedText(appText.assistant.messageCountMeta, {
-                            count: thread.messageCount,
-                          })}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </article>
-          </aside>
-
-          <section className="assistant-column assistant-column--main">
-            <article className="settings-card assistant-card assistant-transcript-card">
-              {(() => {
-                const assistantDisplayedMessages = selectedAssistantThread
-                  ? [
-                      ...selectedAssistantThread.messages,
-                      ...(assistantPendingUserMessage ? [assistantPendingUserMessage] : []),
-                      ...(assistantStreamingMessage ? [assistantStreamingMessage] : []),
-                    ]
-                  : []
-                const assistantDisplayedEvents = selectedAssistantThread
-                  ? [...selectedAssistantThread.events, ...assistantStreamingEvents]
-                  : []
-
-                return (
-                  <>
-              <div className="settings-card-head">
-                <p className="widget-kicker">{appText.assistant.transcriptTitle}</p>
-                <h3>
-                  {selectedAssistantThread?.title ||
-                    (selectedAssistantThreadId
-                      ? appText.assistant.untitledThreadTitle
-                      : appText.assistant.noThreadSelectedTitle)}
-                </h3>
-              </div>
-
-              {!selectedAssistantThreadId ? (
-                <div className="empty-state assistant-empty-state">
-                  <h3 className="empty-title">{appText.assistant.noThreadSelectedTitle}</h3>
-                  <p className="empty-copy">{appText.assistant.noThreadSelectedCopy}</p>
-                </div>
-              ) : assistantDetailLoading && !selectedAssistantThread ? (
-                <p className="settings-note">{appText.auth.authenticatedSessionCopy}</p>
-              ) : assistantDisplayedMessages.length > 0 ? (
-                <div className="assistant-message-list">
-                  {assistantDisplayedMessages.map((message) => {
-                    const relatedEvents = assistantDisplayedEvents.filter(
-                      (event) => event.messageId === message.id,
-                    )
-
-                    return (
-                      <article key={message.id} className={`assistant-message assistant-message--${message.role}`}>
-                        <p className="assistant-message-role">
-                          {getAssistantMessageRoleLabel(message.role)}
-                        </p>
-                        {shouldRenderAssistantMarkdown(message) ? (
-                          <AssistantMarkdown content={message.content} />
-                        ) : (
-                          <p className="assistant-message-copy">{message.content}</p>
-                        )}
-
-                        {relatedEvents.length > 0 ? (
-                          <div className="assistant-tool-event-list">
-                            {relatedEvents.map((event) => (
-                              <article
-                                key={event.id}
-                                className={`assistant-tool-event assistant-tool-event--${event.payload.status}`}
-                              >
-                                <div className="assistant-tool-event-head">
-                                  <div>
-                                    <p className="assistant-tool-event-kicker">
-                                      {appText.assistant.toolActivityTitle}
-                                    </p>
-                                    <h4>{event.payload.toolName}</h4>
-                                  </div>
-                                  <p className="assistant-tool-event-status">
-                                    {getAssistantToolEventStatusLabel(event.payload.status)}
-                                  </p>
-                                </div>
-
-                                <div className="assistant-tool-event-meta">
-                                  <p>
-                                    <span>{appText.assistant.toolServerLabel}</span>
-                                    <strong>{event.payload.serverName}</strong>
-                                  </p>
-                                </div>
-
-                                <div className="assistant-tool-event-body">
-                                  <div>
-                                    <p className="assistant-tool-event-label">
-                                      {appText.assistant.toolArgumentsLabel}
-                                    </p>
-                                    <pre className="assistant-tool-event-value">
-                                      {formatAssistantToolValue(event.payload.displayArguments)}
-                                    </pre>
-                                  </div>
-
-                                  {event.payload.status === 'error' && event.payload.error ? (
-                                    <div>
-                                      <p className="assistant-tool-event-label">
-                                        {appText.assistant.toolErrorLabel}
-                                      </p>
-                                      <pre className="assistant-tool-event-value">
-                                        {event.payload.error.message}
-                                      </pre>
-                                    </div>
-                                  ) : event.payload.displayResult !== null ? (
-                                    <div>
-                                      <p className="assistant-tool-event-label">
-                                        {appText.assistant.toolResultLabel}
-                                      </p>
-                                      <pre className="assistant-tool-event-value">
-                                        {formatAssistantToolValue(event.payload.displayResult)}
-                                      </pre>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </article>
-                            ))}
-                          </div>
-                        ) : null}
-                      </article>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="empty-state assistant-empty-state">
-                  <h3 className="empty-title">{appText.assistant.emptyTranscriptTitle}</h3>
-                  <p className="empty-copy">{appText.assistant.emptyTranscriptCopy}</p>
-                </div>
-              )}
-
-              <form className="assistant-composer" onSubmit={handleAssistantSubmit}>
-                <label className="settings-label assistant-composer-field">
-                  <span>{appText.assistant.composerLabel}</span>
-                  <textarea
-                    className="settings-input assistant-composer-input"
-                    rows={4}
-                    value={assistantDraft}
-                    onChange={(changeEvent) => setAssistantDraft(changeEvent.target.value)}
-                    placeholder={appText.assistant.composerPlaceholder}
-                    disabled={
-                      !selectedAssistantThreadId ||
-                      assistantDetailLoading ||
-                      assistantAvailability.status !== 'available' ||
-                      isAssistantTurnBusy
-                    }
-                  />
-                </label>
-
-                <div className="assistant-composer-footer">
-                  <div className="assistant-turn-meta">
-                    <p className={`assistant-turn-state assistant-turn-state--${assistantTurnState}`}>
-                      <span>{appText.assistant.turnStatusLabel}</span>
-                      <strong>{getAssistantTurnStateLabel()}</strong>
-                    </p>
-
-                    {assistantTurnError ? (
-                      <p className="settings-note settings-note--warning">{assistantTurnError}</p>
-                    ) : !selectedAssistantThreadId ? (
-                      <p className="settings-note">{appText.assistant.composerNoThreadCopy}</p>
-                    ) : assistantAvailability.status !== 'available' ? (
-                      <p className="settings-note">{appText.assistant.composerUnavailableCopy}</p>
-                    ) : null}
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="settings-submit assistant-send-button"
-                    disabled={
-                      !selectedAssistantThreadId ||
-                      assistantDetailLoading ||
-                      assistantAvailability.status !== 'available' ||
-                      assistantDraft.trim().length === 0 ||
-                      isAssistantTurnBusy
-                    }
-                  >
-                    {assistantTurnState === 'sending'
-                      ? appText.assistant.turnStateSending
-                      : assistantTurnState === 'streaming'
-                        ? appText.assistant.turnStateStreaming
-                        : appText.assistant.sendAction}
-                  </button>
-                </div>
-              </form>
-                  </>
-                )
-              })()}
-            </article>
-          </section>
-        </div>
-      </article>
-    </section>
-  )
-
   const renderSystemSettingsPanel = () => {
     const selectedLanguageLabel =
       supportedLanguageOptions.find((language) => language.code === selectedLanguageCode)
@@ -3459,11 +3059,7 @@ function App() {
             <div className="terminal-copy" onClick={handleHiddenDebugTrigger}>
               <p className="terminal-location">{boardSubheadingDisplay}</p>
               <h1 className="terminal-title">
-                {viewMode === 'board'
-                  ? boardTitleDisplay
-                  : viewMode === 'assistant'
-                    ? appText.shell.assistantTitle
-                    : appText.shell.familySettingsTitle}
+                {viewMode === 'board' ? boardTitleDisplay : appText.shell.familySettingsTitle}
               </h1>
             </div>
           </div>
@@ -3527,13 +3123,6 @@ function App() {
               </button>
               <button
                 type="button"
-                className={`terminal-button${viewMode === 'assistant' ? ' is-active' : ''}`}
-                onClick={() => handleViewModeChange('assistant')}
-              >
-                {appText.shell.assistantTab}
-              </button>
-              <button
-                type="button"
                 className={`terminal-button${viewMode === 'settings' ? ' is-active' : ''}`}
                 onClick={() => handleViewModeChange('settings')}
               >
@@ -3553,11 +3142,7 @@ function App() {
 
         <div
           className={`screen-content ${
-            viewMode === 'board'
-              ? 'screen-content--board'
-              : viewMode === 'assistant'
-                ? 'screen-content--assistant'
-                : 'screen-content--settings'
+            viewMode === 'board' ? 'screen-content--board' : 'screen-content--settings'
           }`}
         >
           {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
@@ -3599,9 +3184,33 @@ function App() {
               onCalendarDataChanged={handleCalendarDataChanged}
               onOpenCalendarEvent={handleOpenCalendarEvent}
               onSaveWidgetSettings={handleSaveWidgetSettings}
+              assistantState={{
+                availability: assistantAvailability,
+                threads: assistantThreads,
+                selectedThreadId: selectedAssistantThreadId,
+                selectedThread: selectedAssistantThread,
+                loading: assistantLoading,
+                detailLoading: assistantDetailLoading,
+                creatingThread: assistantCreatingThread,
+                error: assistantError,
+                draft: assistantDraft,
+                turnState: assistantTurnState,
+                turnError: assistantTurnError,
+                pendingUserMessage: assistantPendingUserMessage,
+                streamingMessage: assistantStreamingMessage,
+                streamingEvents: assistantStreamingEvents,
+                isTurnBusy: isAssistantTurnBusy,
+              }}
+              assistantActions={{
+                onCreateThread: () => {
+                  void handleCreateAssistantThread()
+                },
+                onSelectThread: handleSelectAssistantThread,
+                onDraftChange: setAssistantDraft,
+                onSubmit: handleAssistantSubmit,
+                onOpenSettings: handleOpenAssistantSettings,
+              }}
             />
-          ) : viewMode === 'assistant' ? (
-            renderAssistantSection()
           ) : (
             <section className="settings-page">
               <article className="settings-panel">
