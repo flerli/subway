@@ -1507,6 +1507,170 @@ if (!hasColumn('assistant_backend_routes', 'headers_json')) {
   db.exec("ALTER TABLE assistant_backend_routes ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}' ")
 }
 
+const migrateLegacyAssistantRoutesToOwners = () => {
+  const legacyRoutes = db
+    .prepare(`
+      SELECT
+        id,
+        label,
+        backend_kind,
+        base_url,
+        model_identifier,
+        api_key,
+        headers_json,
+        is_enabled,
+        is_default,
+        is_active,
+        supports_streaming,
+        supports_tools,
+        supports_markdown,
+        status,
+        created_at,
+        updated_at
+      FROM assistant_backend_routes
+      WHERE owner_user_id = ?
+    `)
+    .all(defaultAppUserId)
+
+  if (legacyRoutes.length === 0) {
+    return
+  }
+
+  const routeAssignments = db
+    .prepare(`
+      SELECT DISTINCT owner_user_id AS ownerUserId, route_id AS routeId
+      FROM assistant_threads
+      WHERE route_id IS NOT NULL AND TRIM(route_id) != ''
+    `)
+    .all()
+
+  if (routeAssignments.length === 0) {
+    return
+  }
+
+  const ownersWithDefaults = new Set(
+    db
+      .prepare(`
+        SELECT owner_user_id AS ownerUserId
+        FROM assistant_backend_routes
+        WHERE is_default = 1
+      `)
+      .all()
+      .map((row) => row.ownerUserId),
+  )
+
+  db.exec('BEGIN')
+
+  try {
+    for (const assignment of routeAssignments) {
+      if (
+        typeof assignment.ownerUserId !== 'string' ||
+        assignment.ownerUserId.length === 0 ||
+        typeof assignment.routeId !== 'string' ||
+        assignment.routeId.length === 0 ||
+        assignment.ownerUserId === defaultAppUserId
+      ) {
+        continue
+      }
+
+      const ownerScopedRoute = db
+        .prepare(`
+          SELECT id
+          FROM assistant_backend_routes
+          WHERE owner_user_id = ? AND id = ?
+          LIMIT 1
+        `)
+        .get(assignment.ownerUserId, assignment.routeId)
+
+      if (ownerScopedRoute) {
+        continue
+      }
+
+      const legacyRoute = legacyRoutes.find((route) => route.id === assignment.routeId)
+
+      if (!legacyRoute) {
+        continue
+      }
+
+      const migratedRouteId = `${legacyRoute.id}--${assignment.ownerUserId}`
+      const migratedRoute = db
+        .prepare(`
+          SELECT id
+          FROM assistant_backend_routes
+          WHERE owner_user_id = ? AND id = ?
+          LIMIT 1
+        `)
+        .get(assignment.ownerUserId, migratedRouteId)
+
+      const shouldBeDefault = !ownersWithDefaults.has(assignment.ownerUserId)
+
+      if (!migratedRoute) {
+        db
+          .prepare(`
+            INSERT INTO assistant_backend_routes (
+              id,
+              owner_user_id,
+              label,
+              backend_kind,
+              base_url,
+              model_identifier,
+              api_key,
+              headers_json,
+              is_enabled,
+              is_default,
+              is_active,
+              supports_streaming,
+              supports_tools,
+              supports_markdown,
+              status,
+              created_at,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            migratedRouteId,
+            assignment.ownerUserId,
+            legacyRoute.label,
+            legacyRoute.backend_kind,
+            legacyRoute.base_url,
+            legacyRoute.model_identifier,
+            legacyRoute.api_key,
+            legacyRoute.headers_json,
+            legacyRoute.is_enabled,
+            shouldBeDefault ? 1 : 0,
+            shouldBeDefault ? 1 : 0,
+            legacyRoute.supports_streaming,
+            legacyRoute.supports_tools,
+            legacyRoute.supports_markdown,
+            legacyRoute.status,
+            legacyRoute.created_at,
+            legacyRoute.updated_at,
+          )
+
+        if (shouldBeDefault) {
+          ownersWithDefaults.add(assignment.ownerUserId)
+        }
+      }
+
+      db
+        .prepare(`
+          UPDATE assistant_threads
+          SET route_id = ?
+          WHERE owner_user_id = ? AND route_id = ?
+        `)
+        .run(migratedRouteId, assignment.ownerUserId, assignment.routeId)
+    }
+
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+migrateLegacyAssistantRoutesToOwners()
+
 const migrateCalendarEventsFoundation = () => {
   if (!hasColumn('calendar_events', 'event_date')) {
     db.exec('ALTER TABLE calendar_events ADD COLUMN event_date TEXT')
