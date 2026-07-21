@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import './App.css'
 import {
   fetchCurrentSession,
@@ -35,6 +35,7 @@ import {
 } from './api/bring'
 import {
   createAssistantThread,
+  deleteAssistantThread,
   fetchAssistantAvailability,
   fetchAssistantThreadDetail,
   fetchAssistantThreads,
@@ -975,6 +976,52 @@ function App() {
     setExpandedSettingsHubPanelId(null)
     setExpandedWidgetSettingsId('assistant')
     setViewMode('settings')
+  }
+
+  const handleDeleteAssistantThread = async (threadId: string) => {
+    const thread = assistantThreads.find((entry) => entry.id === threadId)
+    const threadTitle = thread?.title || appText.assistant.untitledThreadTitle
+
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        formatLocalizedText(appText.assistant.deleteConversationConfirm, {
+          title: threadTitle,
+        }),
+      )
+    ) {
+      return
+    }
+
+    try {
+      const deletedThreadId = await deleteAssistantThread(threadId)
+      const remainingThreads = assistantThreads.filter((entry) => entry.id !== deletedThreadId)
+
+      setAssistantThreads(remainingThreads)
+
+      if (selectedAssistantThreadId === deletedThreadId) {
+        setSelectedAssistantThreadId(remainingThreads[0]?.id ?? null)
+        setSelectedAssistantThread(null)
+      }
+
+      setAssistantTurnError(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      setAssistantTurnError(
+        error instanceof Error ? error.message : appText.messages.assistantLoadFailed,
+      )
+    }
+  }
+
+  const handleAssistantComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
   }
 
   const playbackAssistantPreview = async (
@@ -3230,9 +3277,13 @@ function App() {
                 onCreateThread: () => {
                   void handleCreateAssistantThread()
                 },
+                onDeleteThread: (threadId) => {
+                  void handleDeleteAssistantThread(threadId)
+                },
                 onSelectThread: handleSelectAssistantThread,
                 onDraftChange: setAssistantDraft,
                 onSubmit: handleAssistantSubmit,
+                onComposerKeyDown: handleAssistantComposerKeyDown,
                 onOpenSettings: handleOpenAssistantSettings,
               }}
             />

@@ -81,6 +81,8 @@ export interface AppTextBundle {
     roleAssistant: string
     roleSystem: string
     roleTool: string
+    deleteConversationAction: string
+    deleteConversationConfirm: string
     toolActivityTitle: string
     toolArgumentsLabel: string
     toolResultLabel: string
@@ -348,6 +350,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       roleAssistant: 'Assistant',
       roleSystem: 'System',
       roleTool: 'Tool',
+      deleteConversationAction: 'Delete',
+      deleteConversationConfirm: 'Delete conversation "{title}"?',
       toolActivityTitle: 'Tool activity',
       toolArgumentsLabel: 'Arguments',
       toolResultLabel: 'Result',
@@ -633,6 +637,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       roleAssistant: 'Assistent',
       roleSystem: 'System',
       roleTool: 'Tool',
+      deleteConversationAction: 'Loschen',
+      deleteConversationConfirm: 'Unterhaltung "{title}" loschen?',
       toolActivityTitle: 'Tool Aktivitat',
       toolArgumentsLabel: 'Argumente',
       toolResultLabel: 'Ergebnis',
@@ -932,6 +938,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       roleAssistant: 'Assistant',
       roleSystem: 'Systeme',
       roleTool: 'Outil',
+      deleteConversationAction: 'Supprimer',
+      deleteConversationConfirm: 'Supprimer la conversation "{title}" ?',
       toolActivityTitle: 'Activite outil',
       toolArgumentsLabel: 'Arguments',
       toolResultLabel: 'Resultat',
@@ -1232,6 +1240,8 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       roleAssistant: 'Asistente',
       roleSystem: 'Sistema',
       roleTool: 'Herramienta',
+      deleteConversationAction: 'Eliminar',
+      deleteConversationConfirm: 'Eliminar la conversacion "{title}"?',
       toolActivityTitle: 'Actividad de herramientas',
       toolArgumentsLabel: 'Argumentos',
       toolResultLabel: 'Resultado',

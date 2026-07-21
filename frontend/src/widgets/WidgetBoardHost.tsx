@@ -122,9 +122,11 @@ interface WidgetBoardHostProps {
   }
   assistantActions: {
     onCreateThread: () => void
+    onDeleteThread: (threadId: string) => void
     onSelectThread: (threadId: string) => void
     onDraftChange: (value: string) => void
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+    onComposerKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void
     onOpenSettings: () => void
   }
 }
@@ -1162,9 +1164,11 @@ export function WidgetBoardHost({
                     streamingEvents: assistantState.streamingEvents,
                     isTurnBusy: assistantState.isTurnBusy,
                     onCreateThread: assistantActions.onCreateThread,
+                    onDeleteThread: assistantActions.onDeleteThread,
                     onSelectThread: assistantActions.onSelectThread,
                     onDraftChange: assistantActions.onDraftChange,
                     onSubmit: assistantActions.onSubmit,
+                    onComposerKeyDown: assistantActions.onComposerKeyDown,
                     onOpenSettings: assistantActions.onOpenSettings,
                   }
               : null

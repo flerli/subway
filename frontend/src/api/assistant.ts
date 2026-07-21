@@ -618,6 +618,28 @@ export const createAssistantThread = async (title?: string): Promise<AssistantTh
   }
 }
 
+export const deleteAssistantThread = async (threadId: string) => {
+  const response = await fetchApi(`/assistant/threads/${threadId}`, {
+    method: 'DELETE',
+  })
+
+  if (response.status === 404) {
+    throw new Error('Assistant thread not found.')
+  }
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to delete assistant thread.')
+  }
+
+  const payload = (await response.json()) as { deletedThreadId?: unknown }
+
+  if (typeof payload.deletedThreadId !== 'string') {
+    throw new Error('Backend returned an invalid assistant delete payload.')
+  }
+
+  return payload.deletedThreadId
+}
+
 export const sendAssistantThreadMessage = async (
   threadId: string,
   content: string,

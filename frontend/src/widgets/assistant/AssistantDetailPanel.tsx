@@ -1,4 +1,4 @@
-import type { FormEventHandler } from 'react'
+import type { FormEventHandler, KeyboardEventHandler } from 'react'
 import type { AppTextBundle } from '../../i18n/appText'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import { AssistantMarkdown } from '../../assistant/AssistantMarkdown'
@@ -28,47 +28,17 @@ export interface AssistantDetailViewData {
   streamingEvents: AssistantMessageEventRecord[]
   isTurnBusy: boolean
   onCreateThread: () => void
+  onDeleteThread: (threadId: string) => void
   onSelectThread: (threadId: string) => void
   onDraftChange: (value: string) => void
   onSubmit: FormEventHandler<HTMLFormElement>
+  onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
   onOpenSettings: () => void
 }
 
 interface AssistantDetailPanelProps {
   data: AssistantDetailViewData
   languageCode: SupportedLanguageCode
-}
-
-const getAvailabilityLabel = (
-  appText: AppTextBundle,
-  status: AssistantAvailabilityRecord['status'],
-) => {
-  switch (status) {
-    case 'available':
-      return appText.assistant.availabilityAvailable
-    case 'disabled':
-      return appText.assistant.availabilityDisabled
-    case 'unavailable':
-      return appText.assistant.availabilityUnavailable
-    default:
-      return appText.assistant.availabilityNotConfigured
-  }
-}
-
-const getAvailabilityCopy = (
-  appText: AppTextBundle,
-  availability: AssistantAvailabilityRecord,
-) => {
-  switch (availability.status) {
-    case 'disabled':
-      return appText.assistant.disabledCopy
-    case 'unavailable':
-      return appText.assistant.unavailableCopy
-    case 'available':
-      return appText.assistant.modelSelectionManagedCopy
-    default:
-      return appText.assistant.notConfiguredCopy
-  }
 }
 
 const getTurnStateLabel = (
@@ -157,9 +127,11 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
     streamingEvents,
     isTurnBusy,
     onCreateThread,
+    onDeleteThread,
     onSelectThread,
     onDraftChange,
     onSubmit,
+    onComposerKeyDown,
     onOpenSettings,
   } = data
 
@@ -177,50 +149,13 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
   return (
     <div className="assistant-layout assistant-layout--widget">
       <aside className="assistant-column assistant-column--sidebar">
-        <article className="settings-card assistant-card assistant-status-card">
+        <article className="settings-card assistant-card assistant-thread-list-card">
           <div className="settings-card-head">
-            <p className="widget-kicker">{appText.assistant.availabilityTitle}</p>
-            <h3>{getAvailabilityLabel(appText, availability.status)}</h3>
+            <p className="widget-kicker">{appText.assistant.threadListTitle}</p>
+            <h3>{threads.length}</h3>
           </div>
 
-          <p className="settings-copy">{getAvailabilityCopy(appText, availability)}</p>
-
-          <div className="assistant-capability-list" role="list">
-            <p className="assistant-meta-row" role="listitem">
-              <span>{appText.assistant.activeRouteLabel}</span>
-              <strong>{availability.activeRoute?.label ?? appText.assistant.routeUnknownValue}</strong>
-            </p>
-            <p className="assistant-meta-row" role="listitem">
-              <span>{appText.assistant.backendKindLabel}</span>
-              <strong>{availability.activeRoute?.backendKind || appText.assistant.routeUnknownValue}</strong>
-            </p>
-            <p className="assistant-meta-row" role="listitem">
-              <span>{appText.assistant.streamingCapabilityLabel}</span>
-              <strong>
-                {availability.activeRoute?.supportsStreaming
-                  ? appText.assistant.enabledValue
-                  : appText.assistant.disabledValue}
-              </strong>
-            </p>
-            <p className="assistant-meta-row" role="listitem">
-              <span>{appText.assistant.toolsCapabilityLabel}</span>
-              <strong>
-                {availability.activeRoute?.supportsTools
-                  ? appText.assistant.enabledValue
-                  : appText.assistant.disabledValue}
-              </strong>
-            </p>
-            <p className="assistant-meta-row" role="listitem">
-              <span>{appText.assistant.markdownCapabilityLabel}</span>
-              <strong>
-                {availability.activeRoute?.supportsMarkdown
-                  ? appText.assistant.enabledValue
-                  : appText.assistant.disabledValue}
-              </strong>
-            </p>
-          </div>
-
-          <div className="assistant-inline-actions">
+          <div className="assistant-inline-actions assistant-inline-actions--thread-list">
             <button type="button" className="widget-action-button" onClick={onCreateThread} disabled={creatingThread || isTurnBusy}>
               <span>
                 {creatingThread
@@ -232,15 +167,6 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
               <span>{appText.widgetAdmin.openSettingsAction}</span>
             </button>
           </div>
-        </article>
-
-        <article className="settings-card assistant-card assistant-thread-list-card">
-          <div className="settings-card-head">
-            <p className="widget-kicker">{appText.assistant.threadListTitle}</p>
-            <h3>{threads.length}</h3>
-          </div>
-
-          <p className="settings-copy">{appText.assistant.threadListCopy}</p>
 
           {loading ? (
             <p className="settings-note">{appText.auth.authenticatedSessionCopy}</p>
@@ -255,23 +181,35 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                 const threadTitle = thread.title || appText.assistant.untitledThreadTitle
 
                 return (
-                  <button
+                  <div
                     key={thread.id}
-                    type="button"
                     className={`assistant-thread-card${thread.id === selectedThreadId ? ' is-active' : ''}`}
-                    aria-label={formatLocalizedText(appText.assistant.openThreadAriaLabel, {
-                      title: threadTitle,
-                    })}
-                    disabled={isTurnBusy}
-                    onClick={() => onSelectThread(thread.id)}
                   >
-                    <strong>{threadTitle}</strong>
-                    <span>
-                      {formatLocalizedText(appText.assistant.messageCountMeta, {
-                        count: thread.messageCount,
+                    <button
+                      type="button"
+                      className="assistant-thread-card__button"
+                      aria-label={formatLocalizedText(appText.assistant.openThreadAriaLabel, {
+                        title: threadTitle,
                       })}
-                    </span>
-                  </button>
+                      disabled={isTurnBusy}
+                      onClick={() => onSelectThread(thread.id)}
+                    >
+                      <strong>{threadTitle}</strong>
+                      <span>
+                        {formatLocalizedText(appText.assistant.messageCountMeta, {
+                          count: thread.messageCount,
+                        })}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="assistant-thread-card__delete"
+                      disabled={isTurnBusy}
+                      onClick={() => onDeleteThread(thread.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )
               })}
             </div>
@@ -383,7 +321,9 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                 rows={4}
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
+                onKeyDown={onComposerKeyDown}
                 placeholder={appText.assistant.composerPlaceholder}
+                data-submit-on-enter="true"
                 disabled={
                   !selectedThreadId ||
                   detailLoading ||

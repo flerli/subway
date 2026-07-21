@@ -2502,6 +2502,11 @@ const insertAssistantThread = (ownerUserId, thread, createdAt, updatedAt) =>
       updatedAt,
     )
 
+const deleteAssistantThreadById = (ownerUserId, threadId) =>
+  db
+    .prepare('DELETE FROM assistant_threads WHERE owner_user_id = ? AND id = ?')
+    .run(ownerUserId, threadId)
+
 const insertAssistantMessage = (ownerUserId, message, createdAt, updatedAt) =>
   db
     .prepare(`
@@ -6181,6 +6186,29 @@ const server = createServer(async (request, response) => {
         buildAssistantMessageEventPayload,
       ),
     })
+    return
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    requestUrl.pathname.startsWith('/api/assistant/threads/')
+  ) {
+    const threadId = requestUrl.pathname.replace('/api/assistant/threads/', '')
+
+    if (!threadId) {
+      sendJson(response, 400, { error: 'Missing assistant thread id.' })
+      return
+    }
+
+    const thread = selectAssistantThreadById(ownerUserId, threadId)
+
+    if (!thread) {
+      sendJson(response, 404, { error: 'Assistant thread not found.' })
+      return
+    }
+
+    deleteAssistantThreadById(ownerUserId, threadId)
+    sendJson(response, 200, { deletedThreadId: threadId })
     return
   }
 

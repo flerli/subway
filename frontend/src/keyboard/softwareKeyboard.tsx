@@ -157,7 +157,10 @@ export const SoftwareKeyboardOverlay = ({
 
   const handleEnter = () => {
     keepFocus()
-    if (normalizedTarget instanceof HTMLTextAreaElement) {
+    if (
+      normalizedTarget instanceof HTMLTextAreaElement &&
+      normalizedTarget.dataset.submitOnEnter !== 'true'
+    ) {
       applyEditableKeyPress(normalizedTarget, '\n')
     } else {
       normalizedTarget.form?.requestSubmit()
