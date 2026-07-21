@@ -47,6 +47,11 @@ const defaultAssistantSettings: AssistantSettingsRecord = {
   updatedAt: null,
 }
 
+const buildAssistantRouteDraft = (): AssistantSettingsRecord => ({
+  ...defaultAssistantSettings,
+  routeId: `assistant-route-${crypto.randomUUID()}`,
+})
+
 const getAvailabilityLabel = (
   appText: AppTextBundle,
   status: AssistantAvailabilityRecord['status'],
@@ -104,7 +109,7 @@ export function AssistantSettingsPanel({
           const routeToEdit =
             assistantRoutes.find((route) => route.routeId === assistantSettings.routeId) ??
             assistantRoutes[0] ??
-            assistantSettings
+            buildAssistantRouteDraft()
           setSelectedRouteId(
             assistantRoutes.some((route) => route.routeId === routeToEdit.routeId)
               ? routeToEdit.routeId
@@ -146,7 +151,7 @@ export function AssistantSettingsPanel({
   )
 
   const applyRouteToEditor = (route: AssistantSettingsRecord | null) => {
-    const nextRoute = route ?? defaultAssistantSettings
+    const nextRoute = route ?? buildAssistantRouteDraft()
 
     setRouteId(nextRoute.routeId)
     setLabel(nextRoute.label)
@@ -182,11 +187,7 @@ export function AssistantSettingsPanel({
   }
 
   const handleCreateConnection = () => {
-    const generatedRouteId = `assistant-route-${crypto.randomUUID()}`
-    const newDraft: AssistantSettingsRecord = {
-      ...defaultAssistantSettings,
-      routeId: generatedRouteId,
-    }
+    const newDraft = buildAssistantRouteDraft()
 
     setSelectedRouteId(null)
     applyRouteToEditor(newDraft)
