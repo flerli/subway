@@ -101,11 +101,15 @@ export function AssistantSettingsPanel({
         if (!cancelled) {
           setAvailability(assistantAvailability)
           setRoutes(assistantRoutes)
-          setSelectedRouteId(assistantSettings.routeId || (assistantRoutes[0]?.routeId ?? null))
           const routeToEdit =
             assistantRoutes.find((route) => route.routeId === assistantSettings.routeId) ??
             assistantRoutes[0] ??
             assistantSettings
+          setSelectedRouteId(
+            assistantRoutes.some((route) => route.routeId === routeToEdit.routeId)
+              ? routeToEdit.routeId
+              : null,
+          )
           setRouteId(routeToEdit.routeId)
           setLabel(routeToEdit.label)
           setBackendKind(routeToEdit.backendKind || 'custom')
@@ -193,7 +197,7 @@ export function AssistantSettingsPanel({
     setRequestState('saving')
 
     try {
-      const savedRoute = selectedRouteId
+      const savedRoute = selectedRoute && selectedRouteId
         ? await updateAssistantRoute(selectedRouteId, {
             label,
             backendKind: backendKind || 'custom',
