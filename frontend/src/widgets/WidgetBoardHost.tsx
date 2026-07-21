@@ -966,7 +966,27 @@ export function WidgetBoardHost({
                 ) : null}
 
                 <ul className="bring-list">
-                  {[...bringList.openItems].reverse().slice(0, 8).map((item) => (
+                  {[...bringList.openItems]
+                    .sort((left, right) => {
+                      const leftTimestamp = Date.parse(left.recentAt)
+                      const rightTimestamp = Date.parse(right.recentAt)
+
+                      if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp)) {
+                        return rightTimestamp - leftTimestamp
+                      }
+
+                      if (!Number.isNaN(rightTimestamp)) {
+                        return 1
+                      }
+
+                      if (!Number.isNaN(leftTimestamp)) {
+                        return -1
+                      }
+
+                      return 0
+                    })
+                    .slice(0, 8)
+                    .map((item) => (
                     <li
                       className="bring-row"
                       key={item.uuid || `${item.itemName}-${item.specification}`}

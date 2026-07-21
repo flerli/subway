@@ -2700,7 +2700,7 @@ select {
   max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
-  grid-template-columns: minmax(0, 1.55fr) minmax(200px, 0.45fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -2712,7 +2712,7 @@ select {
 }
 
 .bring-detail-side-column {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .bring-detail-card {
@@ -2803,7 +2803,7 @@ select {
 
 .bring-detail-matrix {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2869,15 +2869,31 @@ select {
 }
 
 .bring-detail-side-column > .bring-detail-card:first-child {
+  align-content: start;
+}
+
+.bring-detail-side-column > .bring-detail-card:nth-child(2) {
   min-height: 0;
   height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.bring-detail-side-column > .bring-detail-card:first-child .bring-detail-list {
+.bring-detail-side-column > .bring-detail-card:nth-child(2) .bring-detail-list {
   min-height: 0;
   overflow-y: auto;
+}
+
+@media (max-width: 1600px) {
+  .bring-detail-matrix {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1280px) {
+  .bring-detail-matrix {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .widget--expanded > .bring-detail-view {

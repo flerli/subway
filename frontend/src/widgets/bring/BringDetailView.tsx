@@ -47,8 +47,6 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
   const itemNameInputRef = useRef<HTMLInputElement | null>(null)
   const [draftItemName, setDraftItemName] = useState('')
   const [draftSpecification, setDraftSpecification] = useState('')
-  const [editingItemKey, setEditingItemKey] = useState<string | null>(null)
-  const [editingSpecification, setEditingSpecification] = useState('')
   const [requestState, setRequestState] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
@@ -60,7 +58,7 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
   const isReady = data.bringData.status === 'ready' && bringList !== null
   const isReadOnly = Boolean(bringList?.readOnly)
 
-  const buildItemKey = (item: BringListItem) => item.uuid || `${item.itemName}-${item.specification}`
+  const normalizeItemNameKey = (item: BringListItem) => item.itemName.trim().toLowerCase()
 
   const sortByRecentness = (items: BringListItem[]) =>
     [...items].sort((left, right) => {
@@ -82,9 +80,9 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
       return 0
     })
 
-  const openItemKeySet = new Set((bringList?.openItems ?? []).map(buildItemKey))
+  const openItemNameSet = new Set((bringList?.openItems ?? []).map(normalizeItemNameKey))
   const filteredRecentItems = bringList
-    ? sortByRecentness(bringList.recentItems).filter((item) => !openItemKeySet.has(buildItemKey(item)))
+    ? sortByRecentness(bringList.recentItems).filter((item) => !openItemNameSet.has(normalizeItemNameKey(item)))
     : []
 
   const openItemGroups = (() => {
@@ -163,45 +161,6 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
         }, 0)
       },
       widgetText.detail.updateFailedFallback,
-    )
-  }
-
-  const startEditing = (item: BringListItem) => {
-    setEditingItemKey(item.uuid || `${item.itemName}-${item.specification}`)
-    setEditingSpecification(item.specification)
-    setStatusMessage(null)
-  }
-
-  const handleSaveSpecification = async (item: BringListItem) => {
-    await runAction(
-      `update:${item.uuid}`,
-      async () => {
-        await data.onUpdateItem({
-          itemName: item.itemName,
-          specification: editingSpecification.trim(),
-          itemUuid: item.uuid || undefined,
-        })
-        setEditingItemKey(null)
-        setEditingSpecification('')
-      },
-      widgetText.detail.updateFailedFallback,
-    )
-  }
-
-  const handleDeleteItem = async (item: BringListItem) => {
-    if (!window.confirm(formatLocalizedText(widgetText.detail.deleteConfirm, { name: item.itemName }))) {
-      return
-    }
-
-    await runAction(
-      `delete:${item.uuid}`,
-      async () => {
-        await data.onDeleteItem({
-          itemName: item.itemName,
-          itemUuid: item.uuid || undefined,
-        })
-      },
-      widgetText.detail.deleteFailedFallback,
     )
   }
 
@@ -303,6 +262,60 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
           </p>
         ) : null}
 
+        <section className="bring-detail-card">
+          <div className="bring-detail-header-copy">
+            <p className="bring-detail-section-title">{widgetText.detail.openItemsTitle}</p>
+          </div>
+          {bringList.openItems.length > 0 ? (
+            <ul className="bring-detail-list">
+              {openItemGroups.map((group) => (
+                <li className="bring-detail-group" key={group.category || 'uncategorized'}>
+                  {group.category ? (
+                    <p className="bring-detail-group-title">{group.category}</p>
+                  ) : null}
+
+                  <div className="bring-detail-matrix">
+                    {group.items.map((item) => {
+                const itemKey = item.uuid || `${item.itemName}-${item.specification}`
+
+                return (
+                  <article className="bring-detail-item-card" key={itemKey}>
+                    <div className="bring-detail-row-copy">
+                      <p className="bring-item-name">{item.itemName}</p>
+                      {item.category ? (
+                        <p className="bring-item-category">{item.category}</p>
+                      ) : null}
+                      {item.specification ? (
+                        <p className="bring-item-specification">{item.specification}</p>
+                      ) : null}
+                    </div>
+                    <div className="bring-detail-actions">
+                      <button
+                        type="button"
+                        className="bring-detail-action"
+                        disabled={isReadOnly || requestState !== null}
+                        onClick={() => void handleCompleteItem(item)}
+                      >
+                        {widgetText.detail.completeAction}
+                      </button>
+                    </div>
+                  </article>
+                )
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="empty-state empty-state--expanded">
+              <p className="empty-title">{widgetText.copy.emptyTitle}</p>
+              <p className="empty-copy">{widgetText.copy.emptyCopy}</p>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <aside className="bring-detail-side-column">
         <form className="bring-detail-card bring-detail-add-form" onSubmit={handleAddItem}>
           <div className="bring-detail-header-copy">
             <p className="bring-detail-section-title">{widgetText.detail.addSectionTitle}</p>
@@ -341,109 +354,6 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
           </button>
         </form>
 
-        <section className="bring-detail-card">
-          <div className="bring-detail-header-copy">
-            <p className="bring-detail-section-title">{widgetText.detail.openItemsTitle}</p>
-          </div>
-          {bringList.openItems.length > 0 ? (
-            <ul className="bring-detail-list">
-              {openItemGroups.map((group) => (
-                <li className="bring-detail-group" key={group.category || 'uncategorized'}>
-                  {group.category ? (
-                    <p className="bring-detail-group-title">{group.category}</p>
-                  ) : null}
-
-                  <div className="bring-detail-matrix">
-                    {group.items.map((item) => {
-                const itemKey = item.uuid || `${item.itemName}-${item.specification}`
-                const isEditing = editingItemKey === itemKey
-
-                return (
-                  <article className="bring-detail-item-card" key={itemKey}>
-                    <div className="bring-detail-row-copy">
-                      <p className="bring-item-name">{item.itemName}</p>
-                      {isEditing ? (
-                        <input
-                          className="settings-input"
-                          type="text"
-                          value={editingSpecification}
-                          placeholder={widgetText.detail.specificationPlaceholder}
-                          disabled={isReadOnly || requestState !== null}
-                          onChange={(event) => setEditingSpecification(event.target.value)}
-                        />
-                      ) : item.specification ? (
-                        <p className="bring-item-specification">{item.specification}</p>
-                      ) : null}
-                    </div>
-                    <div className="bring-detail-actions">
-                      {isEditing ? (
-                        <>
-                          <button
-                            type="button"
-                            className="bring-detail-action"
-                            disabled={isReadOnly || requestState !== null}
-                            onClick={() => void handleSaveSpecification(item)}
-                          >
-                            {widgetText.detail.saveSpecificationAction}
-                          </button>
-                          <button
-                            type="button"
-                            className="bring-detail-action bring-detail-action--secondary"
-                            disabled={requestState !== null}
-                            onClick={() => {
-                              setEditingItemKey(null)
-                              setEditingSpecification('')
-                            }}
-                          >
-                            {widgetText.detail.cancelEditAction}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="bring-detail-action bring-detail-action--secondary"
-                            disabled={isReadOnly || requestState !== null}
-                            onClick={() => startEditing(item)}
-                          >
-                            {widgetText.detail.editAction}
-                          </button>
-                          <button
-                            type="button"
-                            className="bring-detail-action"
-                            disabled={isReadOnly || requestState !== null}
-                            onClick={() => void handleCompleteItem(item)}
-                          >
-                            {widgetText.detail.completeAction}
-                          </button>
-                          <button
-                            type="button"
-                            className="bring-detail-action bring-detail-action--danger"
-                            disabled={isReadOnly || requestState !== null}
-                            onClick={() => void handleDeleteItem(item)}
-                          >
-                            {widgetText.detail.deleteAction}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                )
-                    })}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="empty-state empty-state--expanded">
-              <p className="empty-title">{widgetText.copy.emptyTitle}</p>
-              <p className="empty-copy">{widgetText.copy.emptyCopy}</p>
-            </div>
-          )}
-        </section>
-      </div>
-
-      <aside className="bring-detail-side-column">
         <section className="bring-detail-card">
           <div className="bring-detail-header-copy">
             <p className="bring-detail-section-title">{widgetText.detail.recentItemsTitle}</p>
