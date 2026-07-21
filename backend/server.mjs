@@ -1470,15 +1470,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS assistant_tool_approval_requests_owner_state_expires_idx
   ON assistant_tool_approval_requests(owner_user_id, state, expires_at)
 `)
-db.exec(`
-  CREATE INDEX IF NOT EXISTS assistant_backend_routes_owner_updated_idx
-  ON assistant_backend_routes(owner_user_id, updated_at)
-`)
-db.exec(`
-  CREATE UNIQUE INDEX IF NOT EXISTS assistant_backend_routes_owner_default_idx
-  ON assistant_backend_routes(owner_user_id)
-  WHERE is_default = 1
-`)
 
 if (!hasColumn('assistant_backend_routes', 'owner_user_id')) {
   db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN owner_user_id TEXT REFERENCES users(id)')
@@ -1497,6 +1488,16 @@ if (!hasColumn('assistant_backend_routes', 'is_default')) {
     SET is_default = CASE WHEN is_active = 1 THEN 1 ELSE 0 END
   `)
 }
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_backend_routes_owner_updated_idx
+  ON assistant_backend_routes(owner_user_id, updated_at)
+`)
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS assistant_backend_routes_owner_default_idx
+  ON assistant_backend_routes(owner_user_id)
+  WHERE is_default = 1
+`)
 
 if (!hasColumn('assistant_backend_routes', 'api_key')) {
   db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN api_key TEXT')
