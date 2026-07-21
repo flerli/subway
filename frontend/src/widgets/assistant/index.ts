@@ -16,11 +16,12 @@ export const assistantWidget: WidgetMicroAppContract = {
   getTranslation: getAssistantWidgetTranslation,
   matchesDefaultTitle: matchesAssistantWidgetTitle,
   loadData: async () => null,
-  renderSettingsPanel: ({ appText, widget, languageCode }) =>
+  renderSettingsPanel: ({ appText, widget, languageCode, onSave }) =>
     createElement(AssistantSettingsPanel, {
       appText,
       widget,
       languageCode,
+      onSave,
       widgetText: getAssistantWidgetTranslation(languageCode),
     }),
   renderDetailView: ({ appText, data, languageCode }) =>

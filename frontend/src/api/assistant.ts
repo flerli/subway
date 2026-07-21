@@ -16,6 +16,21 @@ export interface AssistantRouteRecord {
   enabled: boolean
 }
 
+export interface AssistantSettingsRecord {
+  routeId: string
+  label: string
+  backendKind: 'litellm' | 'custom' | ''
+  baseUrl: string
+  modelIdentifier: string
+  hasStoredApiKey: boolean
+  headersJson: string
+  enabled: boolean
+  supportsStreaming: boolean
+  supportsTools: boolean
+  supportsMarkdown: boolean
+  updatedAt: string | null
+}
+
 export interface AssistantAvailabilityRecord {
   status: AssistantAvailabilityStatus
   activeRoute: AssistantRouteRecord | null
@@ -160,6 +175,46 @@ const normalizeAssistantRoute = (value: unknown): AssistantRouteRecord | null =>
     supportsTools: candidate.supportsTools === true,
     supportsMarkdown: candidate.supportsMarkdown === true,
     enabled: candidate.enabled === true,
+  }
+}
+
+const normalizeAssistantSettings = (value: unknown): AssistantSettingsRecord | null => {
+  const candidate = value as {
+    routeId?: unknown
+    label?: unknown
+    backendKind?: unknown
+    baseUrl?: unknown
+    modelIdentifier?: unknown
+    hasStoredApiKey?: unknown
+    headersJson?: unknown
+    enabled?: unknown
+    supportsStreaming?: unknown
+    supportsTools?: unknown
+    supportsMarkdown?: unknown
+    updatedAt?: unknown
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  return {
+    routeId: typeof candidate.routeId === 'string' ? candidate.routeId : '',
+    label: typeof candidate.label === 'string' ? candidate.label : '',
+    backendKind:
+      candidate.backendKind === 'litellm' || candidate.backendKind === 'custom'
+        ? candidate.backendKind
+        : '',
+    baseUrl: typeof candidate.baseUrl === 'string' ? candidate.baseUrl : '',
+    modelIdentifier:
+      typeof candidate.modelIdentifier === 'string' ? candidate.modelIdentifier : '',
+    hasStoredApiKey: candidate.hasStoredApiKey === true,
+    headersJson: typeof candidate.headersJson === 'string' ? candidate.headersJson : '{}',
+    enabled: candidate.enabled !== false,
+    supportsStreaming: candidate.supportsStreaming === true,
+    supportsTools: candidate.supportsTools === true,
+    supportsMarkdown: candidate.supportsMarkdown !== false,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
   }
 }
 
@@ -417,6 +472,70 @@ export const fetchAssistantAvailability = async (): Promise<AssistantAvailabilit
   return {
     status: normalizeAssistantAvailabilityStatus(payload.assistant?.status),
     activeRoute: normalizeAssistantRoute(payload.assistant?.activeRoute),
+  }
+}
+
+export const fetchAssistantSettings = async (): Promise<AssistantSettingsRecord> => {
+  const response = await fetchApi('/assistant/settings')
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to load assistant settings.')
+  }
+
+  const payload = (await response.json()) as { assistantSettings?: unknown }
+  const assistantSettings = normalizeAssistantSettings(payload.assistantSettings)
+
+  if (!assistantSettings) {
+    throw new Error('Backend returned an invalid assistant settings payload.')
+  }
+
+  return assistantSettings
+}
+
+export const updateAssistantSettings = async (input: {
+  routeId: string
+  label: string
+  backendKind: 'litellm' | 'custom'
+  baseUrl: string
+  modelIdentifier: string
+  apiKey: string
+  headersJson: string
+  enabled: boolean
+  supportsStreaming: boolean
+  supportsTools: boolean
+  supportsMarkdown: boolean
+}) => {
+  const response = await fetchApi('/assistant/settings', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to save assistant settings.')
+  }
+
+  const payload = (await response.json()) as {
+    assistantSettings?: unknown
+    assistant?: {
+      status?: unknown
+      activeRoute?: unknown
+    }
+  }
+  const assistantSettings = normalizeAssistantSettings(payload.assistantSettings)
+
+  if (!assistantSettings) {
+    throw new Error('Backend returned an invalid assistant settings payload.')
+  }
+
+  return {
+    assistantSettings,
+    assistant: {
+      status: normalizeAssistantAvailabilityStatus(payload.assistant?.status),
+      activeRoute: normalizeAssistantRoute(payload.assistant?.activeRoute),
+    },
   }
 }
 

@@ -18,8 +18,20 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
     settings: {
       title: 'Assistant widget settings',
       description:
-        'Review the active assistant route and runtime capabilities for this account. Provider selection remains admin-managed.',
-      fields: {},
+        'Configure the assistant backend connection directly from settings for this account.',
+      fields: {
+        routeId: { label: 'Route id' },
+        label: { label: 'Connection label' },
+        backendKind: { label: 'Backend kind' },
+        baseUrl: { label: 'Base URL', placeholder: 'https://www.scaico.com/v1' },
+        modelIdentifier: { label: 'Model identifier', placeholder: 'subway/subway_assistant_team_mrtna741' },
+        apiKey: { label: 'API key', placeholder: 'Leave empty to keep the stored API key' },
+        headersJson: { label: 'Headers JSON', placeholder: '{}' },
+        enabled: { label: 'Connection enabled' },
+        supportsStreaming: { label: 'Supports streaming' },
+        supportsTools: { label: 'Supports tools' },
+        supportsMarkdown: { label: 'Supports markdown' },
+      },
     },
   },
   de: {
@@ -29,8 +41,20 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
     settings: {
       title: 'Assistent Widget Einstellungen',
       description:
-        'Prufe die aktive Assistent Route und die Laufzeitfahigkeiten fur dieses Konto. Die Providerauswahl bleibt adminverwaltet.',
-      fields: {},
+        'Konfiguriere die Assistent Backend Verbindung direkt in den Einstellungen fur dieses Konto.',
+      fields: {
+        routeId: { label: 'Route ID' },
+        label: { label: 'Verbindungsname' },
+        backendKind: { label: 'Backend Typ' },
+        baseUrl: { label: 'Basis URL', placeholder: 'https://www.scaico.com/v1' },
+        modelIdentifier: { label: 'Modellkennung', placeholder: 'subway/subway_assistant_team_mrtna741' },
+        apiKey: { label: 'API Schlussel', placeholder: 'Leer lassen, um den gespeicherten API Schlussel zu behalten' },
+        headersJson: { label: 'Headers JSON', placeholder: '{}' },
+        enabled: { label: 'Verbindung aktiviert' },
+        supportsStreaming: { label: 'Unterstutzt Streaming' },
+        supportsTools: { label: 'Unterstutzt Tools' },
+        supportsMarkdown: { label: 'Unterstutzt Markdown' },
+      },
     },
   },
   fr: {
@@ -40,8 +64,20 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
     settings: {
       title: 'Reglages du widget assistant',
       description:
-        'Consultez la route assistant active et les capacites du runtime pour ce compte. La selection du provider reste geree par les admins.',
-      fields: {},
+        'Configurez directement la connexion du backend assistant depuis les reglages pour ce compte.',
+      fields: {
+        routeId: { label: 'Id de route' },
+        label: { label: 'Libelle de connexion' },
+        backendKind: { label: 'Type de backend' },
+        baseUrl: { label: 'URL de base', placeholder: 'https://www.scaico.com/v1' },
+        modelIdentifier: { label: 'Identifiant du modele', placeholder: 'subway/subway_assistant_team_mrtna741' },
+        apiKey: { label: 'Cle API', placeholder: 'Laisser vide pour conserver la cle API enregistree' },
+        headersJson: { label: 'Headers JSON', placeholder: '{}' },
+        enabled: { label: 'Connexion activee' },
+        supportsStreaming: { label: 'Supporte le streaming' },
+        supportsTools: { label: 'Supporte les outils' },
+        supportsMarkdown: { label: 'Supporte le markdown' },
+      },
     },
   },
   es: {
@@ -51,8 +87,20 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
     settings: {
       title: 'Ajustes del widget asistente',
       description:
-        'Revisa la ruta activa del asistente y las capacidades del runtime para esta cuenta. La seleccion del proveedor sigue siendo administrada por admins.',
-      fields: {},
+        'Configura directamente la conexion del backend del asistente desde ajustes para esta cuenta.',
+      fields: {
+        routeId: { label: 'Id de ruta' },
+        label: { label: 'Etiqueta de conexion' },
+        backendKind: { label: 'Tipo de backend' },
+        baseUrl: { label: 'URL base', placeholder: 'https://www.scaico.com/v1' },
+        modelIdentifier: { label: 'Identificador del modelo', placeholder: 'subway/subway_assistant_team_mrtna741' },
+        apiKey: { label: 'Clave API', placeholder: 'Dejalo vacio para conservar la clave API guardada' },
+        headersJson: { label: 'Headers JSON', placeholder: '{}' },
+        enabled: { label: 'Conexion activada' },
+        supportsStreaming: { label: 'Soporta streaming' },
+        supportsTools: { label: 'Soporta herramientas' },
+        supportsMarkdown: { label: 'Soporta markdown' },
+      },
     },
   },
 })

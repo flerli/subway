@@ -2860,6 +2860,31 @@ function App() {
         return
       }
 
+      if (widgetId === 'assistant') {
+        setWidgetSettingsMap((currentValues) => ({
+          ...currentValues,
+          [widgetId]: normalizedSettings,
+        }))
+
+        try {
+          const refreshedAvailability = await fetchAssistantAvailability()
+
+          setAssistantAvailability(refreshedAvailability)
+          setWidgetSettingsMap((currentValues) => ({
+            ...currentValues,
+            [widgetId]: normalizedSettings,
+          }))
+        } catch (error) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+        }
+
+        setWidgetSettingsErrorKey(null)
+        return
+      }
+
       const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
 
       setWidgetSettingsMap((currentValues) => ({

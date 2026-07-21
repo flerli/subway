@@ -1173,6 +1173,8 @@ const createAssistantBackendRoutesTableSql = `
     backend_kind TEXT NOT NULL,
     base_url TEXT NOT NULL,
     model_identifier TEXT NOT NULL,
+    api_key TEXT,
+    headers_json TEXT NOT NULL DEFAULT '{}',
     is_enabled INTEGER NOT NULL DEFAULT 1,
     is_active INTEGER NOT NULL DEFAULT 0,
     supports_streaming INTEGER NOT NULL DEFAULT 1,
@@ -1330,6 +1332,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS assistant_message_events_owner_thread_created_idx
   ON assistant_message_events(owner_user_id, thread_id, created_at)
 `)
+
+if (!hasColumn('assistant_backend_routes', 'api_key')) {
+  db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN api_key TEXT')
+}
+
+if (!hasColumn('assistant_backend_routes', 'headers_json')) {
+  db.exec("ALTER TABLE assistant_backend_routes ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}' ")
+}
 
 const migrateCalendarEventsFoundation = () => {
   if (!hasColumn('calendar_events', 'event_date')) {
@@ -2078,6 +2088,8 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
         backend_kind,
         base_url,
         model_identifier,
+        api_key,
+        headers_json,
         is_enabled,
         is_active,
         supports_streaming,
@@ -2087,12 +2099,14 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         label = excluded.label,
         backend_kind = excluded.backend_kind,
         base_url = excluded.base_url,
         model_identifier = excluded.model_identifier,
+        api_key = excluded.api_key,
+        headers_json = excluded.headers_json,
         is_enabled = excluded.is_enabled,
         is_active = excluded.is_active,
         supports_streaming = excluded.supports_streaming,
@@ -2107,6 +2121,8 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
       route.backendKind,
       route.baseUrl,
       route.modelIdentifier,
+      route.apiKey ?? null,
+      route.headersJson ?? '{}',
       normalizeAssistantBooleanFlag(route.enabled),
       normalizeAssistantBooleanFlag(route.isActive),
       normalizeAssistantBooleanFlag(route.supportsStreaming),
@@ -2124,6 +2140,12 @@ const resolveConfiguredAssistantBackendRoute = () => {
     backendKind: normalizeAssistantBackendKind(ASSISTANT_BACKEND_KIND),
     baseUrl: sanitizeAssistantBaseUrl(ASSISTANT_BACKEND_BASE_URL),
     modelIdentifier: sanitizeAssistantModelIdentifier(ASSISTANT_BACKEND_MODEL_IDENTIFIER),
+    apiKey: typeof ASSISTANT_BACKEND_API_KEY === 'string' ? ASSISTANT_BACKEND_API_KEY : '',
+    headersJson:
+      typeof ASSISTANT_BACKEND_HEADERS_JSON === 'string' &&
+      ASSISTANT_BACKEND_HEADERS_JSON.trim().length > 0
+        ? ASSISTANT_BACKEND_HEADERS_JSON
+        : '{}',
     enabled: ASSISTANT_BACKEND_ENABLED,
     isActive: true,
     supportsStreaming: ASSISTANT_BACKEND_SUPPORTS_STREAMING,
@@ -2146,6 +2168,10 @@ const resolveConfiguredAssistantBackendRoute = () => {
 }
 
 const ensureConfiguredAssistantBackendRoutePresent = () => {
+  if (selectActiveAssistantBackendRouteRow()) {
+    return
+  }
+
   const configuredRoute = resolveConfiguredAssistantBackendRoute()
 
   if (!configuredRoute) {
@@ -2223,6 +2249,8 @@ const selectAssistantBackendRouteById = (routeId) =>
         backend_kind AS backendKind,
         base_url AS baseUrl,
         model_identifier AS modelIdentifier,
+        api_key AS apiKey,
+        headers_json AS headersJson,
         is_enabled AS enabled,
         is_active AS isActive,
         supports_streaming AS supportsStreaming,
@@ -2236,6 +2264,143 @@ const selectAssistantBackendRouteById = (routeId) =>
       LIMIT 1
     `)
     .get(routeId)
+
+const selectAssistantSettings = () => {
+  const route = selectActiveAssistantBackendRouteRow()
+
+  return {
+    routeId:
+      route?.id ||
+      sanitizeAssistantThreadTitle(ASSISTANT_BACKEND_ROUTE_ID) ||
+      'assistant-default-route',
+    label: sanitizeAssistantRouteLabel(route?.label),
+    backendKind: normalizeAssistantBackendKind(route?.backendKind),
+    baseUrl: sanitizeAssistantBaseUrl(route?.baseUrl),
+    modelIdentifier: sanitizeAssistantModelIdentifier(route?.modelIdentifier),
+    hasStoredApiKey: typeof route?.apiKey === 'string' && route.apiKey.length > 0,
+    headersJson:
+      typeof route?.headersJson === 'string' && route.headersJson.trim().length > 0
+        ? route.headersJson
+        : '{}',
+    enabled: route?.enabled === true || route?.enabled === 1,
+    supportsStreaming: route?.supportsStreaming === true || route?.supportsStreaming === 1,
+    supportsTools: route?.supportsTools === true || route?.supportsTools === 1,
+    supportsMarkdown: route?.supportsMarkdown === true || route?.supportsMarkdown === 1,
+    updatedAt: typeof route?.updatedAt === 'string' ? route.updatedAt : null,
+  }
+}
+
+const updateAssistantRouteActivation = (routeId, timestamp) => {
+  db.exec('BEGIN')
+
+  try {
+    db.prepare('UPDATE assistant_backend_routes SET is_active = 0, updated_at = ?').run(timestamp)
+    db.prepare('UPDATE assistant_backend_routes SET is_active = 1, updated_at = ? WHERE id = ?').run(timestamp, routeId)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+const saveAssistantSettings = (input) => {
+  const currentRoute = selectActiveAssistantBackendRouteRow()
+  const routeId =
+    sanitizeAssistantThreadTitle(input.routeId) ||
+    sanitizeAssistantThreadTitle(currentRoute?.id) ||
+    sanitizeAssistantThreadTitle(ASSISTANT_BACKEND_ROUTE_ID) ||
+    'assistant-default-route'
+  const label = sanitizeAssistantRouteLabel(input.label)
+  const backendKind = normalizeAssistantBackendKind(input.backendKind)
+  const baseUrl = sanitizeAssistantBaseUrl(input.baseUrl)
+  const modelIdentifier = sanitizeAssistantModelIdentifier(input.modelIdentifier)
+  const enabled = input.enabled !== false
+  const supportsStreaming = input.supportsStreaming === true
+  const supportsTools = input.supportsTools === true
+  const supportsMarkdown = input.supportsMarkdown !== false
+
+  if (!label) {
+    throw new AssistantRuntimeError(
+      'Assistant route label is required.',
+      400,
+      'assistant_settings_label_required',
+    )
+  }
+
+  if (!backendKind) {
+    throw new AssistantRuntimeError(
+      'Assistant backend kind must be litellm or custom.',
+      400,
+      'assistant_settings_backend_kind_invalid',
+    )
+  }
+
+  if (!baseUrl) {
+    throw new AssistantRuntimeError(
+      'Assistant backend base URL is required.',
+      400,
+      'assistant_settings_base_url_required',
+    )
+  }
+
+  if (backendKind === 'litellm' && !modelIdentifier) {
+    throw new AssistantRuntimeError(
+      'Assistant model identifier is required for LiteLLM routes.',
+      400,
+      'assistant_settings_model_identifier_required',
+    )
+  }
+
+  const headersJson =
+    typeof input.headersJson === 'string' && input.headersJson.trim().length > 0
+      ? input.headersJson.trim()
+      : '{}'
+
+  try {
+    const parsedHeaders = JSON.parse(headersJson)
+
+    if (!parsedHeaders || typeof parsedHeaders !== 'object' || Array.isArray(parsedHeaders)) {
+      throw new Error('invalid')
+    }
+  } catch {
+    throw new AssistantRuntimeError(
+      'Assistant backend headers JSON must be a valid JSON object.',
+      400,
+      'assistant_settings_headers_invalid',
+    )
+  }
+
+  const apiKey =
+    typeof input.apiKey === 'string' && input.apiKey.length > 0
+      ? input.apiKey
+      : typeof currentRoute?.apiKey === 'string'
+        ? currentRoute.apiKey
+        : ''
+
+  const timestamp = new Date().toISOString()
+
+  upsertAssistantBackendRoute(
+    {
+      id: routeId,
+      label,
+      backendKind,
+      baseUrl,
+      modelIdentifier,
+      apiKey,
+      headersJson,
+      enabled,
+      isActive: true,
+      supportsStreaming,
+      supportsTools,
+      supportsMarkdown,
+      status: enabled ? 'available' : 'disabled',
+    },
+    timestamp,
+  )
+  updateAssistantRouteActivation(routeId, timestamp)
+
+  return selectAssistantSettings()
+}
 
 const selectAssistantMessagesByThreadId = (ownerUserId, threadId) =>
   db
@@ -2754,13 +2919,19 @@ const buildAssistantProviderEndpointUrl = (route) => {
 }
 
 const buildAssistantProviderHeaders = () => {
+  const activeRoute = selectActiveAssistantBackendRouteRow()
   const headers = {
     'Content-Type': 'application/json',
-    ...parseAssistantConfiguredHeaders(ASSISTANT_BACKEND_HEADERS_JSON),
+    ...parseAssistantConfiguredHeaders(activeRoute?.headersJson ?? ASSISTANT_BACKEND_HEADERS_JSON),
   }
 
-  if (ASSISTANT_BACKEND_API_KEY && typeof headers.Authorization !== 'string') {
-    headers.Authorization = `Bearer ${ASSISTANT_BACKEND_API_KEY}`
+  const routeApiKey =
+    typeof activeRoute?.apiKey === 'string' && activeRoute.apiKey.length > 0
+      ? activeRoute.apiKey
+      : ASSISTANT_BACKEND_API_KEY
+
+  if (routeApiKey && typeof headers.Authorization !== 'string') {
+    headers.Authorization = `Bearer ${routeApiKey}`
   }
 
   return headers
@@ -5933,6 +6104,11 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/settings') {
+    sendJson(response, 200, { assistantSettings: selectAssistantSettings() })
+    return
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/threads') {
     sendJson(response, 200, { threads: selectAssistantThreads(ownerUserId) })
     return
@@ -6491,6 +6667,26 @@ const server = createServer(async (request, response) => {
       messages: [],
     })
     return
+  }
+
+  if (request.method === 'PATCH' && requestUrl.pathname === '/api/assistant/settings') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const assistantSettings = saveAssistantSettings(body ?? {})
+      sendJson(response, 200, { assistantSettings, assistant: selectAssistantAvailability() })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
   }
 
   if (
