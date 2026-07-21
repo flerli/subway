@@ -150,6 +150,7 @@ export interface AssistantMessageStreamHandlers {
 }
 
 export interface AssistantMessageRequestOptions {
+  requestedTools?: boolean
   widgetTools?: RegisteredWidgetMcpTool[]
 }
 
@@ -716,6 +717,8 @@ export const sendAssistantThreadMessage = async (
   content: string,
   options: AssistantMessageRequestOptions = {},
 ): Promise<AssistantTurnResponse> => {
+  const requestedTools = options.requestedTools === true
+
   const response = await fetchApi(`/assistant/threads/${threadId}/messages`, {
     method: 'POST',
     headers: {
@@ -724,8 +727,8 @@ export const sendAssistantThreadMessage = async (
     body: JSON.stringify({
       content,
       stream: false,
-      requestedTools: true,
-      widgetTools: options.widgetTools ?? [],
+      requestedTools,
+      widgetTools: requestedTools ? options.widgetTools ?? [] : [],
     }),
   })
 
@@ -741,6 +744,8 @@ export const streamAssistantThreadMessage = async (
   content: string,
   options: AssistantMessageStreamOptions = {},
 ): Promise<AssistantTurnResponse> => {
+  const requestedTools = options.requestedTools === true
+
   const response = await fetch(getApiUrl(`/assistant/threads/${threadId}/messages`), {
     method: 'POST',
     headers: {
@@ -750,8 +755,8 @@ export const streamAssistantThreadMessage = async (
     body: JSON.stringify({
       content,
       stream: true,
-      requestedTools: true,
-      widgetTools: options.widgetTools ?? [],
+      requestedTools,
+      widgetTools: requestedTools ? options.widgetTools ?? [] : [],
     }),
   })
 

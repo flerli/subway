@@ -1194,9 +1194,12 @@ function App() {
     setAssistantStreamingEvents([])
 
     try {
+      const canRequestTools = assistantAvailability.activeRoute?.supportsTools === true
+
       if (assistantAvailability.activeRoute?.supportsStreaming) {
         await streamAssistantThreadMessage(currentThreadId, promptContent, {
-          widgetTools: registeredWidgetMcpTools,
+          requestedTools: canRequestTools,
+          widgetTools: canRequestTools ? registeredWidgetMcpTools : [],
           onStarted: (startedEvent) => {
             if (assistantTurnRunIdRef.current !== runId) {
               return
@@ -1260,7 +1263,8 @@ function App() {
         })
       } else {
         const completedTurn = await sendAssistantThreadMessage(currentThreadId, promptContent, {
-          widgetTools: registeredWidgetMcpTools,
+          requestedTools: canRequestTools,
+          widgetTools: canRequestTools ? registeredWidgetMcpTools : [],
         })
 
         if (assistantTurnRunIdRef.current !== runId) {
