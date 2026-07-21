@@ -2773,23 +2773,81 @@ const updateAssistantRoute = (ownerUserId, routeId, input) => {
     throw new AssistantRuntimeError('Assistant route not found.', 404, 'assistant_route_not_found')
   }
 
-  return createAssistantRoute(ownerUserId, {
-    routeId,
-    label: input.label ?? currentRoute.label,
-    backendKind: input.backendKind ?? currentRoute.backendKind,
-    baseUrl: input.baseUrl ?? currentRoute.baseUrl,
-    modelIdentifier: input.modelIdentifier ?? currentRoute.modelIdentifier,
+  const label = sanitizeAssistantRouteLabel(input.label ?? currentRoute.label)
+  const backendKind = normalizeAssistantBackendKind(input.backendKind ?? currentRoute.backendKind)
+  const baseUrl = sanitizeAssistantBaseUrl(input.baseUrl ?? currentRoute.baseUrl)
+  const modelIdentifier = sanitizeAssistantModelIdentifier(
+    input.modelIdentifier ?? currentRoute.modelIdentifier,
+  )
+  const headersJson =
+    typeof input.headersJson === 'string'
+      ? input.headersJson.trim() || '{}'
+      : currentRoute.headersJson ?? '{}'
+  const enabled = input.enabled ?? Boolean(currentRoute.enabled)
+  const isDefault = input.isDefault ?? Boolean(currentRoute.isDefault)
+  const supportsStreaming = input.supportsStreaming ?? Boolean(currentRoute.supportsStreaming)
+  const supportsTools = input.supportsTools ?? Boolean(currentRoute.supportsTools)
+  const supportsMarkdown = input.supportsMarkdown ?? Boolean(currentRoute.supportsMarkdown)
+
+  if (!label) {
+    throw new AssistantRuntimeError('Assistant route label is required.', 400, 'assistant_settings_label_required')
+  }
+
+  if (!backendKind) {
+    throw new AssistantRuntimeError('Assistant backend kind must be litellm or custom.', 400, 'assistant_settings_backend_kind_invalid')
+  }
+
+  if (!baseUrl) {
+    throw new AssistantRuntimeError('Assistant backend base URL is required.', 400, 'assistant_settings_base_url_required')
+  }
+
+  if (backendKind === 'litellm' && !modelIdentifier) {
+    throw new AssistantRuntimeError('Assistant model identifier is required for LiteLLM routes.', 400, 'assistant_settings_model_identifier_required')
+  }
+
+  try {
+    const parsedHeaders = JSON.parse(headersJson)
+    if (!parsedHeaders || typeof parsedHeaders !== 'object' || Array.isArray(parsedHeaders)) {
+      throw new Error('invalid')
+    }
+  } catch {
+    throw new AssistantRuntimeError('Assistant backend headers JSON must be a valid JSON object.', 400, 'assistant_settings_headers_invalid')
+  }
+
+  const timestamp = new Date().toISOString()
+  const route = {
+    id: routeId,
+    label,
+    backendKind,
+    baseUrl,
+    modelIdentifier,
     apiKey:
       typeof input.apiKey === 'string' && input.apiKey.length > 0
         ? input.apiKey
         : currentRoute.apiKey,
-    headersJson: input.headersJson ?? currentRoute.headersJson,
-    enabled: input.enabled ?? Boolean(currentRoute.enabled),
-    isDefault: input.isDefault ?? Boolean(currentRoute.isDefault),
-    supportsStreaming: input.supportsStreaming ?? Boolean(currentRoute.supportsStreaming),
-    supportsTools: input.supportsTools ?? Boolean(currentRoute.supportsTools),
-    supportsMarkdown: input.supportsMarkdown ?? Boolean(currentRoute.supportsMarkdown),
-  })
+    headersJson,
+    enabled,
+    isDefault,
+    isActive: isDefault,
+    supportsStreaming,
+    supportsTools,
+    supportsMarkdown,
+    status: resolveAssistantRouteStatus({
+      label,
+      backendKind,
+      baseUrl,
+      modelIdentifier,
+      enabled,
+    }),
+  }
+
+  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+
+  if (isDefault) {
+    updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+  }
+
+  return selectAssistantBackendRouteById(ownerUserId, routeId)
 }
 
 const setDefaultAssistantRoute = (ownerUserId, routeId) => {

@@ -3645,6 +3645,55 @@ select {
   gap: 12px;
 }
 
+.assistant-route-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.assistant-route-list-card,
+.assistant-route-editor-card,
+.assistant-route-list,
+.assistant-route-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.assistant-route-list {
+  max-height: 28rem;
+  overflow-y: auto;
+}
+
+.assistant-route-card {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted-soft);
+  padding: 14px;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.assistant-route-card.is-active {
+  border-color: rgba(126, 240, 200, 0.36);
+  background: rgba(126, 240, 200, 0.1);
+}
+
+.assistant-route-card strong,
+.assistant-route-card span {
+  margin: 0;
+}
+
+@media (max-width: 1040px) {
+  .assistant-route-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .widget-settings-actions--log {
   justify-content: space-between;
 }

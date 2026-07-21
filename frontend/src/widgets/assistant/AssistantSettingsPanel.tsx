@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AppTextBundle } from '../../i18n/appText'
 import {
+  createAssistantRoute,
+  deleteAssistantRoute,
   fetchAssistantAvailability,
+  fetchAssistantRoutes,
   fetchAssistantSettings,
-  updateAssistantSettings,
+  setDefaultAssistantRoute,
+  updateAssistantRoute,
   type AssistantAvailabilityRecord,
   type AssistantSettingsRecord,
 } from '../../api/assistant'
@@ -36,6 +40,7 @@ const defaultAssistantSettings: AssistantSettingsRecord = {
   hasStoredApiKey: false,
   headersJson: '{}',
   enabled: true,
+  isDefault: false,
   supportsStreaming: true,
   supportsTools: true,
   supportsMarkdown: true,
@@ -67,6 +72,8 @@ export function AssistantSettingsPanel({
 }: AssistantSettingsPanelProps) {
   const [availability, setAvailability] =
     useState<AssistantAvailabilityRecord>(defaultAssistantAvailability)
+  const [routes, setRoutes] = useState<AssistantSettingsRecord[]>([])
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null)
   const [routeId, setRouteId] = useState(defaultAssistantSettings.routeId)
   const [label, setLabel] = useState(defaultAssistantSettings.label)
   const [backendKind, setBackendKind] = useState<AssistantSettingsRecord['backendKind']>('custom')
@@ -89,21 +96,27 @@ export function AssistantSettingsPanel({
 
     setRequestState('loading')
 
-    Promise.all([fetchAssistantAvailability(), fetchAssistantSettings()])
-      .then(([assistantAvailability, assistantSettings]) => {
+    Promise.all([fetchAssistantAvailability(), fetchAssistantSettings(), fetchAssistantRoutes()])
+      .then(([assistantAvailability, assistantSettings, assistantRoutes]) => {
         if (!cancelled) {
           setAvailability(assistantAvailability)
-          setRouteId(assistantSettings.routeId)
-          setLabel(assistantSettings.label)
-          setBackendKind(assistantSettings.backendKind || 'custom')
-          setBaseUrl(assistantSettings.baseUrl)
-          setModelIdentifier(assistantSettings.modelIdentifier)
-          setHeadersJson(assistantSettings.headersJson)
-          setEnabled(assistantSettings.enabled)
-          setSupportsStreaming(assistantSettings.supportsStreaming)
-          setSupportsTools(assistantSettings.supportsTools)
-          setSupportsMarkdown(assistantSettings.supportsMarkdown)
-          setHasStoredApiKey(assistantSettings.hasStoredApiKey)
+          setRoutes(assistantRoutes)
+          setSelectedRouteId(assistantSettings.routeId || (assistantRoutes[0]?.routeId ?? null))
+          const routeToEdit =
+            assistantRoutes.find((route) => route.routeId === assistantSettings.routeId) ??
+            assistantRoutes[0] ??
+            assistantSettings
+          setRouteId(routeToEdit.routeId)
+          setLabel(routeToEdit.label)
+          setBackendKind(routeToEdit.backendKind || 'custom')
+          setBaseUrl(routeToEdit.baseUrl)
+          setModelIdentifier(routeToEdit.modelIdentifier)
+          setHeadersJson(routeToEdit.headersJson)
+          setEnabled(routeToEdit.enabled)
+          setSupportsStreaming(routeToEdit.supportsStreaming)
+          setSupportsTools(routeToEdit.supportsTools)
+          setSupportsMarkdown(routeToEdit.supportsMarkdown)
+          setHasStoredApiKey(routeToEdit.hasStoredApiKey)
           setApiKey('')
           setRequestState('idle')
           setStatusMessage(widgetText.settings?.description ?? '')
@@ -123,51 +136,145 @@ export function AssistantSettingsPanel({
     }
   }, [appText.messages.assistantLoadFailed, languageCode, widgetText.settings?.description])
 
+  const selectedRoute = useMemo(
+    () => routes.find((route) => route.routeId === selectedRouteId) ?? null,
+    [routes, selectedRouteId],
+  )
+
+  const applyRouteToEditor = (route: AssistantSettingsRecord | null) => {
+    const nextRoute = route ?? defaultAssistantSettings
+
+    setRouteId(nextRoute.routeId)
+    setLabel(nextRoute.label)
+    setBackendKind(nextRoute.backendKind || 'custom')
+    setBaseUrl(nextRoute.baseUrl)
+    setModelIdentifier(nextRoute.modelIdentifier)
+    setHeadersJson(nextRoute.headersJson)
+    setEnabled(nextRoute.enabled)
+    setSupportsStreaming(nextRoute.supportsStreaming)
+    setSupportsTools(nextRoute.supportsTools)
+    setSupportsMarkdown(nextRoute.supportsMarkdown)
+    setHasStoredApiKey(nextRoute.hasStoredApiKey)
+    setApiKey('')
+  }
+
+  const refreshRoutesAndAvailability = async (preferredRouteId?: string | null) => {
+    const [assistantAvailability, assistantRoutes] = await Promise.all([
+      fetchAssistantAvailability(),
+      fetchAssistantRoutes(),
+    ])
+
+    setAvailability(assistantAvailability)
+    setRoutes(assistantRoutes)
+
+    const nextSelectedRoute =
+      assistantRoutes.find((route) => route.routeId === preferredRouteId) ??
+      assistantRoutes.find((route) => route.isDefault) ??
+      assistantRoutes[0] ??
+      null
+
+    setSelectedRouteId(nextSelectedRoute?.routeId ?? null)
+    applyRouteToEditor(nextSelectedRoute)
+  }
+
+  const handleCreateConnection = () => {
+    const generatedRouteId = `assistant-route-${crypto.randomUUID()}`
+    const newDraft: AssistantSettingsRecord = {
+      ...defaultAssistantSettings,
+      routeId: generatedRouteId,
+    }
+
+    setSelectedRouteId(null)
+    applyRouteToEditor(newDraft)
+    setStatusMessage(widgetText.settings?.description ?? '')
+  }
+
   const handleSave = async () => {
     setRequestState('saving')
 
     try {
-      const payload = await updateAssistantSettings({
-        routeId,
-        label,
-        backendKind: backendKind || 'custom',
-        baseUrl,
-        modelIdentifier,
-        apiKey,
-        headersJson,
-        enabled,
-        supportsStreaming,
-        supportsTools,
-        supportsMarkdown,
-      })
+      const savedRoute = selectedRouteId
+        ? await updateAssistantRoute(selectedRouteId, {
+            label,
+            backendKind: backendKind || 'custom',
+            baseUrl,
+            modelIdentifier,
+            apiKey,
+            headersJson,
+            enabled,
+            isDefault: selectedRoute?.isDefault === true,
+            supportsStreaming,
+            supportsTools,
+            supportsMarkdown,
+          })
+        : await createAssistantRoute({
+            routeId,
+            label,
+            backendKind: backendKind || 'custom',
+            baseUrl,
+            modelIdentifier,
+            apiKey,
+            headersJson,
+            enabled,
+            isDefault: routes.length === 0,
+            supportsStreaming,
+            supportsTools,
+            supportsMarkdown,
+          })
 
-      setAvailability(payload.assistant)
-      setRouteId(payload.assistantSettings.routeId)
-      setLabel(payload.assistantSettings.label)
-      setBackendKind(payload.assistantSettings.backendKind || 'custom')
-      setBaseUrl(payload.assistantSettings.baseUrl)
-      setModelIdentifier(payload.assistantSettings.modelIdentifier)
-      setHeadersJson(payload.assistantSettings.headersJson)
-      setEnabled(payload.assistantSettings.enabled)
-      setSupportsStreaming(payload.assistantSettings.supportsStreaming)
-      setSupportsTools(payload.assistantSettings.supportsTools)
-      setSupportsMarkdown(payload.assistantSettings.supportsMarkdown)
-      setHasStoredApiKey(payload.assistantSettings.hasStoredApiKey)
-      setApiKey('')
+      await refreshRoutesAndAvailability(savedRoute.routeId)
       await onSave(widget.entity.id, {
-        routeId: payload.assistantSettings.routeId,
-        label: payload.assistantSettings.label,
-        backendKind: payload.assistantSettings.backendKind,
-        baseUrl: payload.assistantSettings.baseUrl,
-        modelIdentifier: payload.assistantSettings.modelIdentifier,
-        hasStoredApiKey: payload.assistantSettings.hasStoredApiKey,
-        headersJson: payload.assistantSettings.headersJson,
-        enabled: payload.assistantSettings.enabled,
-        supportsStreaming: payload.assistantSettings.supportsStreaming,
-        supportsTools: payload.assistantSettings.supportsTools,
-        supportsMarkdown: payload.assistantSettings.supportsMarkdown,
-        updatedAt: payload.assistantSettings.updatedAt,
+        routeId: savedRoute.routeId,
+        label: savedRoute.label,
+        backendKind: savedRoute.backendKind,
+        baseUrl: savedRoute.baseUrl,
+        modelIdentifier: savedRoute.modelIdentifier,
+        hasStoredApiKey: savedRoute.hasStoredApiKey,
+        headersJson: savedRoute.headersJson,
+        enabled: savedRoute.enabled,
+        isDefault: savedRoute.isDefault,
+        supportsStreaming: savedRoute.supportsStreaming,
+        supportsTools: savedRoute.supportsTools,
+        supportsMarkdown: savedRoute.supportsMarkdown,
+        updatedAt: savedRoute.updatedAt,
       })
+      setRequestState('saved')
+      setStatusMessage(appText.widgetSettingsHost.savedState)
+    } catch (error) {
+      setRequestState('error')
+      setStatusMessage(
+        error instanceof Error ? error.message : appText.messages.assistantLoadFailed,
+      )
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedRouteId) {
+      return
+    }
+
+    setRequestState('saving')
+
+    try {
+      await deleteAssistantRoute(selectedRouteId)
+      await refreshRoutesAndAvailability(null)
+      setRequestState('saved')
+      setStatusMessage(appText.widgetSettingsHost.savedState)
+    } catch (error) {
+      setRequestState('error')
+      setStatusMessage(
+        error instanceof Error ? error.message : appText.messages.assistantLoadFailed,
+      )
+    }
+  }
+
+  const handleSetDefault = async (routeIdToDefault: string) => {
+    setRequestState('saving')
+
+    try {
+      const payload = await setDefaultAssistantRoute(routeIdToDefault)
+      setAvailability(payload.assistant)
+      await refreshRoutesAndAvailability(routeIdToDefault)
       setRequestState('saved')
       setStatusMessage(appText.widgetSettingsHost.savedState)
     } catch (error) {
@@ -186,7 +293,54 @@ export function AssistantSettingsPanel({
         <p>{widgetText.settings?.description}</p>
       </div>
 
-      <div className="widget-settings-fields">
+      <div className="assistant-route-layout">
+        <section className="settings-card assistant-route-list-card">
+          <div className="settings-card-head">
+            <p className="widget-kicker">{widgetText.copy.routeInventoryTitle}</p>
+            <h3>{routes.length}</h3>
+            <p>{widgetText.copy.routeInventoryCopy}</p>
+          </div>
+
+          <button className="settings-submit" type="button" onClick={handleCreateConnection}>
+            {widgetText.copy.createRouteAction}
+          </button>
+
+          {routes.length === 0 ? (
+            <p className="settings-note">{widgetText.copy.noSavedRoutesCopy}</p>
+          ) : (
+            <div className="assistant-route-list">
+              {routes.map((route) => (
+                <button
+                  key={route.routeId}
+                  type="button"
+                  className={`assistant-route-card${route.routeId === selectedRouteId ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setSelectedRouteId(route.routeId)
+                    applyRouteToEditor(route)
+                  }}
+                >
+                  <strong>{route.label}</strong>
+                  <span>{route.backendKind}</span>
+                  <span>
+                    {route.isDefault
+                      ? widgetText.copy.selectedDefaultMeta
+                      : route.enabled
+                        ? widgetText.copy.enabledState
+                        : widgetText.copy.disabledState}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="settings-card assistant-route-editor-card">
+          <div className="settings-card-head">
+            <p className="widget-kicker">{widgetText.copy.editorTitle}</p>
+            <h3>{label || (widgetText.settings?.title ?? widget.entity.title)}</h3>
+          </div>
+
+          <div className="widget-settings-fields">
         <label className="settings-label">
           <span>{widgetText.settings?.fields.routeId?.label ?? 'Route id'}</span>
           <input
@@ -255,7 +409,7 @@ export function AssistantSettingsPanel({
         </label>
 
         {hasStoredApiKey ? (
-          <p className="settings-note">Stored API key will be reused when the field stays empty.</p>
+          <p className="settings-note">{widgetText.copy.storedApiKeyHint}</p>
         ) : null}
 
         <label className="settings-label">
@@ -304,9 +458,10 @@ export function AssistantSettingsPanel({
             onChange={(event) => setSupportsMarkdown(event.target.checked)}
           />
         </label>
-      </div>
 
-      <div className="assistant-settings-summary">
+          </div>
+
+          <div className="assistant-settings-summary">
         <div className="settings-runtime-row">
           <span>{appText.assistant.availabilityTitle}</span>
           <strong className="settings-runtime-value">
@@ -349,12 +504,30 @@ export function AssistantSettingsPanel({
               : appText.assistant.disabledValue}
           </strong>
         </div>
-      </div>
 
-      <div className="widget-settings-actions">
+          </div>
+
+          <div className="assistant-route-actions">
+            {selectedRouteId ? (
+              <button
+                className="settings-submit"
+                type="button"
+                onClick={() => void handleSetDefault(selectedRouteId)}
+              >
+                {widgetText.copy.setDefaultRouteAction}
+              </button>
+            ) : null}
         <button className="settings-submit" type="button" onClick={() => void handleSave()}>
-          {appText.widgetSettingsHost.saveAction}
+          {widgetText.copy.saveRouteAction}
         </button>
+            {selectedRouteId ? (
+              <button className="settings-submit" type="button" onClick={() => void handleDelete()}>
+                {widgetText.copy.deleteRouteAction}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="widget-settings-actions">
         <p className="settings-note">
           {requestState === 'loading'
             ? appText.auth.authenticatedSessionCopy
@@ -366,9 +539,9 @@ export function AssistantSettingsPanel({
                   ? appText.widgetSettingsHost.saveFailedState
                   : statusMessage}
         </p>
+          </div>
+        </section>
       </div>
-
-      <p className="settings-note">{statusMessage}</p>
     </article>
   )
 }

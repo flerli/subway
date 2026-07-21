@@ -144,7 +144,7 @@ Issues:
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__004_MCP_TOOL_EXECUTION_ORCHESTRATION_AND_RENDERING.md | Add MCP-only tool execution, persisted tool-call event records, and structured tool activity rendering in the chat transcript. | implemented |
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__005_MARKDOWN_TRANSCRIPT_RENDERING_AND_RESPONSE_PRESENTATION.md | Render assistant responses with safe rich markdown, syntax-highlighted code fences, tables, and task lists. | implemented |
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__006_MULTI_CONNECTION_ROUTE_REGISTRY_AND_DEFAULT_SELECTION_FOUNDATION.md | Extend the assistant route registry so each user can persist multiple LLM connections and choose one default route for all newly created conversations. | implemented |
-| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__007_ASSISTANT_SETTINGS_MULTI_CONNECTION_MANAGEMENT_UI.md | Build the assistant settings workflow for creating, editing, deleting, testing, and default-selecting multiple user-managed LLM connections. | planned |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__007_ASSISTANT_SETTINGS_MULTI_CONNECTION_MANAGEMENT_UI.md | Build the assistant settings workflow for creating, editing, deleting, testing, and default-selecting multiple user-managed LLM connections. | implemented |
 
 ## 011 MCP TOOL INTERFACE
 

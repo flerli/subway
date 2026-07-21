@@ -26,6 +26,7 @@ export interface AssistantSettingsRecord {
   hasStoredApiKey: boolean
   headersJson: string
   enabled: boolean
+  isDefault: boolean
   supportsStreaming: boolean
   supportsTools: boolean
   supportsMarkdown: boolean
@@ -218,6 +219,7 @@ const normalizeAssistantSettings = (value: unknown): AssistantSettingsRecord | n
     hasStoredApiKey?: unknown
     headersJson?: unknown
     enabled?: unknown
+    isDefault?: unknown
     supportsStreaming?: unknown
     supportsTools?: unknown
     supportsMarkdown?: unknown
@@ -241,6 +243,7 @@ const normalizeAssistantSettings = (value: unknown): AssistantSettingsRecord | n
     hasStoredApiKey: candidate.hasStoredApiKey === true,
     headersJson: typeof candidate.headersJson === 'string' ? candidate.headersJson : '{}',
     enabled: candidate.enabled !== false,
+    isDefault: candidate.isDefault === true,
     supportsStreaming: candidate.supportsStreaming === true,
     supportsTools: candidate.supportsTools === true,
     supportsMarkdown: candidate.supportsMarkdown !== false,
@@ -562,6 +565,147 @@ export const fetchAssistantSettings = async (): Promise<AssistantSettingsRecord>
   }
 
   return assistantSettings
+}
+
+export const fetchAssistantRoutes = async (): Promise<AssistantSettingsRecord[]> => {
+  const response = await fetchApi('/assistant/routes')
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to load assistant routes.')
+  }
+
+  const payload = (await response.json()) as { routes?: unknown[] }
+
+  if (!Array.isArray(payload.routes)) {
+    throw new Error('Backend returned an invalid assistant route list payload.')
+  }
+
+  return payload.routes
+    .map(normalizeAssistantSettings)
+    .filter((route): route is AssistantSettingsRecord => route !== null)
+}
+
+export const createAssistantRoute = async (input: {
+  routeId: string
+  label: string
+  backendKind: 'litellm' | 'custom'
+  baseUrl: string
+  modelIdentifier: string
+  apiKey: string
+  headersJson: string
+  enabled: boolean
+  isDefault: boolean
+  supportsStreaming: boolean
+  supportsTools: boolean
+  supportsMarkdown: boolean
+}) => {
+  const response = await fetchApi('/assistant/routes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to create assistant route.')
+  }
+
+  const payload = (await response.json()) as { route?: unknown }
+  const route = normalizeAssistantSettings(payload.route)
+
+  if (!route) {
+    throw new Error('Backend returned an invalid assistant route payload.')
+  }
+
+  return route
+}
+
+export const updateAssistantRoute = async (
+  routeId: string,
+  input: {
+    label: string
+    backendKind: 'litellm' | 'custom'
+    baseUrl: string
+    modelIdentifier: string
+    apiKey: string
+    headersJson: string
+    enabled: boolean
+    isDefault: boolean
+    supportsStreaming: boolean
+    supportsTools: boolean
+    supportsMarkdown: boolean
+  },
+) => {
+  const response = await fetchApi(`/assistant/routes/${routeId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to update assistant route.')
+  }
+
+  const payload = (await response.json()) as { route?: unknown }
+  const route = normalizeAssistantSettings(payload.route)
+
+  if (!route) {
+    throw new Error('Backend returned an invalid assistant route payload.')
+  }
+
+  return route
+}
+
+export const setDefaultAssistantRoute = async (routeId: string) => {
+  const response = await fetchApi(`/assistant/routes/${routeId}/default`, {
+    method: 'POST',
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to set the default assistant route.')
+  }
+
+  const payload = (await response.json()) as {
+    route?: unknown
+    assistant?: {
+      status?: unknown
+      activeRoute?: unknown
+    }
+  }
+  const route = normalizeAssistantSettings(payload.route)
+
+  if (!route) {
+    throw new Error('Backend returned an invalid assistant route payload.')
+  }
+
+  return {
+    route,
+    assistant: {
+      status: normalizeAssistantAvailabilityStatus(payload.assistant?.status),
+      activeRoute: normalizeAssistantRoute(payload.assistant?.activeRoute),
+    },
+  }
+}
+
+export const deleteAssistantRoute = async (routeId: string) => {
+  const response = await fetchApi(`/assistant/routes/${routeId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to delete assistant route.')
+  }
+
+  const payload = (await response.json()) as { deletedRouteId?: unknown }
+
+  if (typeof payload.deletedRouteId !== 'string') {
+    throw new Error('Backend returned an invalid assistant route delete payload.')
+  }
+
+  return payload.deletedRouteId
 }
 
 export const updateAssistantSettings = async (input: {
