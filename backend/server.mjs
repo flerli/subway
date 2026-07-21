@@ -2544,6 +2544,30 @@ const upsertAssistantBackendRoute = (ownerUserId, route, timestamp) =>
       timestamp,
     )
 
+const persistAssistantBackendRoute = (ownerUserId, route, timestamp) => {
+  db.exec('BEGIN')
+
+  try {
+    if (route.isDefault) {
+      db
+        .prepare(`
+          UPDATE assistant_backend_routes
+          SET is_default = 0,
+              is_active = 0,
+              updated_at = ?
+          WHERE owner_user_id = ? AND id != ?
+        `)
+        .run(timestamp, ownerUserId, route.id)
+    }
+
+    upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
 const resolveConfiguredAssistantBackendRoute = () => {
   const route = {
     id: sanitizeAssistantThreadTitle(ASSISTANT_BACKEND_ROUTE_ID) || 'assistant-default-route',
@@ -2878,8 +2902,11 @@ const saveAssistantSettings = (ownerUserId, input) => {
     }),
   }
 
-  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
-  updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+  persistAssistantBackendRoute(ownerUserId, route, timestamp)
+
+  if (route.isDefault) {
+    updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+  }
 
   return selectAssistantSettings(ownerUserId)
 }
@@ -2948,7 +2975,7 @@ const createAssistantRoute = (ownerUserId, input) => {
     }),
   }
 
-  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+  persistAssistantBackendRoute(ownerUserId, route, timestamp)
 
   if (isDefault) {
     updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
@@ -3048,7 +3075,7 @@ const updateAssistantRoute = (ownerUserId, routeId, input) => {
     }),
   }
 
-  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+  persistAssistantBackendRoute(ownerUserId, route, timestamp)
 
   if (isDefault) {
     updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
