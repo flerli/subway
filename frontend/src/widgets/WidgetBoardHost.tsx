@@ -966,13 +966,16 @@ export function WidgetBoardHost({
                 ) : null}
 
                 <ul className="bring-list">
-                  {bringList.openItems.slice(0, 4).map((item) => (
+                  {[...bringList.openItems].reverse().slice(0, 8).map((item) => (
                     <li
                       className="bring-row"
                       key={item.uuid || `${item.itemName}-${item.specification}`}
                     >
                       <div className="bring-copy">
                         <p className="bring-item-name">{item.itemName}</p>
+                        {item.category ? (
+                          <p className="bring-item-category">{item.category}</p>
+                        ) : null}
                         {item.specification ? (
                           <p className="bring-item-specification">{item.specification}</p>
                         ) : null}

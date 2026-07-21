@@ -3667,6 +3667,14 @@ const normalizeBringSnapshotItem = (value) => {
     itemName,
     specification: sanitizeBringItemSpecification(candidate.specification),
     uuid: normalizeBringItemUuid(candidate.uuid),
+    category:
+      typeof candidate.category === 'string' && candidate.category.trim().length > 0
+        ? candidate.category.trim().slice(0, 120)
+        : '',
+    recentAt:
+      typeof candidate.recentAt === 'string' && candidate.recentAt.trim().length > 0
+        ? candidate.recentAt.trim().slice(0, 64)
+        : '',
   }
 }
 

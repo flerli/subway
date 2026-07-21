@@ -59,6 +59,8 @@ export interface BringListItem {
   itemName: string
   specification: string
   uuid: string
+  category: string
+  recentAt: string
 }
 
 export interface BringListData {

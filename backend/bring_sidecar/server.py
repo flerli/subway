@@ -80,6 +80,22 @@ def normalize_items(items: Any) -> list[dict[str, str]]:
                 "itemName": item_name,
                 "specification": sanitize_text(read_field(item, "spec"), 320),
                 "uuid": sanitize_text(read_field(item, "uuid"), 120),
+                "category": sanitize_text(
+                    read_field(item, "category", read_field(item, "itemCategory", "")),
+                    120,
+                ),
+                "recentAt": sanitize_text(
+                    read_field(
+                        item,
+                        "updatedAt",
+                        read_field(
+                            item,
+                            "createdAt",
+                            read_field(item, "changedAt", read_field(item, "lastModified", "")),
+                        ),
+                    ),
+                    64,
+                ),
             }
         )
 

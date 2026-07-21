@@ -18,6 +18,8 @@ export interface BringListItemRecord {
   itemName: string
   specification: string
   uuid: string
+  category: string
+  recentAt: string
 }
 
 export interface BringListRecord {
@@ -150,6 +152,8 @@ const normalizeBringListItem = (value: unknown): BringListItemRecord | null => {
     itemName?: unknown
     specification?: unknown
     uuid?: unknown
+    category?: unknown
+    recentAt?: unknown
   }
 
   if (!value || typeof value !== 'object' || typeof candidate.itemName !== 'string') {
@@ -160,6 +164,8 @@ const normalizeBringListItem = (value: unknown): BringListItemRecord | null => {
     itemName: candidate.itemName,
     specification: typeof candidate.specification === 'string' ? candidate.specification : '',
     uuid: typeof candidate.uuid === 'string' ? candidate.uuid : '',
+    category: typeof candidate.category === 'string' ? candidate.category : '',
+    recentAt: typeof candidate.recentAt === 'string' ? candidate.recentAt : '',
   }
 }
 

@@ -60,6 +60,62 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
   const isReady = data.bringData.status === 'ready' && bringList !== null
   const isReadOnly = Boolean(bringList?.readOnly)
 
+  const buildItemKey = (item: BringListItem) => item.uuid || `${item.itemName}-${item.specification}`
+
+  const sortByRecentness = (items: BringListItem[]) =>
+    [...items].sort((left, right) => {
+      const leftTimestamp = Date.parse(left.recentAt)
+      const rightTimestamp = Date.parse(right.recentAt)
+
+      if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp)) {
+        return rightTimestamp - leftTimestamp
+      }
+
+      if (!Number.isNaN(rightTimestamp)) {
+        return 1
+      }
+
+      if (!Number.isNaN(leftTimestamp)) {
+        return -1
+      }
+
+      return 0
+    })
+
+  const openItemKeySet = new Set((bringList?.openItems ?? []).map(buildItemKey))
+  const filteredRecentItems = bringList
+    ? sortByRecentness(bringList.recentItems).filter((item) => !openItemKeySet.has(buildItemKey(item)))
+    : []
+
+  const openItemGroups = (() => {
+    if (!bringList) {
+      return [] as Array<{ category: string; items: BringListItem[] }>
+    }
+
+    const hasAnyCategory = bringList.openItems.some((item) => item.category.trim().length > 0)
+
+    if (!hasAnyCategory) {
+      return [{ category: '', items: bringList.openItems }]
+    }
+
+    const groupedItems = new Map<string, BringListItem[]>()
+
+    for (const item of bringList.openItems) {
+      const categoryKey = item.category.trim()
+      const items = groupedItems.get(categoryKey) ?? []
+      items.push(item)
+      groupedItems.set(categoryKey, items)
+    }
+
+    return Array.from(groupedItems.entries())
+      .sort(([leftCategory], [rightCategory]) => {
+        if (!leftCategory) return 1
+        if (!rightCategory) return -1
+        return leftCategory.localeCompare(rightCategory)
+      })
+      .map(([category, items]) => ({ category, items }))
+  })()
+
   const runAction = async (actionState: string, action: () => Promise<void>, fallbackMessage: string) => {
     setRequestState(actionState)
     setStatusMessage(widgetText.detail.workingState)
@@ -291,12 +347,19 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
           </div>
           {bringList.openItems.length > 0 ? (
             <ul className="bring-detail-list">
-              {bringList.openItems.map((item) => {
+              {openItemGroups.map((group) => (
+                <li className="bring-detail-group" key={group.category || 'uncategorized'}>
+                  {group.category ? (
+                    <p className="bring-detail-group-title">{group.category}</p>
+                  ) : null}
+
+                  <div className="bring-detail-matrix">
+                    {group.items.map((item) => {
                 const itemKey = item.uuid || `${item.itemName}-${item.specification}`
                 const isEditing = editingItemKey === itemKey
 
                 return (
-                  <li className="bring-detail-row" key={itemKey}>
+                  <article className="bring-detail-item-card" key={itemKey}>
                     <div className="bring-detail-row-copy">
                       <p className="bring-item-name">{item.itemName}</p>
                       {isEditing ? (
@@ -364,9 +427,12 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
                         </>
                       )}
                     </div>
-                  </li>
+                  </article>
                 )
-              })}
+                    })}
+                  </div>
+                </li>
+              ))}
             </ul>
           ) : (
             <div className="empty-state empty-state--expanded">
@@ -382,9 +448,9 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
           <div className="bring-detail-header-copy">
             <p className="bring-detail-section-title">{widgetText.detail.recentItemsTitle}</p>
           </div>
-          {bringList.recentItems.length > 0 ? (
+          {filteredRecentItems.length > 0 ? (
             <ul className="bring-detail-list">
-              {bringList.recentItems.slice(0, 8).map((item) => {
+              {filteredRecentItems.map((item) => {
                 const itemKey = item.uuid || `${item.itemName}-${item.specification}`
                 return (
                   <li className="bring-detail-row" key={`recent-${itemKey}`}>
