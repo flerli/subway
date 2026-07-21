@@ -885,9 +885,9 @@ select {
 }
 
 .widget-action-button--icon-only {
-  width: 2.5rem;
-  min-width: 2.5rem;
-  height: 2.5rem;
+  width: 3.75rem;
+  min-width: 3.75rem;
+  height: 3.75rem;
   padding: 0;
   border-radius: 12px;
   justify-content: center;
@@ -1724,14 +1724,20 @@ select {
 
 .assistant-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 0.5fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1.58fr);
   gap: 16px;
   min-height: 60svh;
   height: 100%;
+  align-items: stretch;
 }
 
 .assistant-column {
   align-content: start;
+  min-height: 0;
+}
+
+.assistant-column--main {
+  display: grid;
   min-height: 0;
 }
 
@@ -1820,6 +1826,7 @@ select {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+  min-width: 0;
 }
 
 .assistant-message-list {

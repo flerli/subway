@@ -1,4 +1,4 @@
-import type { FormEventHandler, KeyboardEventHandler } from 'react'
+import { useEffect, useRef, type FormEventHandler, type KeyboardEventHandler } from 'react'
 import type { AppTextBundle } from '../../i18n/appText'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import { AssistantMarkdown } from '../../assistant/AssistantMarkdown'
@@ -90,6 +90,7 @@ const shouldRenderMarkdown = (message: AssistantMessageRecord) =>
   message.role === 'assistant' || message.role === 'system'
 
 export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null)
   const {
     appText,
     availability,
@@ -125,6 +126,12 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
   const displayedEvents = selectedThread
     ? [...selectedThread.events, ...streamingEvents]
     : []
+
+  useEffect(() => {
+    if (turnState === 'completed' && !isTurnBusy) {
+      composerInputRef.current?.focus()
+    }
+  }, [turnState, isTurnBusy, selectedThreadId])
 
   return (
     <div className="assistant-layout assistant-layout--widget">
@@ -294,6 +301,7 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
             <label className="settings-label assistant-composer-field">
               <span>{appText.assistant.composerLabel}</span>
               <textarea
+                ref={composerInputRef}
                 className="settings-input assistant-composer-input"
                 rows={4}
                 value={draft}

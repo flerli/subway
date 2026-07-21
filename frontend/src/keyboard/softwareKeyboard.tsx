@@ -234,7 +234,9 @@ export const SoftwareKeyboardOverlay = ({
     event.preventDefault()
     setPressedKeyWithMinimumVisibility(keyId)
     playTick()
-    action()
+    window.requestAnimationFrame(() => {
+      action()
+    })
   }
 
   const handleKeyPressEnd = () => {

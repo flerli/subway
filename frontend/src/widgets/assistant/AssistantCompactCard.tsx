@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { AppTextBundle } from '../../i18n/appText'
 import type {
   AssistantMessageRecord,
@@ -36,18 +37,29 @@ export function AssistantCompactCard({
   threads,
   selectedThread,
 }: AssistantCompactCardProps) {
+  const conversationRef = useRef<HTMLDivElement | null>(null)
   const recentMessages = selectedThread?.messages.slice(-4) ?? []
   const selectedThreadTitle =
     selectedThread?.title ||
     threads[0]?.title ||
     appText.assistant.untitledThreadTitle
 
+  useEffect(() => {
+    const container = conversationRef.current
+
+    if (!container) {
+      return
+    }
+
+    container.scrollTop = container.scrollHeight
+  }, [recentMessages])
+
   return (
     <div className="assistant-compact">
       <div className="assistant-compact-thread">
         <h3>{selectedThreadTitle}</h3>
         {recentMessages.length > 0 ? (
-          <div className="assistant-compact-conversation">
+          <div className="assistant-compact-conversation" ref={conversationRef}>
             {recentMessages.map((message) => (
               <article
                 key={message.id}
