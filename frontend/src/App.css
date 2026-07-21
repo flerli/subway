@@ -884,6 +884,19 @@ select {
   flex: none;
 }
 
+.widget-action-button--icon-only {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border-radius: 12px;
+  justify-content: center;
+}
+
+.widget-action-button--icon-only span {
+  display: none;
+}
+
 .widget--active {
   border-color: rgba(214, 232, 255, 0.32);
 }
@@ -1711,9 +1724,10 @@ select {
 
 .assistant-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 0.62fr) minmax(0, 1.38fr);
+  grid-template-columns: minmax(180px, 0.5fr) minmax(0, 1.5fr);
   gap: 16px;
   min-height: 60svh;
+  height: 100%;
 }
 
 .assistant-column {
@@ -1805,10 +1819,10 @@ select {
   height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .assistant-message-list {
-  max-height: 58svh;
   overflow-y: auto;
   align-content: start;
   min-height: 0;
@@ -1881,6 +1895,8 @@ select {
 .assistant-compact-conversation {
   display: grid;
   gap: 8px;
+  max-height: 18rem;
+  overflow-y: auto;
 }
 
 .assistant-compact-bubble {
@@ -3881,7 +3897,7 @@ select {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color 80ms ease;
+  transition: background-color 80ms ease, transform 80ms ease, border-color 80ms ease, box-shadow 80ms ease;
   display: grid;
   place-items: center;
 }
@@ -3889,6 +3905,9 @@ select {
 .software-keyboard__key:active,
 .software-keyboard__key.is-pressed {
   background: rgba(214, 232, 255, 0.22);
+  transform: scale(0.97);
+  border-color: rgba(214, 232, 255, 0.36);
+  box-shadow: 0 0 0 1px rgba(214, 232, 255, 0.08), inset 0 0 0 1px rgba(214, 232, 255, 0.06);
 }
 
 .software-keyboard__key--action {

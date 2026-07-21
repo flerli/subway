@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
@@ -134,6 +135,8 @@ export const SoftwareKeyboardOverlay = ({
 }: SoftwareKeyboardOverlayProps) => {
   const [shiftActive, setShiftActive] = useState(false)
   const [pressedKeyId, setPressedKeyId] = useState<string | null>(null)
+  const pressedKeyClearTimeoutRef = useRef<number | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   const normalizedTarget = useMemo(
     () => normalizeKeyboardTarget(activeTarget),
@@ -145,9 +148,59 @@ export const SoftwareKeyboardOverlay = ({
     setPressedKeyId(null)
   }, [normalizedTarget])
 
+  useEffect(() => {
+    return () => {
+      if (pressedKeyClearTimeoutRef.current !== null) {
+        window.clearTimeout(pressedKeyClearTimeoutRef.current)
+      }
+    }
+  }, [])
+
   if (!normalizedTarget) return null
 
   const keepFocus = () => normalizedTarget.focus({ preventScroll: true })
+
+  const playTick = () => {
+    const AudioContextCtor = window.AudioContext
+
+    if (!AudioContextCtor) {
+      return
+    }
+
+    const audioContext = audioContextRef.current ?? new AudioContextCtor()
+    audioContextRef.current = audioContext
+
+    if (audioContext.state === 'suspended') {
+      void audioContext.resume().catch(() => {})
+    }
+
+    const oscillator = audioContext.createOscillator()
+    const gain = audioContext.createGain()
+    const startTime = audioContext.currentTime
+
+    oscillator.type = 'square'
+    oscillator.frequency.setValueAtTime(720, startTime)
+    gain.gain.setValueAtTime(0.001, startTime)
+    gain.gain.linearRampToValueAtTime(0.028, startTime + 0.003)
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.045)
+
+    oscillator.connect(gain)
+    gain.connect(audioContext.destination)
+    oscillator.start(startTime)
+    oscillator.stop(startTime + 0.05)
+  }
+
+  const setPressedKeyWithMinimumVisibility = (keyId: string) => {
+    if (pressedKeyClearTimeoutRef.current !== null) {
+      window.clearTimeout(pressedKeyClearTimeoutRef.current)
+    }
+
+    setPressedKeyId(keyId)
+    pressedKeyClearTimeoutRef.current = window.setTimeout(() => {
+      setPressedKeyId((currentKeyId) => (currentKeyId === keyId ? null : currentKeyId))
+      pressedKeyClearTimeoutRef.current = null
+    }, 85)
+  }
 
   const handleKeyPress = (key: string) => {
     keepFocus()
@@ -179,12 +232,13 @@ export const SoftwareKeyboardOverlay = ({
     action: () => void,
   ) => (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    setPressedKeyId(keyId)
+    setPressedKeyWithMinimumVisibility(keyId)
+    playTick()
     action()
   }
 
   const handleKeyPressEnd = () => {
-    setPressedKeyId(null)
+    // Keep the pressed state visible briefly even on very fast taps.
   }
 
   const renderKey = (key: string) => (

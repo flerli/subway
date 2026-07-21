@@ -528,7 +528,7 @@ export function WidgetBoardHost({
     return (
       <button
         type="button"
-        className={`widget-action-button${isExpanded ? ' is-active' : ''}`}
+        className={`widget-action-button widget-action-button--icon-only${isExpanded ? ' is-active' : ''}`}
         aria-label={
           isExpanded
             ? formatLocalizedText(appText.boardHost.collapseAriaLabel, {
@@ -551,11 +551,6 @@ export function WidgetBoardHost({
             strokeWidth="1.5"
           />
         </svg>
-        <span>
-          {isExpanded
-            ? appText.boardHost.collapseAction
-            : appText.boardHost.expandAction}
-        </span>
       </button>
     )
   }

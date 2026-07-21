@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import type { BringWidgetTranslation } from './translations'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import type { BringWidgetData, BringListItem } from '../widgetHostModels'
@@ -44,6 +44,7 @@ const isBringDetailViewData = (value: unknown): value is BringDetailViewData => 
 }
 
 export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
+  const itemNameInputRef = useRef<HTMLInputElement | null>(null)
   const [draftItemName, setDraftItemName] = useState('')
   const [draftSpecification, setDraftSpecification] = useState('')
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null)
@@ -101,6 +102,9 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
         setDraftItemName('')
         setDraftSpecification('')
         setStatusMessage(null)
+        window.setTimeout(() => {
+          itemNameInputRef.current?.focus()
+        }, 0)
       },
       widgetText.detail.updateFailedFallback,
     )
@@ -250,6 +254,7 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
           <label className="settings-label">
             <span>{widgetText.detail.itemNameLabel}</span>
             <input
+              ref={itemNameInputRef}
               className="settings-input"
               type="text"
               value={draftItemName}
