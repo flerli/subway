@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 
 export type SoftwareKeyboardTarget = HTMLInputElement | HTMLTextAreaElement
 
@@ -122,21 +127,23 @@ interface SoftwareKeyboardOverlayProps {
   onRequestClose: () => void
 }
 
-const preventDefault = (event: React.MouseEvent) => event.preventDefault()
-
 export const SoftwareKeyboardOverlay = ({
   activeTarget,
   layout = FOUNDATION_LAYOUT,
   onRequestClose,
 }: SoftwareKeyboardOverlayProps) => {
   const [shiftActive, setShiftActive] = useState(false)
+  const [pressedKeyId, setPressedKeyId] = useState<string | null>(null)
 
   const normalizedTarget = useMemo(
     () => normalizeKeyboardTarget(activeTarget),
     [activeTarget],
   )
 
-  useEffect(() => { setShiftActive(false) }, [normalizedTarget])
+  useEffect(() => {
+    setShiftActive(false)
+    setPressedKeyId(null)
+  }, [normalizedTarget])
 
   if (!normalizedTarget) return null
 
@@ -167,13 +174,28 @@ export const SoftwareKeyboardOverlay = ({
     }
   }
 
+  const handleKeyPressStart = (
+    keyId: string,
+    action: () => void,
+  ) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    setPressedKeyId(keyId)
+    action()
+  }
+
+  const handleKeyPressEnd = () => {
+    setPressedKeyId(null)
+  }
+
   const renderKey = (key: string) => (
     <button
       key={key}
       type="button"
-      className="software-keyboard__key"
-      onMouseDown={preventDefault}
-      onClick={() => handleKeyPress(key)}
+      className={`software-keyboard__key${pressedKeyId === key ? ' is-pressed' : ''}`}
+      onPointerDown={handleKeyPressStart(key, () => handleKeyPress(key))}
+      onPointerUp={handleKeyPressEnd}
+      onPointerCancel={handleKeyPressEnd}
+      onPointerLeave={handleKeyPressEnd}
     >
       {shiftActive ? key.toUpperCase() : key}
     </button>
@@ -183,7 +205,7 @@ export const SoftwareKeyboardOverlay = ({
     <div className="software-keyboard" aria-hidden="true">
       <div
         className="software-keyboard__panel"
-        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -191,8 +213,10 @@ export const SoftwareKeyboardOverlay = ({
           <button
             type="button"
             className="software-keyboard__close"
-            onMouseDown={preventDefault}
-            onClick={onRequestClose}
+            onPointerDown={handleKeyPressStart('close', onRequestClose)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
           >
             ✕ Close
           </button>
@@ -201,7 +225,16 @@ export const SoftwareKeyboardOverlay = ({
         {/* Row 0: numbers + ⌫ top-right */}
         <div className="software-keyboard__row">
           {layout.numberRow.map(renderKey)}
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleBackspace}>⌫</button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'backspace' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('backspace', handleBackspace)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ⌫
+          </button>
         </div>
 
         {/* Alpha rows */}
@@ -213,13 +246,76 @@ export const SoftwareKeyboardOverlay = ({
 
         {/* Footer: ⇧  space  ◀ ▲ ▼ ▶  ↵ */}
         <div className="software-keyboard__row software-keyboard__row--footer">
-          <button type="button" className={`software-keyboard__key software-keyboard__key--action${shiftActive ? ' is-active' : ''}`} onMouseDown={preventDefault} onClick={() => setShiftActive((v) => !v)}>⇧</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--space" onMouseDown={preventDefault} onClick={handleSpace}>space</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleLeft}>◀</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleUp}>▲</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleDown}>▼</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleRight}>▶</button>
-          <button type="button" className="software-keyboard__key software-keyboard__key--action" onMouseDown={preventDefault} onClick={handleEnter}>↵</button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${shiftActive ? ' is-active' : ''}${pressedKeyId === 'shift' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('shift', () => setShiftActive((v) => !v))}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ⇧
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--space${pressedKeyId === 'space' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('space', handleSpace)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            space
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'left' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('left', handleLeft)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'up' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('up', handleUp)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'down' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('down', handleDown)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ▼
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'right' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('right', handleRight)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ▶
+          </button>
+          <button
+            type="button"
+            className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'enter' ? ' is-pressed' : ''}`}
+            onPointerDown={handleKeyPressStart('enter', handleEnter)}
+            onPointerUp={handleKeyPressEnd}
+            onPointerCancel={handleKeyPressEnd}
+            onPointerLeave={handleKeyPressEnd}
+          >
+            ↵
+          </button>
         </div>
       </div>
     </div>

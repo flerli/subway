@@ -1890,10 +1890,11 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.05);
+  justify-self: start;
 }
 
 .assistant-compact-bubble--user {
-  margin-left: auto;
+  justify-self: end;
   border-color: rgba(126, 240, 200, 0.26);
   background: linear-gradient(180deg, rgba(126, 240, 200, 0.16) 0%, rgba(86, 182, 255, 0.08) 100%);
 }
@@ -1901,7 +1902,7 @@ select {
 .assistant-compact-bubble--assistant,
 .assistant-compact-bubble--system,
 .assistant-compact-bubble--tool {
-  margin-right: auto;
+  justify-self: start;
 }
 
 .assistant-markdown {
@@ -2049,6 +2050,9 @@ select {
   background: rgba(255, 255, 255, 0.04);
   display: grid;
   gap: 8px;
+  max-width: min(78%, 780px);
+  width: fit-content;
+  justify-self: start;
 }
 
 .assistant-tool-event-list {
@@ -2130,8 +2134,7 @@ select {
 }
 
 .assistant-message--user {
-  margin-left: auto;
-  margin-right: 4%;
+  justify-self: end;
   border-color: rgba(126, 240, 200, 0.26);
   background: linear-gradient(180deg, rgba(126, 240, 200, 0.16) 0%, rgba(86, 182, 255, 0.08) 100%);
 }
@@ -2139,8 +2142,7 @@ select {
 .assistant-message--assistant,
 .assistant-message--system,
 .assistant-message--tool {
-  margin-right: auto;
-  margin-left: 4%;
+  justify-self: start;
   border-color: rgba(126, 240, 200, 0.18);
   background: rgba(255, 255, 255, 0.05);
 }
@@ -3877,12 +3879,15 @@ select {
   font-weight: 700;
   letter-spacing: 0.02em;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background-color 80ms ease;
   display: grid;
   place-items: center;
 }
 
-.software-keyboard__key:active {
+.software-keyboard__key:active,
+.software-keyboard__key.is-pressed {
   background: rgba(214, 232, 255, 0.22);
 }
 
