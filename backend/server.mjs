@@ -2064,6 +2064,8 @@ const selectActiveAssistantBackendRouteRow = () =>
         backend_kind AS backendKind,
         base_url AS baseUrl,
         model_identifier AS modelIdentifier,
+        api_key AS apiKey,
+        headers_json AS headersJson,
         is_enabled AS enabled,
         is_active AS isActive,
         supports_streaming AS supportsStreaming,
