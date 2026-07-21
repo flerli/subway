@@ -540,7 +540,7 @@ export function AssistantSettingsPanel({
               : requestState === 'saved'
                 ? appText.widgetSettingsHost.savedState
                 : requestState === 'error'
-                  ? appText.widgetSettingsHost.saveFailedState
+                  ? statusMessage
                   : statusMessage}
         </p>
           </div>
