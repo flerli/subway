@@ -2918,6 +2918,25 @@ const buildAssistantProviderEndpointUrl = (route) => {
   return baseUrl
 }
 
+const isOpenAiCompatibleCustomAssistantRoute = (route) => {
+  if (route.backendKind !== 'custom') {
+    return false
+  }
+
+  const endpointUrl = buildAssistantProviderEndpointUrl(route)
+
+  try {
+    const pathname = new URL(endpointUrl).pathname.toLowerCase()
+
+    return (
+      pathname.includes('/chat/completion') ||
+      pathname.includes('/chat/completions')
+    )
+  } catch {
+    return false
+  }
+}
+
 const buildAssistantProviderHeaders = () => {
   const activeRoute = selectActiveAssistantBackendRouteRow()
   const headers = {
@@ -3097,6 +3116,21 @@ const buildAssistantProviderRequestPayload = (route, executionRequest) => {
         routeId: route.id,
       },
       user: executionRequest.ownerUserId,
+    }
+  }
+
+  if (isOpenAiCompatibleCustomAssistantRoute(route)) {
+    return {
+      model: sanitizeAssistantModelIdentifier(route.modelIdentifier),
+      messages: transcriptMessages,
+      stream: executionRequest.streamRequested,
+      user: executionRequest.ownerUserId,
+      metadata: {
+        source: 'subway',
+        ownerUserId: executionRequest.ownerUserId,
+        threadId: executionRequest.threadId,
+        routeId: route.id,
+      },
     }
   }
 
@@ -3463,6 +3497,12 @@ const executeAssistantTurn = async (
 
 const sendAssistantRuntimeError = (response, error) => {
   if (error instanceof AssistantRuntimeError) {
+    console.warn('Assistant runtime error.', {
+      message: error.message,
+      errorCode: error.errorCode,
+      statusCode: error.statusCode,
+      providerStatusCode: error.providerStatusCode,
+    })
     sendJson(response, error.statusCode, {
       error: error.message,
       errorCode: error.errorCode,
