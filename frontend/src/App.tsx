@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import './App.css'
 import {
   fetchCurrentSession,
@@ -39,6 +39,7 @@ import {
   fetchAssistantAvailability,
   fetchAssistantThreadDetail,
   fetchAssistantThreads,
+  resolveAssistantToolApproval,
   type AssistantMessageEventRecord,
   sendAssistantThreadMessage,
   streamAssistantThreadMessage,
@@ -114,7 +115,15 @@ import type {
   WeatherLocationData,
   WeatherWidgetData,
 } from './widgets/widgetHostModels'
-import { buildWidgetRegistry } from './widgets/widgetRegistry'
+import {
+  buildRegisteredWidgetMcpToolCatalog,
+  buildWidgetRegistry,
+} from './widgets/widgetRegistry'
+import {
+  mergeWidgetSettingsWithMcpConfiguration,
+  normalizeWidgetMcpConfiguration,
+  stripWidgetMcpConfigurationSettings,
+} from './widgets/widgetMcpConfiguration'
 import type {
   RegisteredWidget,
   WidgetHealthState,
@@ -583,6 +592,8 @@ function App() {
     useState<AssistantMessageRecord | null>(null)
   const [assistantStreamingEvents, setAssistantStreamingEvents] =
     useState<AssistantMessageEventRecord[]>([])
+  const [assistantResolvingApprovalRequestId, setAssistantResolvingApprovalRequestId] =
+    useState<string | null>(null)
   const [weatherRefreshToken, setWeatherRefreshToken] = useState(0)
   const [nextWeatherRefreshAt, setNextWeatherRefreshAt] = useState<number | null>(null)
   const [activeFilter, setActiveFilter] = useState<FilterId>(ALL_FILTER_ID)
@@ -612,6 +623,10 @@ function App() {
   const [widgetSettingsMap, setWidgetSettingsMap] = useState<
     Record<string, WidgetSettingsValues>
   >({})
+  const registeredWidgetMcpTools = useMemo(
+    () => buildRegisteredWidgetMcpToolCatalog(registeredWidgets, widgetSettingsMap),
+    [registeredWidgets, widgetSettingsMap],
+  )
   const [widgetHealthMap, setWidgetHealthMap] = useState<Record<string, WidgetHealthState>>({})
   const [, setDebugTapTimestamps] = useState<number[]>([])
   const [appPreferencesLoaded, setAppPreferencesLoaded] = useState(false)
@@ -668,7 +683,9 @@ function App() {
   const weatherError = resolveAppMessage(weatherErrorKey, appText)
   const assistantError = resolveAppMessage(assistantErrorKey, appText)
   const isAssistantTurnBusy =
-    assistantTurnState === 'sending' || assistantTurnState === 'streaming'
+    assistantTurnState === 'sending' ||
+    assistantTurnState === 'streaming' ||
+    assistantResolvingApprovalRequestId !== null
   const calendarRangeStart = formatLocalIsoDate(now)
   const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 30))
   const combinedWidgetSettingsMap: Record<string, WidgetSettingsValues> = {
@@ -1010,6 +1027,53 @@ function App() {
     }
   }
 
+  const handleResolveAssistantToolApproval = async (
+    approvalRequestId: string,
+    action: 'approve' | 'reject' | 'cancel',
+  ) => {
+    if (assistantResolvingApprovalRequestId) {
+      return
+    }
+
+    setAssistantResolvingApprovalRequestId(approvalRequestId)
+    setAssistantTurnError(null)
+
+    try {
+      const threadDetail = await resolveAssistantToolApproval(approvalRequestId, action)
+
+      setSelectedAssistantThread(threadDetail)
+      setSelectedAssistantThreadId(threadDetail.id)
+      setAssistantThreads((currentThreads) => {
+        const nextThreads = currentThreads.filter((thread) => thread.id !== threadDetail.id)
+
+        return [
+          {
+            id: threadDetail.id,
+            routeId: threadDetail.routeId,
+            title: threadDetail.title,
+            state: threadDetail.state,
+            messageCount: threadDetail.messages.length,
+            createdAt: threadDetail.createdAt,
+            updatedAt: threadDetail.updatedAt,
+          },
+          ...nextThreads,
+        ]
+      })
+      await refreshAssistantThreadList()
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      setAssistantTurnError(
+        error instanceof Error ? error.message : appText.messages.assistantSendFailed,
+      )
+    } finally {
+      setAssistantResolvingApprovalRequestId(null)
+    }
+  }
+
   const handleAssistantComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
@@ -1132,6 +1196,7 @@ function App() {
     try {
       if (assistantAvailability.activeRoute?.supportsStreaming) {
         await streamAssistantThreadMessage(currentThreadId, promptContent, {
+          widgetTools: registeredWidgetMcpTools,
           onStarted: (startedEvent) => {
             if (assistantTurnRunIdRef.current !== runId) {
               return
@@ -1194,7 +1259,9 @@ function App() {
           },
         })
       } else {
-        const completedTurn = await sendAssistantThreadMessage(currentThreadId, promptContent)
+        const completedTurn = await sendAssistantThreadMessage(currentThreadId, promptContent, {
+          widgetTools: registeredWidgetMcpTools,
+        })
 
         if (assistantTurnRunIdRef.current !== runId) {
           return
@@ -2854,8 +2921,21 @@ function App() {
       const widget = registeredWidgets.find(
         (registeredWidget) => registeredWidget.entity.id === widgetId,
       )
-      const normalizedSettings =
-        widget?.module.settingsDefinition?.normalize(draftSettings) ?? draftSettings
+      const currentSettings = widgetSettingsMap[widgetId] ?? {}
+      const mergedDraftSettings = {
+        ...currentSettings,
+        ...draftSettings,
+      }
+      const normalizedBusinessSettings =
+        widget?.module.settingsDefinition?.normalize(
+          stripWidgetMcpConfigurationSettings(mergedDraftSettings),
+        ) ?? stripWidgetMcpConfigurationSettings(mergedDraftSettings)
+      const normalizedSettings = widget
+        ? mergeWidgetSettingsWithMcpConfiguration(
+            normalizedBusinessSettings,
+            normalizeWidgetMcpConfiguration(widget, mergedDraftSettings),
+          )
+        : mergedDraftSettings
 
       if (widgetId === 'audio-visual') {
         const persistedPreferences = await updateAppPreferences({
@@ -2866,11 +2946,32 @@ function App() {
         const nextAudioVisualSettings = getAudioVisualSettingsFromAppPreferences(
           persistedPreferences,
         )
+        const nextPersistedSettings = widget
+          ? mergeWidgetSettingsWithMcpConfiguration(
+              nextAudioVisualSettings,
+              normalizeWidgetMcpConfiguration(widget, normalizedSettings),
+            )
+          : nextAudioVisualSettings
         setAudioVisualPreferenceSettings(nextAudioVisualSettings)
         setWidgetSettingsMap((currentValues) => ({
           ...currentValues,
-          'audio-visual': nextAudioVisualSettings,
+          'audio-visual': nextPersistedSettings,
         }))
+
+        try {
+          const persistedSettings = await updateWidgetSettings(widgetId, nextPersistedSettings)
+
+          setWidgetSettingsMap((currentValues) => ({
+            ...currentValues,
+            [widgetId]: persistedSettings.settings,
+          }))
+        } catch (error) {
+          if (isAuthRequiredError(error)) {
+            handleAuthRequired()
+            return
+          }
+        }
+
         setWidgetSettingsErrorKey(null)
         return
       }
@@ -2908,11 +3009,12 @@ function App() {
 
         try {
           const refreshedAvailability = await fetchAssistantAvailability()
+          const persistedSettings = await updateWidgetSettings(widgetId, normalizedSettings)
 
           setAssistantAvailability(refreshedAvailability)
           setWidgetSettingsMap((currentValues) => ({
             ...currentValues,
-            [widgetId]: normalizedSettings,
+            [widgetId]: persistedSettings.settings,
           }))
         } catch (error) {
           if (isAuthRequiredError(error)) {
@@ -3264,6 +3366,7 @@ function App() {
                 pendingUserMessage: assistantPendingUserMessage,
                 streamingMessage: assistantStreamingMessage,
                 streamingEvents: assistantStreamingEvents,
+                resolvingApprovalRequestId: assistantResolvingApprovalRequestId,
                 isTurnBusy: isAssistantTurnBusy,
               }}
               assistantActions={{
@@ -3277,6 +3380,9 @@ function App() {
                 onDraftChange: setAssistantDraft,
                 onSubmit: handleAssistantSubmit,
                 onComposerKeyDown: handleAssistantComposerKeyDown,
+                onResolveToolApproval: (approvalRequestId, action) => {
+                  void handleResolveAssistantToolApproval(approvalRequestId, action)
+                },
               }}
             />
           ) : (

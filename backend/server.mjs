@@ -114,6 +114,14 @@ const ASSISTANT_AVAILABILITY_STATUSES = new Set([
 const ASSISTANT_THREAD_STATES = new Set(['active', 'archived'])
 const ASSISTANT_MESSAGE_ROLES = new Set(['system', 'user', 'assistant', 'tool'])
 const ASSISTANT_MESSAGE_EVENT_TYPES = new Set(['tool_call'])
+const ASSISTANT_TOOL_APPROVAL_STATES = new Set([
+  'pending',
+  'approved',
+  'rejected',
+  'canceled',
+  'expired',
+])
+const ASSISTANT_TOOL_APPROVAL_TTL_MS = 10 * 60 * 1000
 const supportedRecurrenceFrequencySet = new Set([
   'none',
   'daily',
@@ -436,6 +444,98 @@ const sanitizeAssistantMcpServerName = (value) => {
   }
 
   return value.trim().slice(0, 120)
+}
+
+const sanitizeAssistantToolDescription = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 400)
+}
+
+const sanitizeAssistantWidgetLabel = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 120)
+}
+
+const sanitizeAssistantWidgetSourceLocation = (value) => {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value.trim().slice(0, 120)
+}
+
+const ASSISTANT_WIDGET_TOOL_ARGUMENT_TYPES = new Set(['string', 'number', 'boolean'])
+
+const normalizeAssistantWidgetToolArgument = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+  const key = sanitizeAssistantToolName(candidate.key ?? candidate.name)
+  const description = sanitizeAssistantToolDescription(candidate.description)
+  const type = ASSISTANT_WIDGET_TOOL_ARGUMENT_TYPES.has(candidate.type)
+    ? candidate.type
+    : 'string'
+
+  if (!key || !description) {
+    return null
+  }
+
+  return {
+    key,
+    description,
+    type,
+    required: candidate.required !== false,
+  }
+}
+
+const normalizeAssistantWidgetTools = (value) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const widgetToolsByName = new Map()
+
+  value.forEach((entry) => {
+    const candidate = entry && typeof entry === 'object' ? entry : {}
+    const widgetId = sanitizeAssistantWidgetLabel(candidate.widgetId)
+    const widgetTitle = sanitizeAssistantWidgetLabel(candidate.widgetTitle)
+    const sourceLocation = sanitizeAssistantWidgetSourceLocation(candidate.sourceLocation)
+    const toolName = sanitizeAssistantToolName(candidate.toolName ?? candidate.name)
+    const description = sanitizeAssistantToolDescription(candidate.description)
+    const humanAction = sanitizeAssistantToolDescription(candidate.humanAction)
+    const parityScope = Array.isArray(candidate.parityScope)
+      ? [...new Set(candidate.parityScope.filter((scope) => scope === 'read' || scope === 'write'))]
+      : []
+    const argumentsList = Array.isArray(candidate.arguments)
+      ? candidate.arguments
+          .map(normalizeAssistantWidgetToolArgument)
+          .filter((argumentDefinition) => argumentDefinition !== null)
+      : []
+
+    if (!widgetId || !toolName || !description) {
+      return
+    }
+
+    widgetToolsByName.set(toolName, {
+      widgetId,
+      widgetTitle: widgetTitle || widgetId,
+      sourceLocation,
+      toolName,
+      description,
+      humanAction: humanAction || description,
+      parityScope: parityScope.length > 0 ? parityScope : ['read'],
+      approvalRequired: candidate.approvalRequired === true,
+      redactArguments: candidate.redactArguments === true,
+      redactResults: candidate.redactResults === true,
+      arguments: argumentsList,
+    })
+  })
+
+  return [...widgetToolsByName.values()]
 }
 
 const parseAssistantMcpServers = (value) => {
@@ -1169,6 +1269,7 @@ const createBringListSnapshotsTableSql = `
 const createAssistantBackendRoutesTableSql = `
   CREATE TABLE IF NOT EXISTS assistant_backend_routes (
     id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
     label TEXT NOT NULL,
     backend_kind TEXT NOT NULL,
     base_url TEXT NOT NULL,
@@ -1176,6 +1277,7 @@ const createAssistantBackendRoutesTableSql = `
     api_key TEXT,
     headers_json TEXT NOT NULL DEFAULT '{}',
     is_enabled INTEGER NOT NULL DEFAULT 1,
+    is_default INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 0,
     supports_streaming INTEGER NOT NULL DEFAULT 1,
     supports_tools INTEGER NOT NULL DEFAULT 1,
@@ -1224,6 +1326,37 @@ const createAssistantMessageEventsTableSql = `
     message_id TEXT,
     event_type TEXT NOT NULL,
     payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, id),
+    FOREIGN KEY (owner_user_id, thread_id)
+      REFERENCES assistant_threads(owner_user_id, id)
+      ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id, message_id)
+      REFERENCES assistant_messages(owner_user_id, id)
+      ON DELETE CASCADE
+  )
+`
+
+const createAssistantToolApprovalRequestsTableSql = `
+  CREATE TABLE IF NOT EXISTS assistant_tool_approval_requests (
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    server_name TEXT NOT NULL,
+    widget_id TEXT,
+    widget_title TEXT,
+    source_location TEXT,
+    widget_tool_json TEXT NOT NULL,
+    arguments_json TEXT NOT NULL,
+    redact_arguments INTEGER NOT NULL DEFAULT 1,
+    redact_results INTEGER NOT NULL DEFAULT 1,
+    state TEXT NOT NULL DEFAULT 'pending',
+    expires_at TEXT NOT NULL,
+    resolved_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (owner_user_id, id),
@@ -1316,6 +1449,7 @@ db.exec(createAssistantBackendRoutesTableSql)
 db.exec(createAssistantThreadsTableSql)
 db.exec(createAssistantMessagesTableSql)
 db.exec(createAssistantMessageEventsTableSql)
+db.exec(createAssistantToolApprovalRequestsTableSql)
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
   ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
@@ -1332,6 +1466,37 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS assistant_message_events_owner_thread_created_idx
   ON assistant_message_events(owner_user_id, thread_id, created_at)
 `)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_tool_approval_requests_owner_state_expires_idx
+  ON assistant_tool_approval_requests(owner_user_id, state, expires_at)
+`)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS assistant_backend_routes_owner_updated_idx
+  ON assistant_backend_routes(owner_user_id, updated_at)
+`)
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS assistant_backend_routes_owner_default_idx
+  ON assistant_backend_routes(owner_user_id)
+  WHERE is_default = 1
+`)
+
+if (!hasColumn('assistant_backend_routes', 'owner_user_id')) {
+  db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN owner_user_id TEXT REFERENCES users(id)')
+}
+
+db.prepare(`
+  UPDATE assistant_backend_routes
+  SET owner_user_id = ?
+  WHERE owner_user_id IS NULL OR TRIM(owner_user_id) = ''
+`).run(defaultAppUserId)
+
+if (!hasColumn('assistant_backend_routes', 'is_default')) {
+  db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0')
+  db.exec(`
+    UPDATE assistant_backend_routes
+    SET is_default = CASE WHEN is_active = 1 THEN 1 ELSE 0 END
+  `)
+}
 
 if (!hasColumn('assistant_backend_routes', 'api_key')) {
   db.exec('ALTER TABLE assistant_backend_routes ADD COLUMN api_key TEXT')
@@ -1943,6 +2108,39 @@ const upsertWidgetSettings = (ownerUserId, widgetId, settingsJson, timestamp) =>
     `)
     .run(ownerUserId, widgetId, settingsJson, timestamp, timestamp)
 
+const selectWidgetSettingsByWidgetId = (ownerUserId, widgetId) =>
+  selectAllWidgetSettings(ownerUserId).find((entry) => entry.widgetId === widgetId) ?? null
+
+const readAssistantWidgetSettings = (ownerUserId, widgetId) =>
+  selectWidgetSettingsByWidgetId(ownerUserId, widgetId)?.settings ?? {}
+
+const parseAssistantJsonStringArgument = (value, fallback) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    throw new AssistantRuntimeError(
+      'Assistant tool JSON string argument is invalid.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+}
+
+const updateAssistantWidgetSettings = (ownerUserId, widgetId, settings) => {
+  const timestamp = new Date().toISOString()
+  upsertWidgetSettings(ownerUserId, widgetId, JSON.stringify(settings), timestamp)
+
+  return {
+    widgetId,
+    settings,
+    updatedAt: timestamp,
+  }
+}
+
 const selectBringIntegrationRow = (ownerUserId) =>
   db
     .prepare(`
@@ -2020,7 +2218,45 @@ const buildAssistantRoutePayload = (route) => {
     supportsTools: Boolean(route.supportsTools),
     supportsMarkdown: Boolean(route.supportsMarkdown),
     enabled: Boolean(route.enabled),
+    isDefault: Boolean(route.isDefault),
   }
+}
+
+const buildAssistantRouteSettingsPayload = (route) => {
+  if (!route) {
+    return null
+  }
+
+  return {
+    routeId: route.id,
+    label: sanitizeAssistantRouteLabel(route.label),
+    backendKind: normalizeAssistantBackendKind(route.backendKind),
+    baseUrl: sanitizeAssistantBaseUrl(route.baseUrl),
+    modelIdentifier: sanitizeAssistantModelIdentifier(route.modelIdentifier),
+    hasStoredApiKey: typeof route.apiKey === 'string' && route.apiKey.length > 0,
+    headersJson:
+      typeof route.headersJson === 'string' && route.headersJson.trim().length > 0
+        ? route.headersJson
+        : '{}',
+    enabled: route.enabled === true || route.enabled === 1,
+    isDefault: route.isDefault === true || route.isDefault === 1,
+    supportsStreaming: route.supportsStreaming === true || route.supportsStreaming === 1,
+    supportsTools: route.supportsTools === true || route.supportsTools === 1,
+    supportsMarkdown: route.supportsMarkdown === true || route.supportsMarkdown === 1,
+    updatedAt: typeof route.updatedAt === 'string' ? route.updatedAt : null,
+  }
+}
+
+const resolveAssistantRouteStatus = (route) => {
+  if (!route) {
+    return 'not_configured'
+  }
+
+  if (!route.enabled) {
+    return 'disabled'
+  }
+
+  return isAssistantRouteConfigured(route) ? 'available' : 'unavailable'
 }
 
 const buildAssistantAvailabilityFromRoute = (route) => {
@@ -2055,11 +2291,12 @@ const buildAssistantAvailabilityFromRoute = (route) => {
   }
 }
 
-const selectActiveAssistantBackendRouteRow = () =>
+const selectActiveAssistantBackendRouteRow = (ownerUserId) =>
   db
     .prepare(`
       SELECT
         id,
+        owner_user_id AS ownerUserId,
         label,
         backend_kind AS backendKind,
         base_url AS baseUrl,
@@ -2067,6 +2304,7 @@ const selectActiveAssistantBackendRouteRow = () =>
         api_key AS apiKey,
         headers_json AS headersJson,
         is_enabled AS enabled,
+        is_default AS isDefault,
         is_active AS isActive,
         supports_streaming AS supportsStreaming,
         supports_tools AS supportsTools,
@@ -2075,17 +2313,18 @@ const selectActiveAssistantBackendRouteRow = () =>
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM assistant_backend_routes
-      WHERE is_active = 1
+      WHERE owner_user_id = ? AND is_default = 1
       ORDER BY updated_at DESC, id ASC
       LIMIT 1
     `)
-    .get()
+    .get(ownerUserId)
 
-const upsertAssistantBackendRoute = (route, timestamp) =>
+const upsertAssistantBackendRoute = (ownerUserId, route, timestamp) =>
   db
     .prepare(`
       INSERT INTO assistant_backend_routes (
         id,
+        owner_user_id,
         label,
         backend_kind,
         base_url,
@@ -2093,6 +2332,7 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
         api_key,
         headers_json,
         is_enabled,
+        is_default,
         is_active,
         supports_streaming,
         supports_tools,
@@ -2101,8 +2341,9 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
         created_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
+        owner_user_id = excluded.owner_user_id,
         label = excluded.label,
         backend_kind = excluded.backend_kind,
         base_url = excluded.base_url,
@@ -2110,6 +2351,7 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
         api_key = excluded.api_key,
         headers_json = excluded.headers_json,
         is_enabled = excluded.is_enabled,
+        is_default = excluded.is_default,
         is_active = excluded.is_active,
         supports_streaming = excluded.supports_streaming,
         supports_tools = excluded.supports_tools,
@@ -2119,6 +2361,7 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
     `)
     .run(
       route.id,
+      ownerUserId,
       route.label,
       route.backendKind,
       route.baseUrl,
@@ -2126,6 +2369,7 @@ const upsertAssistantBackendRoute = (route, timestamp) =>
       route.apiKey ?? null,
       route.headersJson ?? '{}',
       normalizeAssistantBooleanFlag(route.enabled),
+      normalizeAssistantBooleanFlag(route.isDefault),
       normalizeAssistantBooleanFlag(route.isActive),
       normalizeAssistantBooleanFlag(route.supportsStreaming),
       normalizeAssistantBooleanFlag(route.supportsTools),
@@ -2165,12 +2409,13 @@ const resolveConfiguredAssistantBackendRoute = () => {
       ? 'available'
       : 'unavailable'
     : 'disabled'
+  route.isDefault = true
 
   return route
 }
 
 const ensureConfiguredAssistantBackendRoutePresent = () => {
-  if (selectActiveAssistantBackendRouteRow()) {
+  if (selectActiveAssistantBackendRouteRow(defaultAppUserId)) {
     return
   }
 
@@ -2185,8 +2430,10 @@ const ensureConfiguredAssistantBackendRoutePresent = () => {
   db.exec('BEGIN')
 
   try {
-    db.prepare('UPDATE assistant_backend_routes SET is_active = 0').run()
-    upsertAssistantBackendRoute(configuredRoute, timestamp)
+    db
+      .prepare('UPDATE assistant_backend_routes SET is_active = 0, is_default = 0, updated_at = ? WHERE owner_user_id = ?')
+      .run(timestamp, defaultAppUserId)
+    upsertAssistantBackendRoute(defaultAppUserId, configuredRoute, timestamp)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
@@ -2194,8 +2441,36 @@ const ensureConfiguredAssistantBackendRoutePresent = () => {
   }
 }
 
-const selectAssistantAvailability = () =>
-  buildAssistantAvailabilityFromRoute(selectActiveAssistantBackendRouteRow())
+const selectAssistantAvailability = (ownerUserId) =>
+  buildAssistantAvailabilityFromRoute(selectActiveAssistantBackendRouteRow(ownerUserId))
+
+const selectAssistantRoutes = (ownerUserId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        owner_user_id AS ownerUserId,
+        label,
+        backend_kind AS backendKind,
+        base_url AS baseUrl,
+        model_identifier AS modelIdentifier,
+        api_key AS apiKey,
+        headers_json AS headersJson,
+        is_enabled AS enabled,
+        is_default AS isDefault,
+        is_active AS isActive,
+        supports_streaming AS supportsStreaming,
+        supports_tools AS supportsTools,
+        supports_markdown AS supportsMarkdown,
+        status,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_backend_routes
+      WHERE owner_user_id = ?
+      ORDER BY is_default DESC, updated_at DESC, id ASC
+    `)
+    .all(ownerUserId)
+    .map(buildAssistantRouteSettingsPayload)
 
 const selectAssistantThreads = (ownerUserId) =>
   db
@@ -2242,11 +2517,12 @@ const selectAssistantThreadById = (ownerUserId, threadId) =>
     `)
     .get(ownerUserId, threadId)
 
-const selectAssistantBackendRouteById = (routeId) =>
+const selectAssistantBackendRouteById = (ownerUserId, routeId) =>
   db
     .prepare(`
       SELECT
         id,
+        owner_user_id AS ownerUserId,
         label,
         backend_kind AS backendKind,
         base_url AS baseUrl,
@@ -2254,6 +2530,7 @@ const selectAssistantBackendRouteById = (routeId) =>
         api_key AS apiKey,
         headers_json AS headersJson,
         is_enabled AS enabled,
+        is_default AS isDefault,
         is_active AS isActive,
         supports_streaming AS supportsStreaming,
         supports_tools AS supportsTools,
@@ -2262,13 +2539,13 @@ const selectAssistantBackendRouteById = (routeId) =>
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM assistant_backend_routes
-      WHERE id = ?
+      WHERE owner_user_id = ? AND id = ?
       LIMIT 1
     `)
-    .get(routeId)
+    .get(ownerUserId, routeId)
 
-const selectAssistantSettings = () => {
-  const route = selectActiveAssistantBackendRouteRow()
+const selectAssistantSettings = (ownerUserId) => {
+  const route = selectActiveAssistantBackendRouteRow(ownerUserId)
 
   return {
     routeId:
@@ -2285,6 +2562,7 @@ const selectAssistantSettings = () => {
         ? route.headersJson
         : '{}',
     enabled: route?.enabled === true || route?.enabled === 1,
+    isDefault: route?.isDefault === true || route?.isDefault === 1,
     supportsStreaming: route?.supportsStreaming === true || route?.supportsStreaming === 1,
     supportsTools: route?.supportsTools === true || route?.supportsTools === 1,
     supportsMarkdown: route?.supportsMarkdown === true || route?.supportsMarkdown === 1,
@@ -2292,12 +2570,16 @@ const selectAssistantSettings = () => {
   }
 }
 
-const updateAssistantRouteActivation = (routeId, timestamp) => {
+const updateAssistantRouteActivation = (ownerUserId, routeId, timestamp) => {
   db.exec('BEGIN')
 
   try {
-    db.prepare('UPDATE assistant_backend_routes SET is_active = 0, updated_at = ?').run(timestamp)
-    db.prepare('UPDATE assistant_backend_routes SET is_active = 1, updated_at = ? WHERE id = ?').run(timestamp, routeId)
+    db
+      .prepare('UPDATE assistant_backend_routes SET is_active = 0, is_default = 0, updated_at = ? WHERE owner_user_id = ?')
+      .run(timestamp, ownerUserId)
+    db
+      .prepare('UPDATE assistant_backend_routes SET is_active = 1, is_default = 1, updated_at = ? WHERE owner_user_id = ? AND id = ?')
+      .run(timestamp, ownerUserId, routeId)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
@@ -2305,8 +2587,8 @@ const updateAssistantRouteActivation = (routeId, timestamp) => {
   }
 }
 
-const saveAssistantSettings = (input) => {
-  const currentRoute = selectActiveAssistantBackendRouteRow()
+const saveAssistantSettings = (ownerUserId, input) => {
+  const currentRoute = selectActiveAssistantBackendRouteRow(ownerUserId)
   const routeId =
     sanitizeAssistantThreadTitle(input.routeId) ||
     sanitizeAssistantThreadTitle(currentRoute?.id) ||
@@ -2381,27 +2663,158 @@ const saveAssistantSettings = (input) => {
 
   const timestamp = new Date().toISOString()
 
-  upsertAssistantBackendRoute(
-    {
-      id: routeId,
+  const route = {
+    id: routeId,
+    label,
+    backendKind,
+    baseUrl,
+    modelIdentifier,
+    apiKey,
+    headersJson,
+    enabled,
+    isDefault: true,
+    isActive: true,
+    supportsStreaming,
+    supportsTools,
+    supportsMarkdown,
+    status: resolveAssistantRouteStatus({
       label,
       backendKind,
       baseUrl,
       modelIdentifier,
-      apiKey,
-      headersJson,
       enabled,
-      isActive: true,
-      supportsStreaming,
-      supportsTools,
-      supportsMarkdown,
-      status: enabled ? 'available' : 'disabled',
-    },
-    timestamp,
-  )
-  updateAssistantRouteActivation(routeId, timestamp)
+    }),
+  }
 
-  return selectAssistantSettings()
+  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+  updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+
+  return selectAssistantSettings(ownerUserId)
+}
+
+const createAssistantRoute = (ownerUserId, input) => {
+  const currentDefaultRoute = selectActiveAssistantBackendRouteRow(ownerUserId)
+  const routeId = sanitizeAssistantThreadTitle(input.routeId) || `assistant-route-${randomUUID()}`
+  const label = sanitizeAssistantRouteLabel(input.label)
+  const backendKind = normalizeAssistantBackendKind(input.backendKind)
+  const baseUrl = sanitizeAssistantBaseUrl(input.baseUrl)
+  const modelIdentifier = sanitizeAssistantModelIdentifier(input.modelIdentifier)
+  const headersJson =
+    typeof input.headersJson === 'string' && input.headersJson.trim().length > 0
+      ? input.headersJson.trim()
+      : '{}'
+  const enabled = input.enabled !== false
+  const isDefault = input.isDefault === true || !currentDefaultRoute
+  const apiKey = typeof input.apiKey === 'string' ? input.apiKey : ''
+
+  if (!label) {
+    throw new AssistantRuntimeError('Assistant route label is required.', 400, 'assistant_settings_label_required')
+  }
+
+  if (!backendKind) {
+    throw new AssistantRuntimeError('Assistant backend kind must be litellm or custom.', 400, 'assistant_settings_backend_kind_invalid')
+  }
+
+  if (!baseUrl) {
+    throw new AssistantRuntimeError('Assistant backend base URL is required.', 400, 'assistant_settings_base_url_required')
+  }
+
+  if (backendKind === 'litellm' && !modelIdentifier) {
+    throw new AssistantRuntimeError('Assistant model identifier is required for LiteLLM routes.', 400, 'assistant_settings_model_identifier_required')
+  }
+
+  try {
+    const parsedHeaders = JSON.parse(headersJson)
+    if (!parsedHeaders || typeof parsedHeaders !== 'object' || Array.isArray(parsedHeaders)) {
+      throw new Error('invalid')
+    }
+  } catch {
+    throw new AssistantRuntimeError('Assistant backend headers JSON must be a valid JSON object.', 400, 'assistant_settings_headers_invalid')
+  }
+
+  const timestamp = new Date().toISOString()
+  const route = {
+    id: routeId,
+    label,
+    backendKind,
+    baseUrl,
+    modelIdentifier,
+    apiKey,
+    headersJson,
+    enabled,
+    isDefault,
+    isActive: isDefault,
+    supportsStreaming: input.supportsStreaming === true,
+    supportsTools: input.supportsTools === true,
+    supportsMarkdown: input.supportsMarkdown !== false,
+    status: resolveAssistantRouteStatus({
+      label,
+      backendKind,
+      baseUrl,
+      modelIdentifier,
+      enabled,
+    }),
+  }
+
+  upsertAssistantBackendRoute(ownerUserId, route, timestamp)
+
+  if (isDefault) {
+    updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+  }
+
+  return selectAssistantBackendRouteById(ownerUserId, routeId)
+}
+
+const updateAssistantRoute = (ownerUserId, routeId, input) => {
+  const currentRoute = selectAssistantBackendRouteById(ownerUserId, routeId)
+
+  if (!currentRoute) {
+    throw new AssistantRuntimeError('Assistant route not found.', 404, 'assistant_route_not_found')
+  }
+
+  return createAssistantRoute(ownerUserId, {
+    routeId,
+    label: input.label ?? currentRoute.label,
+    backendKind: input.backendKind ?? currentRoute.backendKind,
+    baseUrl: input.baseUrl ?? currentRoute.baseUrl,
+    modelIdentifier: input.modelIdentifier ?? currentRoute.modelIdentifier,
+    apiKey:
+      typeof input.apiKey === 'string' && input.apiKey.length > 0
+        ? input.apiKey
+        : currentRoute.apiKey,
+    headersJson: input.headersJson ?? currentRoute.headersJson,
+    enabled: input.enabled ?? Boolean(currentRoute.enabled),
+    isDefault: input.isDefault ?? Boolean(currentRoute.isDefault),
+    supportsStreaming: input.supportsStreaming ?? Boolean(currentRoute.supportsStreaming),
+    supportsTools: input.supportsTools ?? Boolean(currentRoute.supportsTools),
+    supportsMarkdown: input.supportsMarkdown ?? Boolean(currentRoute.supportsMarkdown),
+  })
+}
+
+const setDefaultAssistantRoute = (ownerUserId, routeId) => {
+  const route = selectAssistantBackendRouteById(ownerUserId, routeId)
+
+  if (!route) {
+    throw new AssistantRuntimeError('Assistant route not found.', 404, 'assistant_route_not_found')
+  }
+
+  const timestamp = new Date().toISOString()
+  updateAssistantRouteActivation(ownerUserId, routeId, timestamp)
+  updateAssistantBackendRouteStatus(routeId, resolveAssistantRouteStatus(route), timestamp)
+
+  return buildAssistantRouteSettingsPayload(selectAssistantBackendRouteById(ownerUserId, routeId))
+}
+
+const deleteAssistantRoute = (ownerUserId, routeId) => {
+  const route = selectAssistantBackendRouteById(ownerUserId, routeId)
+
+  if (!route) {
+    throw new AssistantRuntimeError('Assistant route not found.', 404, 'assistant_route_not_found')
+  }
+
+  db.prepare('DELETE FROM assistant_backend_routes WHERE owner_user_id = ? AND id = ?').run(ownerUserId, routeId)
+
+  return routeId
 }
 
 const selectAssistantMessagesByThreadId = (ownerUserId, threadId) =>
@@ -2465,6 +2878,121 @@ const selectAssistantMessageEventsByThreadId = (ownerUserId, threadId) =>
         updatedAt: row.updatedAt,
       }
     })
+
+const selectWidgetToolCallEventsByWidgetId = (ownerUserId, widgetId) =>
+  db
+    .prepare(`
+      SELECT
+        assistant_message_events.id AS id,
+        assistant_message_events.thread_id AS threadId,
+        assistant_message_events.message_id AS messageId,
+        assistant_message_events.event_type AS eventType,
+        assistant_message_events.payload_json AS payloadJson,
+        assistant_message_events.created_at AS createdAt,
+        assistant_message_events.updated_at AS updatedAt,
+        assistant_threads.title AS threadTitle
+      FROM assistant_message_events
+      LEFT JOIN assistant_threads
+        ON assistant_threads.owner_user_id = assistant_message_events.owner_user_id
+       AND assistant_threads.id = assistant_message_events.thread_id
+      WHERE assistant_message_events.owner_user_id = ?
+      ORDER BY assistant_message_events.created_at DESC, assistant_message_events.id DESC
+    `)
+    .all(ownerUserId)
+    .flatMap((row) => {
+      let payload = {}
+
+      try {
+        payload = JSON.parse(row.payloadJson)
+      } catch {
+        payload = {}
+      }
+
+      if (
+        row.eventType !== 'tool_call' ||
+        typeof payload.widgetId !== 'string' ||
+        payload.widgetId !== widgetId
+      ) {
+        return []
+      }
+
+      return [
+        {
+          id: row.id,
+          threadId: row.threadId,
+          threadTitle:
+            typeof row.threadTitle === 'string' && row.threadTitle.length > 0
+              ? row.threadTitle
+              : '',
+          messageId:
+            typeof row.messageId === 'string' && row.messageId.length > 0
+              ? row.messageId
+              : null,
+          eventType: 'tool_call',
+          payload,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        },
+      ]
+    })
+
+const selectAssistantToolApprovalRequestById = (ownerUserId, approvalRequestId) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        thread_id AS threadId,
+        message_id AS messageId,
+        tool_call_id AS toolCallId,
+        tool_name AS toolName,
+        server_name AS serverName,
+        widget_id AS widgetId,
+        widget_title AS widgetTitle,
+        source_location AS sourceLocation,
+        widget_tool_json AS widgetToolJson,
+        arguments_json AS argumentsJson,
+        redact_arguments AS redactArguments,
+        redact_results AS redactResults,
+        state,
+        expires_at AS expiresAt,
+        resolved_at AS resolvedAt,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_tool_approval_requests
+      WHERE owner_user_id = ? AND id = ?
+      LIMIT 1
+    `)
+    .get(ownerUserId, approvalRequestId)
+
+const selectExpiredPendingAssistantToolApprovalRequests = (ownerUserId, nowIsoTimestamp) =>
+  db
+    .prepare(`
+      SELECT
+        id,
+        thread_id AS threadId,
+        message_id AS messageId,
+        tool_call_id AS toolCallId,
+        tool_name AS toolName,
+        server_name AS serverName,
+        widget_id AS widgetId,
+        widget_title AS widgetTitle,
+        source_location AS sourceLocation,
+        widget_tool_json AS widgetToolJson,
+        arguments_json AS argumentsJson,
+        redact_arguments AS redactArguments,
+        redact_results AS redactResults,
+        state,
+        expires_at AS expiresAt,
+        resolved_at AS resolvedAt,
+        created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM assistant_tool_approval_requests
+      WHERE owner_user_id = ?
+        AND state = 'pending'
+        AND expires_at <= ?
+      ORDER BY expires_at ASC, id ASC
+    `)
+    .all(ownerUserId, nowIsoTimestamp)
 
 const selectNextAssistantMessageSequenceIndex = (ownerUserId, threadId) => {
   const result = db
@@ -2559,6 +3087,71 @@ const insertAssistantMessageEvent = (ownerUserId, event, createdAt, updatedAt) =
       updatedAt,
     )
 
+const insertAssistantToolApprovalRequest = (ownerUserId, approvalRequest, createdAt, updatedAt) =>
+  db
+    .prepare(`
+      INSERT INTO assistant_tool_approval_requests (
+        owner_user_id,
+        id,
+        thread_id,
+        message_id,
+        tool_call_id,
+        tool_name,
+        server_name,
+        widget_id,
+        widget_title,
+        source_location,
+        widget_tool_json,
+        arguments_json,
+        redact_arguments,
+        redact_results,
+        state,
+        expires_at,
+        resolved_at,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      ownerUserId,
+      approvalRequest.id,
+      approvalRequest.threadId,
+      approvalRequest.messageId,
+      approvalRequest.toolCallId,
+      approvalRequest.toolName,
+      approvalRequest.serverName,
+      approvalRequest.widgetId,
+      approvalRequest.widgetTitle,
+      approvalRequest.sourceLocation,
+      approvalRequest.widgetToolJson,
+      approvalRequest.argumentsJson,
+      approvalRequest.redactArguments ? 1 : 0,
+      approvalRequest.redactResults ? 1 : 0,
+      approvalRequest.state,
+      approvalRequest.expiresAt,
+      approvalRequest.resolvedAt,
+      createdAt,
+      updatedAt,
+    )
+
+const updateAssistantToolApprovalRequestState = (
+  ownerUserId,
+  approvalRequestId,
+  state,
+  resolvedAt,
+  updatedAt,
+) =>
+  db
+    .prepare(`
+      UPDATE assistant_tool_approval_requests
+      SET state = ?,
+          resolved_at = ?,
+          updated_at = ?
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(state, resolvedAt, updatedAt, ownerUserId, approvalRequestId)
+
 const updateAssistantThreadRuntimeState = (
   ownerUserId,
   threadId,
@@ -2585,6 +3178,28 @@ const updateAssistantBackendRouteStatus = (routeId, status, updatedAt) =>
       WHERE id = ?
     `)
     .run(status, updatedAt, routeId)
+
+const buildAssistantThreadDetailPayload = (ownerUserId, threadId) => {
+  const thread = selectAssistantThreadById(ownerUserId, threadId)
+
+  if (!thread) {
+    throw new AssistantRuntimeError(
+      'Assistant thread not found.',
+      404,
+      'assistant_thread_not_found',
+    )
+  }
+
+  expireAssistantToolApprovals(ownerUserId)
+
+  return {
+    thread: buildAssistantThreadPayload(thread),
+    messages: selectAssistantMessagesByThreadId(ownerUserId, threadId),
+    events: selectAssistantMessageEventsByThreadId(ownerUserId, threadId).map(
+      buildAssistantMessageEventPayload,
+    ),
+  }
+}
 
 const buildAssistantThreadPayload = (thread) => ({
   id: thread.id,
@@ -2679,14 +3294,79 @@ const redactAssistantToolValue = (value) => {
 const buildAssistantToolDisplayPayload = (value, shouldRedact) =>
   shouldRedact ? redactAssistantToolValue(value) : value
 
-const resolveAssistantMcpToolConfig = (toolName) => {
+const buildAssistantProviderToolDefinitions = (widgetTools) =>
+  widgetTools.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.toolName,
+      description: tool.description,
+      parameters: {
+        type: 'object',
+        properties: Object.fromEntries(
+          tool.arguments.map((argumentDefinition) => [
+            argumentDefinition.key,
+            {
+              type: argumentDefinition.type,
+              description: argumentDefinition.description,
+            },
+          ]),
+        ),
+        required: tool.arguments
+          .filter((argumentDefinition) => argumentDefinition.required)
+          .map((argumentDefinition) => argumentDefinition.key),
+        additionalProperties: false,
+      },
+    },
+  }))
+
+const normalizeAssistantToolEventStatus = (value) => {
+  switch (value) {
+    case 'approval_pending':
+    case 'approval_approved':
+    case 'approval_rejected':
+    case 'approval_canceled':
+    case 'approval_expired':
+    case 'completed':
+    case 'error':
+      return value
+    default:
+      return 'running'
+  }
+}
+
+const normalizeAssistantToolApprovalState = (value) =>
+  ASSISTANT_TOOL_APPROVAL_STATES.has(value) ? value : 'pending'
+
+const resolveAssistantMcpToolConfig = (toolName, widgetTools = []) => {
+  const discoveredWidgetTool =
+    widgetTools.find((widgetTool) => widgetTool.toolName === toolName) ?? null
+  const internalWidgetToolHandler = assistantInternalWidgetToolHandlers.get(toolName) ?? null
+
+  if (internalWidgetToolHandler) {
+    return {
+      kind: 'internal',
+      server: {
+        name: internalWidgetToolHandler.serverName,
+      },
+      tool: {
+        name: toolName,
+        redactArguments: discoveredWidgetTool?.redactArguments === true,
+        redactResults: discoveredWidgetTool?.redactResults === true,
+      },
+      widgetTool: discoveredWidgetTool,
+      execute: internalWidgetToolHandler.execute,
+    }
+  }
+
   for (const server of configuredAssistantMcpServers) {
     const matchedTool = server.tools.find((tool) => tool.name === toolName) ?? null
 
     if (matchedTool) {
       return {
+        kind: 'remote',
         server,
         tool: matchedTool,
+        widgetTool: discoveredWidgetTool,
       }
     }
   }
@@ -2769,8 +3449,8 @@ const normalizeAssistantToolResultPayload = (value) => {
   return null
 }
 
-const callAssistantMcpTool = async (toolCall) => {
-  const resolvedToolConfig = resolveAssistantMcpToolConfig(toolCall.toolName)
+const callAssistantMcpTool = async (ownerUserId, toolCall, widgetTools = []) => {
+  const resolvedToolConfig = resolveAssistantMcpToolConfig(toolCall.toolName, widgetTools)
 
   if (!resolvedToolConfig) {
     throw new AssistantRuntimeError(
@@ -2778,6 +3458,33 @@ const callAssistantMcpTool = async (toolCall) => {
       400,
       'assistant_tool_not_found',
     )
+  }
+
+  if (resolvedToolConfig.kind === 'internal') {
+    const normalizedResult = normalizeAssistantToolResultPayload(
+      await resolvedToolConfig.execute(ownerUserId, toolCall.arguments),
+    )
+
+    if (normalizedResult === null) {
+      throw new AssistantRuntimeError(
+        'Assistant widget tool returned an invalid result payload.',
+        502,
+        'assistant_tool_result_invalid',
+      )
+    }
+
+    return {
+      serverName: resolvedToolConfig.server.name,
+      toolName: toolCall.toolName,
+      toolId: toolCall.id,
+      widgetId: resolvedToolConfig.widgetTool?.widgetId ?? null,
+      widgetTitle: resolvedToolConfig.widgetTool?.widgetTitle ?? null,
+      sourceLocation: resolvedToolConfig.widgetTool?.sourceLocation ?? null,
+      arguments: toolCall.arguments,
+      result: normalizedResult,
+      redactArguments: resolvedToolConfig.tool.redactArguments,
+      redactResults: resolvedToolConfig.tool.redactResults,
+    }
   }
 
   const controller = new AbortController()
@@ -2835,6 +3542,9 @@ const callAssistantMcpTool = async (toolCall) => {
       serverName: resolvedToolConfig.server.name,
       toolName: toolCall.toolName,
       toolId: toolCall.id,
+      widgetId: resolvedToolConfig.widgetTool?.widgetId ?? null,
+      widgetTitle: resolvedToolConfig.widgetTool?.widgetTitle ?? null,
+      sourceLocation: resolvedToolConfig.widgetTool?.sourceLocation ?? null,
       arguments: toolCall.arguments,
       result: normalizedResult,
       redactArguments: resolvedToolConfig.tool.redactArguments,
@@ -2876,7 +3586,36 @@ const buildAssistantToolEventRecord = (
     toolCallId: toolExecution.toolId,
     serverName: toolExecution.serverName,
     toolName: toolExecution.toolName,
-    status: error ? 'error' : phase,
+    widgetId:
+      typeof toolExecution.widgetId === 'string' && toolExecution.widgetId.length > 0
+        ? toolExecution.widgetId
+        : null,
+    widgetTitle:
+      typeof toolExecution.widgetTitle === 'string' && toolExecution.widgetTitle.length > 0
+        ? toolExecution.widgetTitle
+        : null,
+    sourceLocation:
+      typeof toolExecution.sourceLocation === 'string' && toolExecution.sourceLocation.length > 0
+        ? toolExecution.sourceLocation
+        : null,
+    status: error ? 'error' : normalizeAssistantToolEventStatus(phase),
+    approval:
+      typeof toolExecution.approvalRequestId === 'string' &&
+      toolExecution.approvalRequestId.length > 0
+        ? {
+            requestId: toolExecution.approvalRequestId,
+            required: toolExecution.approvalRequired === true,
+            state: normalizeAssistantToolApprovalState(toolExecution.approvalState),
+            expiresAt:
+              typeof toolExecution.approvalExpiresAt === 'string'
+                ? toolExecution.approvalExpiresAt
+                : null,
+            resolvedAt:
+              typeof toolExecution.approvalResolvedAt === 'string'
+                ? toolExecution.approvalResolvedAt
+                : null,
+          }
+        : null,
     displayArguments: buildAssistantToolDisplayPayload(
       toolExecution.arguments,
       toolExecution.redactArguments,
@@ -2903,6 +3642,297 @@ const buildAssistantToolEventRecord = (
     createdAt: timestamp,
     updatedAt: timestamp,
   }
+}
+
+const buildAssistantToolApprovalRequestRecord = (
+  threadId,
+  assistantMessageId,
+  toolExecution,
+  widgetTool,
+) => {
+  const createdAt = new Date().toISOString()
+  const expiresAt = new Date(Date.now() + ASSISTANT_TOOL_APPROVAL_TTL_MS).toISOString()
+
+  return {
+    id: `assistant-approval-${randomUUID()}`,
+    threadId,
+    messageId: assistantMessageId,
+    toolCallId: toolExecution.toolId,
+    toolName: toolExecution.toolName,
+    serverName: toolExecution.serverName,
+    widgetId: widgetTool?.widgetId ?? null,
+    widgetTitle: widgetTool?.widgetTitle ?? null,
+    sourceLocation: widgetTool?.sourceLocation ?? null,
+    widgetToolJson: JSON.stringify(widgetTool ?? {}),
+    argumentsJson: JSON.stringify(toolExecution.arguments ?? {}),
+    redactArguments: toolExecution.redactArguments === true,
+    redactResults: toolExecution.redactResults === true,
+    state: 'pending',
+    expiresAt,
+    resolvedAt: null,
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+const parseAssistantApprovalRequestArguments = (approvalRequest) => {
+  try {
+    const parsedValue = JSON.parse(approvalRequest.argumentsJson)
+
+    return parsedValue && typeof parsedValue === 'object' ? parsedValue : {}
+  } catch {
+    return {}
+  }
+}
+
+const parseAssistantApprovalRequestWidgetTool = (approvalRequest) => {
+  try {
+    const parsedValue = JSON.parse(approvalRequest.widgetToolJson)
+
+    return parsedValue && typeof parsedValue === 'object' ? parsedValue : {}
+  } catch {
+    return {}
+  }
+}
+
+const buildAssistantApprovalEventExecution = (
+  approvalRequest,
+  approvalState,
+  resolvedAt = null,
+) => {
+  const widgetTool = parseAssistantApprovalRequestWidgetTool(approvalRequest)
+
+  return {
+    serverName: approvalRequest.serverName,
+    toolName: approvalRequest.toolName,
+    toolId: approvalRequest.toolCallId,
+    widgetId: approvalRequest.widgetId,
+    widgetTitle: approvalRequest.widgetTitle,
+    sourceLocation: approvalRequest.sourceLocation,
+    arguments: parseAssistantApprovalRequestArguments(approvalRequest),
+    result: null,
+    redactArguments: approvalRequest.redactArguments === true || approvalRequest.redactArguments === 1,
+    redactResults: approvalRequest.redactResults === true || approvalRequest.redactResults === 1,
+    approvalRequestId: approvalRequest.id,
+    approvalRequired: true,
+    approvalState,
+    approvalExpiresAt: approvalRequest.expiresAt,
+    approvalResolvedAt: resolvedAt,
+    widgetTool,
+  }
+}
+
+const expireAssistantToolApprovals = (ownerUserId) => {
+  const nowTimestamp = new Date().toISOString()
+  const expiredRequests = selectExpiredPendingAssistantToolApprovalRequests(
+    ownerUserId,
+    nowTimestamp,
+  )
+
+  for (const approvalRequest of expiredRequests) {
+    updateAssistantToolApprovalRequestState(
+      ownerUserId,
+      approvalRequest.id,
+      'expired',
+      nowTimestamp,
+      nowTimestamp,
+    )
+
+    const expiredEvent = buildAssistantToolEventRecord(
+      ownerUserId,
+      approvalRequest.threadId,
+      approvalRequest.messageId,
+      buildAssistantApprovalEventExecution(approvalRequest, 'expired', nowTimestamp),
+      'approval_expired',
+    )
+    insertAssistantMessageEvent(
+      ownerUserId,
+      expiredEvent,
+      expiredEvent.createdAt,
+      expiredEvent.updatedAt,
+    )
+
+    const thread = selectAssistantThreadById(ownerUserId, approvalRequest.threadId)
+
+    if (thread) {
+      updateAssistantThreadRuntimeState(
+        ownerUserId,
+        approvalRequest.threadId,
+        thread.routeId,
+        thread.title,
+        nowTimestamp,
+      )
+    }
+  }
+}
+
+const resolveAssistantToolApproval = async (ownerUserId, approvalRequestId, action) => {
+  expireAssistantToolApprovals(ownerUserId)
+
+  const approvalRequest = selectAssistantToolApprovalRequestById(ownerUserId, approvalRequestId)
+
+  if (!approvalRequest) {
+    throw new AssistantRuntimeError(
+      'Assistant tool approval request not found.',
+      404,
+      'assistant_tool_approval_not_found',
+    )
+  }
+
+  if (approvalRequest.state !== 'pending') {
+    return buildAssistantThreadDetailPayload(ownerUserId, approvalRequest.threadId)
+  }
+
+  const normalizedAction =
+    action === 'reject' || action === 'cancel' || action === 'approve' ? action : ''
+
+  if (!normalizedAction) {
+    throw new AssistantRuntimeError(
+      'Assistant tool approval action must be approve, reject, or cancel.',
+      400,
+      'assistant_tool_approval_action_invalid',
+    )
+  }
+
+  const resolvedAt = new Date().toISOString()
+  const thread = selectAssistantThreadById(ownerUserId, approvalRequest.threadId)
+
+  if (!thread) {
+    throw new AssistantRuntimeError(
+      'Assistant thread not found.',
+      404,
+      'assistant_thread_not_found',
+    )
+  }
+
+  if (approvalRequest.expiresAt <= resolvedAt) {
+    updateAssistantToolApprovalRequestState(
+      ownerUserId,
+      approvalRequest.id,
+      'expired',
+      resolvedAt,
+      resolvedAt,
+    )
+    const expiredEvent = buildAssistantToolEventRecord(
+      ownerUserId,
+      approvalRequest.threadId,
+      approvalRequest.messageId,
+      buildAssistantApprovalEventExecution(approvalRequest, 'expired', resolvedAt),
+      'approval_expired',
+    )
+    insertAssistantMessageEvent(
+      ownerUserId,
+      expiredEvent,
+      expiredEvent.createdAt,
+      expiredEvent.updatedAt,
+    )
+    updateAssistantThreadRuntimeState(
+      ownerUserId,
+      approvalRequest.threadId,
+      thread.routeId,
+      thread.title,
+      resolvedAt,
+    )
+
+    return buildAssistantThreadDetailPayload(ownerUserId, approvalRequest.threadId)
+  }
+
+  const nextState =
+    normalizedAction === 'approve'
+      ? 'approved'
+      : normalizedAction === 'reject'
+        ? 'rejected'
+        : 'canceled'
+
+  updateAssistantToolApprovalRequestState(
+    ownerUserId,
+    approvalRequest.id,
+    nextState,
+    resolvedAt,
+    resolvedAt,
+  )
+
+  const approvalEvent = buildAssistantToolEventRecord(
+    ownerUserId,
+    approvalRequest.threadId,
+    approvalRequest.messageId,
+    buildAssistantApprovalEventExecution(approvalRequest, nextState, resolvedAt),
+    nextState === 'approved'
+      ? 'approval_approved'
+      : nextState === 'rejected'
+        ? 'approval_rejected'
+        : 'approval_canceled',
+  )
+  insertAssistantMessageEvent(
+    ownerUserId,
+    approvalEvent,
+    approvalEvent.createdAt,
+    approvalEvent.updatedAt,
+  )
+
+  if (nextState === 'approved') {
+    try {
+      const toolExecution = await callAssistantMcpTool(
+        ownerUserId,
+        {
+          id: approvalRequest.toolCallId,
+          toolName: approvalRequest.toolName,
+          arguments: parseAssistantApprovalRequestArguments(approvalRequest),
+        },
+        [parseAssistantApprovalRequestWidgetTool(approvalRequest)],
+      )
+
+      const completedEvent = buildAssistantToolEventRecord(
+        ownerUserId,
+        approvalRequest.threadId,
+        approvalRequest.messageId,
+        {
+          ...toolExecution,
+          approvalRequestId: approvalRequest.id,
+          approvalRequired: true,
+          approvalState: 'approved',
+          approvalExpiresAt: approvalRequest.expiresAt,
+          approvalResolvedAt: resolvedAt,
+        },
+        'completed',
+      )
+      insertAssistantMessageEvent(
+        ownerUserId,
+        completedEvent,
+        completedEvent.createdAt,
+        completedEvent.updatedAt,
+      )
+    } catch (error) {
+      if (!(error instanceof AssistantRuntimeError)) {
+        throw error
+      }
+
+      const errorEvent = buildAssistantToolEventRecord(
+        ownerUserId,
+        approvalRequest.threadId,
+        approvalRequest.messageId,
+        buildAssistantApprovalEventExecution(approvalRequest, 'approved', resolvedAt),
+        'approved',
+        error,
+      )
+      insertAssistantMessageEvent(
+        ownerUserId,
+        errorEvent,
+        errorEvent.createdAt,
+        errorEvent.updatedAt,
+      )
+    }
+  }
+
+  updateAssistantThreadRuntimeState(
+    ownerUserId,
+    approvalRequest.threadId,
+    thread.routeId,
+    thread.title,
+    resolvedAt,
+  )
+
+  return buildAssistantThreadDetailPayload(ownerUserId, approvalRequest.threadId)
 }
 
 const buildAssistantProviderEndpointUrl = (route) => {
@@ -2944,16 +3974,15 @@ const isOpenAiCompatibleCustomAssistantRoute = (route) => {
   }
 }
 
-const buildAssistantProviderHeaders = () => {
-  const activeRoute = selectActiveAssistantBackendRouteRow()
+const buildAssistantProviderHeaders = (route) => {
   const headers = {
     'Content-Type': 'application/json',
-    ...parseAssistantConfiguredHeaders(activeRoute?.headersJson ?? ASSISTANT_BACKEND_HEADERS_JSON),
+    ...parseAssistantConfiguredHeaders(route?.headersJson ?? ASSISTANT_BACKEND_HEADERS_JSON),
   }
 
   const routeApiKey =
-    typeof activeRoute?.apiKey === 'string' && activeRoute.apiKey.length > 0
-      ? activeRoute.apiKey
+    typeof route?.apiKey === 'string' && route.apiKey.length > 0
+      ? route.apiKey
       : ASSISTANT_BACKEND_API_KEY
 
   if (routeApiKey && typeof headers.Authorization !== 'string') {
@@ -3110,18 +4139,27 @@ const buildAssistantProviderRequestPayload = (route, executionRequest) => {
     role: message.role,
     content: message.content,
   }))
+  const widgetTools = executionRequest.toolsRequested === true
+    ? normalizeAssistantWidgetTools(executionRequest.widgetTools)
+    : []
+  const providerTools = widgetTools.length > 0
+    ? buildAssistantProviderToolDefinitions(widgetTools)
+    : null
+  const metadata = {
+    source: 'subway',
+    ownerUserId: executionRequest.ownerUserId,
+    threadId: executionRequest.threadId,
+    routeId: route.id,
+    widgetTools,
+  }
 
   if (route.backendKind === 'litellm') {
     return {
       model: route.modelIdentifier,
       messages: transcriptMessages,
       stream: executionRequest.streamRequested,
-      metadata: {
-        source: 'subway',
-        ownerUserId: executionRequest.ownerUserId,
-        threadId: executionRequest.threadId,
-        routeId: route.id,
-      },
+      ...(providerTools ? { tools: providerTools } : {}),
+      metadata,
       user: executionRequest.ownerUserId,
     }
   }
@@ -3131,13 +4169,9 @@ const buildAssistantProviderRequestPayload = (route, executionRequest) => {
       model: sanitizeAssistantModelIdentifier(route.modelIdentifier),
       messages: transcriptMessages,
       stream: executionRequest.streamRequested,
+      ...(providerTools ? { tools: providerTools } : {}),
       user: executionRequest.ownerUserId,
-      metadata: {
-        source: 'subway',
-        ownerUserId: executionRequest.ownerUserId,
-        threadId: executionRequest.threadId,
-        routeId: route.id,
-      },
+      metadata,
     }
   }
 
@@ -3146,12 +4180,9 @@ const buildAssistantProviderRequestPayload = (route, executionRequest) => {
     messages: transcriptMessages,
     stream: executionRequest.streamRequested,
     requestedTools: executionRequest.toolsRequested,
-    metadata: {
-      source: 'subway',
-      ownerUserId: executionRequest.ownerUserId,
-      threadId: executionRequest.threadId,
-      routeId: route.id,
-    },
+    ...(providerTools ? { tools: providerTools } : {}),
+    availableWidgetTools: widgetTools,
+    metadata,
   }
 }
 
@@ -3194,7 +4225,7 @@ const callAssistantProviderRoute = async (route, executionRequest) => {
   try {
     const response = await fetch(buildAssistantProviderEndpointUrl(route), {
       method: 'POST',
-      headers: buildAssistantProviderHeaders(),
+      headers: buildAssistantProviderHeaders(route),
       body: JSON.stringify(buildAssistantProviderRequestPayload(route, executionRequest)),
       signal: controller.signal,
     })
@@ -3246,11 +4277,11 @@ const callAssistantProviderRoute = async (route, executionRequest) => {
   }
 }
 
-const resolveAssistantExecutionRoute = (thread, options = {}) => {
+const resolveAssistantExecutionRoute = (ownerUserId, thread, options = {}) => {
   const threadRouteId = typeof thread.routeId === 'string' ? thread.routeId : ''
   const route = threadRouteId
-    ? selectAssistantBackendRouteById(threadRouteId) ?? selectActiveAssistantBackendRouteRow()
-    : selectActiveAssistantBackendRouteRow()
+    ? selectAssistantBackendRouteById(ownerUserId, threadRouteId) ?? selectActiveAssistantBackendRouteRow(ownerUserId)
+    : selectActiveAssistantBackendRouteRow(ownerUserId)
 
   if (!route) {
     throw new AssistantRuntimeError(
@@ -3341,7 +4372,7 @@ const executeAssistantTurn = async (
     )
   }
 
-  const route = resolveAssistantExecutionRoute(thread, options)
+  const route = resolveAssistantExecutionRoute(ownerUserId, thread, options)
   const threadTitle =
     sanitizeAssistantThreadTitle(thread.title) || deriveAssistantThreadTitleFromPrompt(content)
   const userMessageTimestamp = new Date().toISOString()
@@ -3376,6 +4407,7 @@ const executeAssistantTurn = async (
       ],
       streamRequested: options.streamRequested === true,
       toolsRequested: options.toolsRequested === true,
+      widgetTools: normalizeAssistantWidgetTools(options.widgetTools),
     })
 
     const assistantMessageTimestamp = new Date().toISOString()
@@ -3399,17 +4431,65 @@ const executeAssistantTurn = async (
     )
 
     if (options.toolsRequested === true && providerResponse.toolCalls.length > 0) {
+      const widgetTools = normalizeAssistantWidgetTools(options.widgetTools)
+
       for (const toolCall of providerResponse.toolCalls) {
-        const resolvedToolConfig = resolveAssistantMcpToolConfig(toolCall.toolName)
+        const resolvedToolConfig = resolveAssistantMcpToolConfig(
+          toolCall.toolName,
+          widgetTools,
+        )
         const startedToolExecution = {
           serverName: resolvedToolConfig?.server.name ?? 'mcp',
           toolName: toolCall.toolName,
           toolId: toolCall.id,
+          widgetId: resolvedToolConfig?.widgetTool?.widgetId ?? null,
+          widgetTitle: resolvedToolConfig?.widgetTool?.widgetTitle ?? null,
+          sourceLocation: resolvedToolConfig?.widgetTool?.sourceLocation ?? null,
           arguments: toolCall.arguments,
           result: null,
           redactArguments: resolvedToolConfig?.tool.redactArguments !== false,
           redactResults: resolvedToolConfig?.tool.redactResults !== false,
         }
+
+        if (resolvedToolConfig?.widgetTool?.approvalRequired === true) {
+          const approvalRequest = buildAssistantToolApprovalRequestRecord(
+            threadId,
+            assistantMessageId,
+            startedToolExecution,
+            resolvedToolConfig.widgetTool,
+          )
+
+          insertAssistantToolApprovalRequest(
+            ownerUserId,
+            approvalRequest,
+            approvalRequest.createdAt,
+            approvalRequest.updatedAt,
+          )
+
+          const pendingApprovalEvent = buildAssistantToolEventRecord(
+            ownerUserId,
+            threadId,
+            assistantMessageId,
+            {
+              ...startedToolExecution,
+              approvalRequestId: approvalRequest.id,
+              approvalRequired: true,
+              approvalState: 'pending',
+              approvalExpiresAt: approvalRequest.expiresAt,
+              approvalResolvedAt: null,
+            },
+            'approval_pending',
+          )
+          insertAssistantMessageEvent(
+            ownerUserId,
+            pendingApprovalEvent,
+            pendingApprovalEvent.createdAt,
+            pendingApprovalEvent.updatedAt,
+          )
+          toolEvents.push(pendingApprovalEvent)
+          continue
+        }
+
         const startedEvent = buildAssistantToolEventRecord(
           ownerUserId,
           threadId,
@@ -3426,7 +4506,11 @@ const executeAssistantTurn = async (
         toolEvents.push(startedEvent)
 
         try {
-          const toolExecution = await callAssistantMcpTool(toolCall)
+          const toolExecution = await callAssistantMcpTool(
+            ownerUserId,
+            toolCall,
+            widgetTools,
+          )
           const completedEvent = buildAssistantToolEventRecord(
             ownerUserId,
             threadId,
@@ -4418,6 +5502,1130 @@ const getWeatherPayload = async (latitude, longitude, locationLabel) => {
     throw error
   }
 }
+
+const normalizeAssistantToolNumberArgument = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsedValue = Number.parseFloat(value)
+
+    return Number.isFinite(parsedValue) ? parsedValue : null
+  }
+
+  return null
+}
+
+const normalizeAssistantToolStringArgument = (value, fallback = '') => {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  return value.trim()
+}
+
+const normalizeAssistantToolIntegerArgument = (value) => {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsedValue = Number.parseInt(value, 10)
+
+    return Number.isInteger(parsedValue) ? parsedValue : null
+  }
+
+  return null
+}
+
+const buildAssistantArrivalBoardEvents = (
+  agendaItems,
+  referenceTime,
+  units,
+) => {
+  const nowTime = referenceTime.getTime()
+  const referenceYear = referenceTime.getFullYear()
+  const referenceMonth = referenceTime.getMonth()
+  const referenceDay = referenceTime.getDate()
+
+  return agendaItems
+    .map((agendaItem) => {
+      const eventDateTime = new Date(`${agendaItem.date}T${agendaItem.time}:00`)
+
+      return {
+        agendaItem,
+        eventDateTime,
+      }
+    })
+    .filter(({ eventDateTime }) => !Number.isNaN(eventDateTime.getTime()))
+    .filter(({ eventDateTime }) => eventDateTime.getTime() >= nowTime)
+    .sort((left, right) => left.eventDateTime.getTime() - right.eventDateTime.getTime())
+    .slice(0, 6)
+    .map(({ agendaItem, eventDateTime }) => {
+      const diffMs = Math.max(eventDateTime.getTime() - nowTime, 0)
+      const totalHours = diffMs / (1000 * 60 * 60)
+      const totalMinutes = Math.round(diffMs / (1000 * 60))
+
+      let value
+
+      if (totalHours < 5) {
+        const hours = Math.floor(totalMinutes / 60)
+        const minutes = totalMinutes % 60
+        value =
+          hours > 0
+            ? `${hours}${units.hourAbbr} ${minutes}${units.minuteAbbr}`
+            : `${Math.max(1, minutes)}${units.minuteAbbr}`
+      } else if (totalHours < 24) {
+        value = `${Math.max(1, Math.round(totalHours))}${units.hourAbbr}`
+      } else {
+        value = `${Math.max(1, Math.ceil(totalHours / 24))}${units.dayAbbr}`
+      }
+
+      return {
+        line: `arrival-${agendaItem.line}`,
+        eventId: agendaItem.eventId,
+        eventDate: agendaItem.date,
+        destination: agendaItem.title,
+        direction: 'Arrival',
+        platform: agendaItem.location,
+        value,
+        unit: '',
+        isSameDay:
+          eventDateTime.getFullYear() === referenceYear &&
+          eventDateTime.getMonth() === referenceMonth &&
+          eventDateTime.getDate() === referenceDay,
+        members: agendaItem.members,
+        cancelled: agendaItem.cancelled,
+      }
+    })
+}
+
+const executeArrivalBoardGetWidgetStateTool = async (ownerUserId, argumentsValue) => {
+  const focusedMemberId = normalizeAssistantToolStringArgument(argumentsValue?.focusedMemberId)
+  const settings = readAssistantWidgetSettings(ownerUserId, 'arrival-board')
+  const calendarSettings = readAssistantWidgetSettings(ownerUserId, 'calendar')
+  const now = new Date()
+  const agendaItems = selectCalendarEventsByRange(
+    ownerUserId,
+    formatIsoDate(now),
+    formatIsoDate(addDaysToDate(now, 30)),
+  ).map((event) => buildCalendarEventPayload(event, event.occurrenceDate))
+
+  const filteredAgenda = agendaItems
+    .filter((agendaItem) =>
+      !focusedMemberId ||
+      agendaItem.members.includes(LEGACY_HOUSEHOLD_MEMBER_ID) ||
+      agendaItem.members.includes(focusedMemberId),
+    )
+    .filter((agendaItem) =>
+      calendarSettings.includeHouseholdEvents === false
+        ? !agendaItem.members.includes(LEGACY_HOUSEHOLD_MEMBER_ID)
+        : true,
+    )
+    .sort(
+      (left, right) => left.date.localeCompare(right.date) || left.time.localeCompare(right.time),
+    )
+
+  return {
+    widgetId: 'arrival-board',
+    settings,
+    focusedMemberId: focusedMemberId || null,
+    arrivals: buildAssistantArrivalBoardEvents(filteredAgenda, now, {
+      hourAbbr: 'h',
+      minuteAbbr: 'm',
+      dayAbbr: 'd',
+    }),
+  }
+}
+
+const executeArrivalBoardGetArrivalEventDetailTool = async (ownerUserId, argumentsValue) => {
+  const eventId = normalizeAssistantToolStringArgument(argumentsValue?.eventId)
+
+  if (!eventId) {
+    throw new AssistantRuntimeError(
+      'Arrival board event detail requires an eventId argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const baseEventId = eventId.includes('__') ? eventId.split('__')[0] : eventId
+  const occurrenceDate = eventId.includes('__') ? eventId.split('__')[1] : null
+  const event = selectNormalizedCalendarEventById(ownerUserId, baseEventId)
+
+  if (!event) {
+    throw new AssistantRuntimeError(
+      'Arrival board event detail could not find the selected calendar event.',
+      404,
+      'assistant_tool_not_found',
+    )
+  }
+
+  return {
+    widgetId: 'arrival-board',
+    calendarEvent: buildCalendarEventPayload(event, occurrenceDate || event.date),
+  }
+}
+
+const executeArrivalBoardUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  const currentSettings = readAssistantWidgetSettings(ownerUserId, 'arrival-board')
+  const nextSettings = {
+    boardTitle:
+      normalizeAssistantToolStringArgument(argumentsValue?.boardTitle) ||
+      (typeof currentSettings.boardTitle === 'string' ? currentSettings.boardTitle : 'Home Info Kiosk'),
+    boardSubheading:
+      normalizeAssistantToolStringArgument(argumentsValue?.boardSubheading) ||
+      (typeof currentSettings.boardSubheading === 'string'
+        ? currentSettings.boardSubheading
+        : 'Family Avenue South'),
+  }
+
+  return updateAssistantWidgetSettings(ownerUserId, 'arrival-board', nextSettings)
+}
+
+const executeWeatherGetWidgetStateTool = async (ownerUserId) => {
+  const settings = readAssistantWidgetSettings(ownerUserId, 'weather')
+  const normalizedSettings = typeof settings === 'object' && settings ? settings : {}
+  const configuredLocations = Array.isArray(normalizedSettings.locations)
+    ? normalizedSettings.locations
+    : [
+        {
+          id: 'location-1',
+          label: typeof normalizedSettings.locationLabel === 'string' ? normalizedSettings.locationLabel : WEATHER_LOCATION,
+          latitude:
+            typeof normalizedSettings.latitude === 'number' ? normalizedSettings.latitude : WEATHER_LATITUDE,
+          longitude:
+            typeof normalizedSettings.longitude === 'number' ? normalizedSettings.longitude : WEATHER_LONGITUDE,
+        },
+      ]
+
+  const locations = []
+
+  for (const location of configuredLocations) {
+    const latitude = normalizeAssistantToolNumberArgument(location.latitude)
+    const longitude = normalizeAssistantToolNumberArgument(location.longitude)
+    const label = normalizeAssistantToolStringArgument(location.label, WEATHER_LOCATION)
+
+    if (latitude === null || longitude === null) {
+      continue
+    }
+
+    locations.push({
+      id: typeof location.id === 'string' ? location.id : `location-${locations.length + 1}`,
+      weather: await getWeatherPayload(latitude, longitude, label),
+    })
+  }
+
+  return {
+    widgetId: 'weather',
+    settings: normalizedSettings,
+    locations,
+  }
+}
+
+const executeWeatherUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  const currentSettings = readAssistantWidgetSettings(ownerUserId, 'weather')
+  let parsedLocations = currentSettings.locations
+
+  if (typeof argumentsValue?.locations === 'string' && argumentsValue.locations.trim().length > 0) {
+    try {
+      parsedLocations = JSON.parse(argumentsValue.locations)
+    } catch {
+      throw new AssistantRuntimeError(
+        'Weather widget locations must be a valid JSON array string when provided.',
+        400,
+        'assistant_tool_arguments_invalid',
+      )
+    }
+  }
+
+  const nextSettings = {
+    ...currentSettings,
+    ...(typeof argumentsValue?.focusLocationSlot === 'number'
+      ? { focusLocationSlot: argumentsValue.focusLocationSlot }
+      : {}),
+    ...(typeof argumentsValue?.refreshIntervalMinutes === 'number'
+      ? { refreshIntervalMinutes: argumentsValue.refreshIntervalMinutes }
+      : {}),
+    ...(parsedLocations ? { locations: parsedLocations } : {}),
+  }
+
+  return updateAssistantWidgetSettings(ownerUserId, 'weather', nextSettings)
+}
+
+const executeYoutubeGetWidgetStateTool = async (ownerUserId) => ({
+  widgetId: 'youtube',
+  settings: readAssistantWidgetSettings(ownerUserId, 'youtube'),
+})
+
+const executeYoutubeSearchVideosTool = async (_ownerUserId, argumentsValue) => {
+  const query = normalizeAssistantToolStringArgument(argumentsValue?.query)
+
+  if (!query) {
+    throw new AssistantRuntimeError(
+      'YouTube search requires a query argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const videos = await searchYoutubeVideos(query)
+  const selectedVideoId = normalizeAssistantToolStringArgument(argumentsValue?.selectedVideoId)
+  const selectedIndex = normalizeAssistantToolNumberArgument(argumentsValue?.selectedIndex)
+  const selectedVideo = selectedVideoId
+    ? videos.find((video) => video.id === selectedVideoId) ?? null
+    : typeof selectedIndex === 'number' && Number.isInteger(selectedIndex)
+      ? videos[selectedIndex] ?? null
+      : videos[0] ?? null
+
+  return {
+    widgetId: 'youtube',
+    query,
+    videos,
+    selectedVideo: selectedVideo ?? null,
+  }
+}
+
+const executeYoutubeUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  const currentSettings = readAssistantWidgetSettings(ownerUserId, 'youtube')
+  const nextSettings = {
+    ...currentSettings,
+    ...(typeof argumentsValue?.autoPlay === 'boolean'
+      ? { autoPlay: argumentsValue.autoPlay }
+      : {}),
+  }
+
+  return updateAssistantWidgetSettings(ownerUserId, 'youtube', nextSettings)
+}
+
+const executeTodoGetWidgetStateTool = async (ownerUserId, argumentsValue) => {
+  const focusedMemberId = normalizeAssistantToolStringArgument(argumentsValue?.focusedMemberId)
+  const settings = readAssistantWidgetSettings(ownerUserId, 'todo')
+  const todoItems = selectAllTodoItems(ownerUserId)
+  const maxItems =
+    typeof settings.maxItems === 'number' && Number.isFinite(settings.maxItems)
+      ? Math.min(Math.max(Math.round(settings.maxItems), 1), 10)
+      : 4
+  const showCompleted =
+    typeof settings.showCompleted === 'boolean' ? settings.showCompleted : true
+
+  const visibleItems = todoItems
+    .filter((todoItem) =>
+      !focusedMemberId ||
+      todoItem.members.includes(LEGACY_HOUSEHOLD_MEMBER_ID) ||
+      todoItem.members.includes(focusedMemberId),
+    )
+    .filter((todoItem) => (showCompleted ? true : !todoItem.done))
+    .slice(0, maxItems)
+
+  return {
+    widgetId: 'todo',
+    settings: {
+      maxItems,
+      showCompleted,
+    },
+    focusedMemberId: focusedMemberId || null,
+    items: visibleItems,
+  }
+}
+
+const executeTodoSetItemDoneStateTool = async (ownerUserId, argumentsValue) => {
+  const todoItemId = normalizeAssistantToolStringArgument(argumentsValue?.todoItemId)
+
+  if (!todoItemId || typeof argumentsValue?.done !== 'boolean') {
+    throw new AssistantRuntimeError(
+      'Todo item updates require todoItemId and done arguments.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const existingTodoItem = selectTodoItemById(ownerUserId, todoItemId)
+
+  if (!existingTodoItem) {
+    throw new AssistantRuntimeError(
+      'Todo item not found.',
+      404,
+      'assistant_tool_not_found',
+    )
+  }
+
+  const updatedAt = new Date().toISOString()
+  updateTodoItemDone(ownerUserId, todoItemId, argumentsValue.done, updatedAt)
+
+  return {
+    widgetId: 'todo',
+    todoItem: {
+      ...existingTodoItem,
+      done: argumentsValue.done,
+    },
+    updatedAt,
+  }
+}
+
+const executeTodoUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  const currentSettings = readAssistantWidgetSettings(ownerUserId, 'todo')
+  const nextSettings = {
+    maxItems:
+      typeof argumentsValue?.maxItems === 'number' && argumentsValue.maxItems > 0
+        ? Math.min(argumentsValue.maxItems, 10)
+        : typeof currentSettings.maxItems === 'number' && currentSettings.maxItems > 0
+          ? Math.min(currentSettings.maxItems, 10)
+          : 4,
+    showCompleted:
+      typeof argumentsValue?.showCompleted === 'boolean'
+        ? argumentsValue.showCompleted
+        : typeof currentSettings.showCompleted === 'boolean'
+          ? currentSettings.showCompleted
+          : true,
+  }
+
+  return updateAssistantWidgetSettings(ownerUserId, 'todo', nextSettings)
+}
+
+const buildAssistantCalendarToolInput = (argumentsValue, currentEvent = null) => {
+  const scopeMode = normalizeAssistantToolStringArgument(argumentsValue?.scopeMode)
+  const scopeMemberIds = parseAssistantJsonStringArgument(
+    argumentsValue?.scopeMemberIdsJson,
+    currentEvent?.scope?.memberIds ?? [],
+  )
+  const recurrenceByWeekdays = parseAssistantJsonStringArgument(
+    argumentsValue?.recurrenceByWeekdaysJson,
+    currentEvent?.recurrence?.byWeekdays ?? [],
+  )
+  const excludedDates = parseAssistantJsonStringArgument(
+    argumentsValue?.excludedDatesJson,
+    currentEvent?.excludedDates ?? [],
+  )
+
+  return {
+    ...(typeof argumentsValue?.date === 'string' ? { date: argumentsValue.date } : {}),
+    ...(typeof argumentsValue?.time === 'string' ? { time: argumentsValue.time } : {}),
+    ...(typeof argumentsValue?.title === 'string' ? { title: argumentsValue.title } : {}),
+    ...(typeof argumentsValue?.description === 'string'
+      ? { description: argumentsValue.description }
+      : {}),
+    ...(typeof argumentsValue?.locationCity === 'string'
+      ? { locationCity: argumentsValue.locationCity }
+      : {}),
+    ...(typeof argumentsValue?.locationCountry === 'string'
+      ? { locationCountry: argumentsValue.locationCountry }
+      : {}),
+    ...(scopeMode
+      ? {
+          scope: {
+            mode: scopeMode,
+            memberIds: Array.isArray(scopeMemberIds) ? scopeMemberIds : [],
+          },
+        }
+      : {}),
+    recurrence: {
+      frequency:
+        normalizeAssistantToolStringArgument(argumentsValue?.recurrenceFrequency) ||
+        currentEvent?.recurrence?.frequency ||
+        'none',
+      interval:
+        normalizeAssistantToolIntegerArgument(argumentsValue?.recurrenceInterval) ??
+        currentEvent?.recurrence?.interval ??
+        1,
+      byWeekdays: Array.isArray(recurrenceByWeekdays) ? recurrenceByWeekdays : [],
+      count:
+        normalizeAssistantToolIntegerArgument(argumentsValue?.recurrenceCount) ??
+        currentEvent?.recurrence?.count ??
+        null,
+      until:
+        normalizeAssistantToolStringArgument(argumentsValue?.recurrenceUntil) ||
+        currentEvent?.recurrence?.until ||
+        null,
+    },
+    excludedDates: Array.isArray(excludedDates) ? excludedDates : [],
+    ...(typeof argumentsValue?.cancelled === 'boolean'
+      ? { cancelled: argumentsValue.cancelled }
+      : {}),
+  }
+}
+
+const executeCalendarGetRangeEventsTool = async (ownerUserId, argumentsValue) => {
+  const rangeStart = normalizeAssistantToolStringArgument(argumentsValue?.rangeStart)
+  const rangeEnd = normalizeAssistantToolStringArgument(argumentsValue?.rangeEnd)
+
+  if (!rangeStart || !rangeEnd) {
+    throw new AssistantRuntimeError(
+      'Calendar range queries require rangeStart and rangeEnd arguments.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const focusedMemberId = normalizeAssistantToolStringArgument(argumentsValue?.focusedMemberId)
+  const includeHouseholdEvents =
+    typeof argumentsValue?.includeHouseholdEvents === 'boolean'
+      ? argumentsValue.includeHouseholdEvents
+      : readAssistantWidgetSettings(ownerUserId, 'calendar').includeHouseholdEvents !== false
+  const events = selectCalendarEventsByRange(ownerUserId, rangeStart, rangeEnd)
+    .filter((event) =>
+      !focusedMemberId ||
+      event.members.includes(LEGACY_HOUSEHOLD_MEMBER_ID) ||
+      event.members.includes(focusedMemberId),
+    )
+    .filter((event) =>
+      includeHouseholdEvents ? true : !event.members.includes(LEGACY_HOUSEHOLD_MEMBER_ID),
+    )
+
+  return {
+    widgetId: 'calendar',
+    settings: {
+      includeHouseholdEvents,
+    },
+    rangeStart,
+    rangeEnd,
+    focusedMemberId: focusedMemberId || null,
+    calendarEvents: events,
+  }
+}
+
+const executeCalendarCreateEventTool = async (ownerUserId, argumentsValue) => {
+  const validMemberIds = buildFamilyMemberIdSet(ownerUserId)
+  const result = buildCalendarEventFromInput({
+    value: buildAssistantCalendarToolInput(argumentsValue),
+    validMemberIds,
+  })
+
+  if (result.error) {
+    throw new AssistantRuntimeError(result.error, 400, 'assistant_tool_arguments_invalid')
+  }
+
+  const calendarEventId = `calendar-${randomUUID()}`
+  const timestamp = new Date().toISOString()
+  insertCalendarEvent(
+    ownerUserId,
+    {
+      id: calendarEventId,
+      ...result.calendarEvent,
+    },
+    timestamp,
+    timestamp,
+  )
+
+  return {
+    widgetId: 'calendar',
+    calendarEvent: buildCalendarEventPayload(
+      selectNormalizedCalendarEventById(ownerUserId, calendarEventId),
+    ),
+  }
+}
+
+const executeCalendarUpdateEventTool = async (ownerUserId, argumentsValue) => {
+  const calendarEventId = normalizeAssistantToolStringArgument(argumentsValue?.calendarEventId)
+
+  if (!calendarEventId) {
+    throw new AssistantRuntimeError(
+      'Calendar updates require a calendarEventId argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const currentEvent = selectNormalizedCalendarEventById(ownerUserId, calendarEventId)
+
+  if (!currentEvent) {
+    throw new AssistantRuntimeError('Calendar event not found.', 404, 'assistant_tool_not_found')
+  }
+
+  const validMemberIds = buildFamilyMemberIdSet(ownerUserId)
+  const result = buildCalendarEventFromInput({
+    value: buildAssistantCalendarToolInput(argumentsValue, currentEvent),
+    validMemberIds,
+    currentEvent,
+  })
+
+  if (result.error) {
+    throw new AssistantRuntimeError(result.error, 400, 'assistant_tool_arguments_invalid')
+  }
+
+  updateCalendarEventRecord(
+    ownerUserId,
+    calendarEventId,
+    result.calendarEvent,
+    new Date().toISOString(),
+  )
+
+  return {
+    widgetId: 'calendar',
+    calendarEvent: buildCalendarEventPayload(
+      selectNormalizedCalendarEventById(ownerUserId, calendarEventId),
+    ),
+  }
+}
+
+const executeCalendarDeleteEventTool = async (ownerUserId, argumentsValue) => {
+  const calendarEventId = normalizeAssistantToolStringArgument(argumentsValue?.calendarEventId)
+
+  if (!calendarEventId) {
+    throw new AssistantRuntimeError(
+      'Calendar deletes require a calendarEventId argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const currentEvent = selectNormalizedCalendarEventById(ownerUserId, calendarEventId)
+
+  if (!currentEvent) {
+    throw new AssistantRuntimeError('Calendar event not found.', 404, 'assistant_tool_not_found')
+  }
+
+  deleteCalendarEventById(ownerUserId, calendarEventId)
+
+  return {
+    widgetId: 'calendar',
+    deletedCalendarEventId: calendarEventId,
+    title: currentEvent.title,
+  }
+}
+
+const executeCalendarUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  const currentSettings = readAssistantWidgetSettings(ownerUserId, 'calendar')
+  const nextSettings = {
+    includeHouseholdEvents:
+      typeof argumentsValue?.includeHouseholdEvents === 'boolean'
+        ? argumentsValue.includeHouseholdEvents
+        : currentSettings.includeHouseholdEvents !== false,
+  }
+
+  return updateAssistantWidgetSettings(ownerUserId, 'calendar', nextSettings)
+}
+
+const executeBringGetWidgetStateTool = async (ownerUserId) => ({
+  widgetId: 'bring',
+  bringSettings: selectBringSettings(ownerUserId),
+  bringList: await getBringListWithFallback(ownerUserId),
+})
+
+const executeBringLoadAvailableListsTool = async (ownerUserId, argumentsValue) => {
+  const { username, password } = resolveBringCredentials(ownerUserId, argumentsValue)
+
+  if (!username || !password) {
+    throw new AssistantRuntimeError(
+      'Bring list discovery requires valid Bring credentials.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  return {
+    widgetId: 'bring',
+    lists: await loadBringLists(username, password),
+    bringSettings: selectBringSettings(ownerUserId),
+  }
+}
+
+const executeBringUpdateWidgetSettingsTool = async (ownerUserId, argumentsValue) => {
+  ensureBringCredentialEncryptionConfigured()
+  const { currentIntegration, username, password, hasStoredPassword } = resolveBringCredentials(
+    ownerUserId,
+    argumentsValue,
+  )
+
+  if (!username || !password) {
+    throw new AssistantRuntimeError(
+      'Bring settings updates require valid Bring credentials.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const lists = await loadBringLists(username, password)
+  const requestedSelectedListUuid = normalizeBringListUuid(
+    argumentsValue?.selectedListUuid ?? currentIntegration?.selected_list_uuid,
+  )
+  const selectedList = requestedSelectedListUuid
+    ? lists.find((entry) => entry.listUuid === requestedSelectedListUuid) ?? null
+    : null
+
+  if (lists.length > 0 && !selectedList) {
+    throw new AssistantRuntimeError(
+      'selectedListUuid must match one available Bring shopping list.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const encryptedPasswordJson =
+    typeof argumentsValue?.password === 'string' && argumentsValue.password.length > 0
+      ? encryptBringPassword(password)
+      : hasStoredPassword
+        ? currentIntegration.encrypted_password_json
+        : encryptBringPassword(password)
+  const timestamp = new Date().toISOString()
+
+  upsertBringIntegration(
+    ownerUserId,
+    username,
+    encryptedPasswordJson,
+    selectedList?.listUuid ?? '',
+    selectedList?.name ?? '',
+    timestamp,
+  )
+
+  return {
+    widgetId: 'bring',
+    bringSettings: selectBringSettings(ownerUserId),
+    lists,
+  }
+}
+
+const executeBringRefreshSelectedListTool = async (ownerUserId) => ({
+  widgetId: 'bring',
+  bringList: await refreshBringSelectedList(ownerUserId),
+})
+
+const executeBringAddItemTool = async (ownerUserId, argumentsValue) => {
+  const itemName = sanitizeBringItemName(argumentsValue?.itemName)
+
+  if (!itemName) {
+    throw new AssistantRuntimeError(
+      'Bring add_item requires an itemName argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  return {
+    widgetId: 'bring',
+    bringList: await mutateBringSelectedList(ownerUserId, '/selected-list/items/add', {
+      itemName,
+      specification: sanitizeBringItemSpecification(argumentsValue?.specification),
+      itemUuid: normalizeBringItemUuid(argumentsValue?.itemUuid) || randomUUID(),
+    }),
+  }
+}
+
+const executeBringCompleteItemTool = async (ownerUserId, argumentsValue) => {
+  const itemName = sanitizeBringItemName(argumentsValue?.itemName)
+
+  if (!itemName) {
+    throw new AssistantRuntimeError(
+      'Bring complete_item requires an itemName argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  return {
+    widgetId: 'bring',
+    bringList: await mutateBringSelectedList(ownerUserId, '/selected-list/items/complete', {
+      itemName,
+      specification: sanitizeBringItemSpecification(argumentsValue?.specification),
+      itemUuid: normalizeBringItemUuid(argumentsValue?.itemUuid),
+    }),
+  }
+}
+
+const executeBringReopenRecentItemTool = async (ownerUserId, argumentsValue) => {
+  const itemName = sanitizeBringItemName(argumentsValue?.itemName)
+
+  if (!itemName) {
+    throw new AssistantRuntimeError(
+      'Bring reopen_recent_item requires an itemName argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  return {
+    widgetId: 'bring',
+    bringList: await mutateBringSelectedList(ownerUserId, '/selected-list/items/add', {
+      itemName,
+      specification: sanitizeBringItemSpecification(argumentsValue?.specification),
+      itemUuid: randomUUID(),
+    }),
+  }
+}
+
+const executeRoborockGetWidgetStateTool = async (ownerUserId) => ({
+  widgetId: 'roborock',
+  roborockSettings: selectRoborockSettings(ownerUserId),
+})
+
+const executeRoborockRequestLoginCodeTool = async (_ownerUserId, argumentsValue) => {
+  const email = sanitizeRoborockEmail(argumentsValue?.email)
+
+  if (!email) {
+    throw new AssistantRuntimeError(
+      'Roborock request_login_code requires an email argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  await requestRoborockLoginCode(email)
+
+  return {
+    widgetId: 'roborock',
+    requestedForEmail: email,
+    ok: true,
+  }
+}
+
+const executeRoborockCreateSessionTool = async (ownerUserId, argumentsValue) => {
+  ensureRoborockSessionEncryptionConfigured()
+  const email = sanitizeRoborockEmail(argumentsValue?.email)
+  const verificationCode = sanitizeRoborockVerificationCode(argumentsValue?.verificationCode)
+
+  if (!email || !verificationCode) {
+    throw new AssistantRuntimeError(
+      'Roborock create_session requires email and verificationCode arguments.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const sessionPayload = await loginRoborockAccount(email, verificationCode)
+  const timestamp = new Date().toISOString()
+
+  upsertRoborockIntegration(
+    ownerUserId,
+    email,
+    encryptRoborockSessionPayload(JSON.stringify(sessionPayload)),
+    sessionPayload.baseUrl,
+    'connected',
+    timestamp,
+    timestamp,
+    timestamp,
+  )
+  updateRoborockSelection(ownerUserId, '', '', '', null, '', timestamp)
+
+  return {
+    widgetId: 'roborock',
+    roborockSettings: selectRoborockSettings(ownerUserId),
+  }
+}
+
+const executeRoborockLoadDevicesTool = async (ownerUserId, argumentsValue) => {
+  const requestedSelectedDeviceDuid = normalizeRoborockDeviceDuid(argumentsValue?.selectedDeviceDuid)
+  const discovery = await loadRoborockDeviceDiscovery(ownerUserId, requestedSelectedDeviceDuid)
+
+  return {
+    widgetId: 'roborock',
+    devices: discovery.devices,
+    routines: discovery.routines,
+    selectedDeviceDuid: discovery.selectedDeviceDuid,
+    roborockSettings: selectRoborockSettings(ownerUserId),
+  }
+}
+
+const executeRoborockUpdateSelectionTool = async (ownerUserId, argumentsValue) => {
+  const selectedDeviceDuid = normalizeRoborockDeviceDuid(argumentsValue?.selectedDeviceDuid)
+  const selectedRoutineId = normalizeRoborockRoutineId(argumentsValue?.selectedRoutineId)
+
+  if (!selectedDeviceDuid) {
+    throw new AssistantRuntimeError(
+      'Roborock update_selection requires selectedDeviceDuid.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const discovery = await loadRoborockDeviceDiscovery(ownerUserId, selectedDeviceDuid)
+  const selectedDevice =
+    discovery.devices.find((device) => device.duid === selectedDeviceDuid) ?? null
+
+  if (!selectedDevice) {
+    throw new AssistantRuntimeError(
+      'selectedDeviceDuid must match one available Roborock device.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const selectedRoutine =
+    selectedRoutineId === null
+      ? null
+      : discovery.routines.find((routine) => routine.id === selectedRoutineId) ?? null
+
+  if (selectedRoutineId !== null && !selectedRoutine) {
+    throw new AssistantRuntimeError(
+      'selectedRoutineId must match one available Roborock routine.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const timestamp = new Date().toISOString()
+  updateRoborockSelection(
+    ownerUserId,
+    selectedDevice.duid,
+    selectedDevice.name,
+    selectedDevice.model,
+    selectedRoutine?.id ?? null,
+    selectedRoutine?.name ?? '',
+    timestamp,
+  )
+
+  return {
+    widgetId: 'roborock',
+    roborockSettings: selectRoborockSettings(ownerUserId),
+    devices: discovery.devices,
+    routines: discovery.routines,
+    selectedDeviceDuid: selectedDevice.duid,
+  }
+}
+
+const executeRoborockValidateSessionTool = async (ownerUserId) => ({
+  widgetId: 'roborock',
+  validation: await validateRoborockStoredSession(ownerUserId),
+})
+
+const executeWeatherWidgetAssistantTool = async (_ownerUserId, argumentsValue) => {
+  const candidate = argumentsValue && typeof argumentsValue === 'object' ? argumentsValue : {}
+  const latitude = normalizeAssistantToolNumberArgument(candidate.latitude)
+  const longitude = normalizeAssistantToolNumberArgument(candidate.longitude)
+  const locationLabel = sanitizeAssistantWidgetLabel(candidate.locationLabel) || WEATHER_LOCATION
+
+  if (latitude === null || latitude < -90 || latitude > 90) {
+    throw new AssistantRuntimeError(
+      'Weather widget tool requires a valid latitude argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  if (longitude === null || longitude < -180 || longitude > 180) {
+    throw new AssistantRuntimeError(
+      'Weather widget tool requires a valid longitude argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  const weather = await getWeatherPayload(latitude, longitude, locationLabel)
+
+  return {
+    widgetId: 'weather',
+    sourceLocation: 'weather',
+    locationQuery: {
+      latitude,
+      longitude,
+      locationLabel,
+    },
+    weather,
+  }
+}
+
+const assistantInternalWidgetToolHandlers = new Map([
+  [
+    'widget.calendar.get_range_events',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeCalendarGetRangeEventsTool,
+    },
+  ],
+  [
+    'widget.calendar.create_event',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeCalendarCreateEventTool,
+    },
+  ],
+  [
+    'widget.calendar.update_event',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeCalendarUpdateEventTool,
+    },
+  ],
+  [
+    'widget.calendar.delete_event',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeCalendarDeleteEventTool,
+    },
+  ],
+  [
+    'widget.calendar.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeCalendarUpdateWidgetSettingsTool,
+    },
+  ],
+  [
+    'widget.todo.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeTodoGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.todo.set_item_done_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeTodoSetItemDoneStateTool,
+    },
+  ],
+  [
+    'widget.todo.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeTodoUpdateWidgetSettingsTool,
+    },
+  ],
+  [
+    'widget.bring.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.bring.load_available_lists',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringLoadAvailableListsTool,
+    },
+  ],
+  [
+    'widget.bring.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringUpdateWidgetSettingsTool,
+    },
+  ],
+  [
+    'widget.bring.refresh_selected_list',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringRefreshSelectedListTool,
+    },
+  ],
+  [
+    'widget.bring.add_item',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringAddItemTool,
+    },
+  ],
+  [
+    'widget.bring.complete_item',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringCompleteItemTool,
+    },
+  ],
+  [
+    'widget.bring.reopen_recent_item',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringReopenRecentItemTool,
+    },
+  ],
+  [
+    'widget.roborock.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.roborock.request_login_code',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockRequestLoginCodeTool,
+    },
+  ],
+  [
+    'widget.roborock.create_session',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockCreateSessionTool,
+    },
+  ],
+  [
+    'widget.roborock.load_devices',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockLoadDevicesTool,
+    },
+  ],
+  [
+    'widget.roborock.update_selection',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockUpdateSelectionTool,
+    },
+  ],
+  [
+    'widget.roborock.validate_session',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeRoborockValidateSessionTool,
+    },
+  ],
+  [
+    'widget.arrival_board.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeArrivalBoardGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.arrival_board.get_arrival_event_detail',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeArrivalBoardGetArrivalEventDetailTool,
+    },
+  ],
+  [
+    'widget.arrival_board.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeArrivalBoardUpdateWidgetSettingsTool,
+    },
+  ],
+  [
+    'widget.weather.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeWeatherGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.weather.get_current_weather',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeWeatherWidgetAssistantTool,
+    },
+  ],
+  [
+    'widget.weather.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeWeatherUpdateWidgetSettingsTool,
+    },
+  ],
+  [
+    'widget.youtube.get_widget_state',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeYoutubeGetWidgetStateTool,
+    },
+  ],
+  [
+    'widget.youtube.search_videos',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeYoutubeSearchVideosTool,
+    },
+  ],
+  [
+    'widget.youtube.update_widget_settings',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeYoutubeUpdateWidgetSettingsTool,
+    },
+  ],
+])
 
 const buildYoutubeSearchUrl = (query) => {
   const url = new URL('https://www.youtube.com/results')
@@ -6139,6 +8347,27 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (
+    request.method === 'GET' &&
+    /^\/api\/widget-settings\/[^/]+\/mcp-tool-log$/.test(requestUrl.pathname)
+  ) {
+    const widgetId = requestUrl.pathname
+      .replace('/api/widget-settings/', '')
+      .replace('/mcp-tool-log', '')
+
+    if (!widgetId) {
+      sendJson(response, 400, { error: 'Missing widget id.' })
+      return
+    }
+
+    expireAssistantToolApprovals(ownerUserId)
+
+    sendJson(response, 200, {
+      toolEvents: selectWidgetToolCallEventsByWidgetId(ownerUserId, widgetId),
+    })
+    return
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/app-preferences') {
     sendJson(response, 200, { appPreferences: selectAppPreferences(ownerUserId) })
     return
@@ -6155,12 +8384,17 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/availability') {
-    sendJson(response, 200, { assistant: selectAssistantAvailability() })
+    sendJson(response, 200, { assistant: selectAssistantAvailability(ownerUserId) })
     return
   }
 
   if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/settings') {
-    sendJson(response, 200, { assistantSettings: selectAssistantSettings() })
+    sendJson(response, 200, { assistantSettings: selectAssistantSettings(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/assistant/routes') {
+    sendJson(response, 200, { routes: selectAssistantRoutes(ownerUserId) })
     return
   }
 
@@ -6180,21 +8414,46 @@ const server = createServer(async (request, response) => {
       return
     }
 
-    const thread = selectAssistantThreadById(ownerUserId, threadId)
+    try {
+      sendJson(response, 200, buildAssistantThreadDetailPayload(ownerUserId, threadId))
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+    }
+    return
+  }
 
-    if (!thread) {
-      sendJson(response, 404, { error: 'Assistant thread not found.' })
+  if (
+    request.method === 'POST' &&
+    /^\/api\/assistant\/tool-approvals\/[^/]+$/.test(requestUrl.pathname)
+  ) {
+    const approvalRequestId = requestUrl.pathname.replace('/api/assistant/tool-approvals/', '')
+
+    if (!approvalRequestId) {
+      sendJson(response, 400, { error: 'Missing assistant tool approval request id.' })
       return
     }
 
-    sendJson(response, 200, {
-      thread: buildAssistantThreadPayload(thread),
-      messages: selectAssistantMessagesByThreadId(ownerUserId, threadId),
-      events: selectAssistantMessageEventsByThreadId(ownerUserId, threadId).map(
-        buildAssistantMessageEventPayload,
-      ),
-    })
-    return
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const threadDetail = await resolveAssistantToolApproval(
+        ownerUserId,
+        approvalRequestId,
+        body?.action,
+      )
+      sendJson(response, 200, threadDetail)
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
   }
 
   if (
@@ -6721,30 +8980,60 @@ const server = createServer(async (request, response) => {
       return
     }
 
-    const activeRoute = selectActiveAssistantBackendRouteRow()
-    const title = sanitizeAssistantThreadTitle(body?.title)
-    const timestamp = new Date().toISOString()
-    const threadId = `assistant-thread-${randomUUID()}`
+    try {
+      const activeRoute = selectActiveAssistantBackendRouteRow(ownerUserId)
 
-    insertAssistantThread(
-      ownerUserId,
-      {
-        id: threadId,
-        routeId: activeRoute?.id ?? null,
-        title,
-        state: 'active',
-      },
-      timestamp,
-      timestamp,
-    )
+      if (!activeRoute) {
+        throw new AssistantRuntimeError(
+          'No default assistant route is configured for new conversations.',
+          400,
+          'assistant_default_route_missing',
+        )
+      }
 
-    const createdThread = selectAssistantThreadById(ownerUserId, threadId)
+      if (!activeRoute.enabled) {
+        throw new AssistantRuntimeError(
+          'The default assistant route is disabled.',
+          400,
+          'assistant_default_route_disabled',
+        )
+      }
 
-    sendJson(response, 201, {
-      thread: buildAssistantThreadPayload(createdThread),
-      messages: [],
-    })
-    return
+      if (!isAssistantRouteConfigured(activeRoute)) {
+        throw new AssistantRuntimeError(
+          'The default assistant route is not configured correctly.',
+          400,
+          'assistant_default_route_invalid',
+        )
+      }
+
+      const title = sanitizeAssistantThreadTitle(body?.title)
+      const timestamp = new Date().toISOString()
+      const threadId = `assistant-thread-${randomUUID()}`
+
+      insertAssistantThread(
+        ownerUserId,
+        {
+          id: threadId,
+          routeId: activeRoute.id,
+          title,
+          state: 'active',
+        },
+        timestamp,
+        timestamp,
+      )
+
+      const createdThread = selectAssistantThreadById(ownerUserId, threadId)
+
+      sendJson(response, 201, {
+        thread: buildAssistantThreadPayload(createdThread),
+        messages: [],
+      })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
   }
 
   if (request.method === 'PATCH' && requestUrl.pathname === '/api/assistant/settings') {
@@ -6758,8 +9047,103 @@ const server = createServer(async (request, response) => {
     }
 
     try {
-      const assistantSettings = saveAssistantSettings(body ?? {})
-      sendJson(response, 200, { assistantSettings, assistant: selectAssistantAvailability() })
+      const assistantSettings = saveAssistantSettings(ownerUserId, body ?? {})
+      sendJson(response, 200, { assistantSettings, assistant: selectAssistantAvailability(ownerUserId) })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/assistant/routes') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const route = createAssistantRoute(ownerUserId, body ?? {})
+      sendJson(response, 201, { route: buildAssistantRouteSettingsPayload(route) })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'PATCH' &&
+    requestUrl.pathname.startsWith('/api/assistant/routes/') &&
+    !requestUrl.pathname.endsWith('/default')
+  ) {
+    const routeId = requestUrl.pathname.replace('/api/assistant/routes/', '')
+
+    if (!routeId) {
+      sendJson(response, 400, { error: 'Missing assistant route id.' })
+      return
+    }
+
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    try {
+      const route = updateAssistantRoute(ownerUserId, routeId, body ?? {})
+      sendJson(response, 200, { route: buildAssistantRouteSettingsPayload(route) })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
+  }
+
+  if (
+    request.method === 'POST' &&
+    /^\/api\/assistant\/routes\/[^/]+\/default$/.test(requestUrl.pathname)
+  ) {
+    const routeId = requestUrl.pathname
+      .replace('/api/assistant/routes/', '')
+      .replace('/default', '')
+
+    if (!routeId) {
+      sendJson(response, 400, { error: 'Missing assistant route id.' })
+      return
+    }
+
+    try {
+      const route = setDefaultAssistantRoute(ownerUserId, routeId)
+      sendJson(response, 200, {
+        route,
+        assistant: selectAssistantAvailability(ownerUserId),
+      })
+      return
+    } catch (error) {
+      sendAssistantRuntimeError(response, error)
+      return
+    }
+  }
+
+  if (request.method === 'DELETE' && requestUrl.pathname.startsWith('/api/assistant/routes/')) {
+    const routeId = requestUrl.pathname.replace('/api/assistant/routes/', '')
+
+    if (!routeId) {
+      sendJson(response, 400, { error: 'Missing assistant route id.' })
+      return
+    }
+
+    try {
+      const deletedRouteId = deleteAssistantRoute(ownerUserId, routeId)
+      sendJson(response, 200, { deletedRouteId })
       return
     } catch (error) {
       sendAssistantRuntimeError(response, error)
@@ -6790,9 +9174,11 @@ const server = createServer(async (request, response) => {
     }
 
     try {
+      const widgetTools = normalizeAssistantWidgetTools(body?.widgetTools)
       const assistantTurn = await executeAssistantTurn(ownerUserId, threadId, body?.content, {
         streamRequested: body?.stream === true,
-        toolsRequested: body?.requestedTools === true,
+        toolsRequested: body?.requestedTools === true || widgetTools.length > 0,
+        widgetTools,
       })
 
       if (body?.stream === true) {

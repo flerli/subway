@@ -6,6 +6,7 @@ import type {
   AssistantAvailabilityRecord,
   AssistantMessageEventRecord,
   AssistantMessageRecord,
+  AssistantToolApprovalAction,
   AssistantThreadDetail,
   AssistantThreadSummary,
 } from '../../api/assistant'
@@ -26,6 +27,7 @@ export interface AssistantDetailViewData {
   pendingUserMessage: AssistantMessageRecord | null
   streamingMessage: AssistantMessageRecord | null
   streamingEvents: AssistantMessageEventRecord[]
+  resolvingApprovalRequestId: string | null
   isTurnBusy: boolean
   onCreateThread: () => void
   onDeleteThread: (threadId: string) => void
@@ -33,6 +35,10 @@ export interface AssistantDetailViewData {
   onDraftChange: (value: string) => void
   onSubmit: FormEventHandler<HTMLFormElement>
   onComposerKeyDown: KeyboardEventHandler<HTMLTextAreaElement>
+  onResolveToolApproval: (
+    approvalRequestId: string,
+    action: AssistantToolApprovalAction,
+  ) => void
 }
 
 interface AssistantDetailPanelProps {
@@ -61,6 +67,16 @@ const getToolEventStatusLabel = (
   status: AssistantMessageEventRecord['payload']['status'],
 ) => {
   switch (status) {
+    case 'approval_pending':
+      return appText.assistant.toolStatusApprovalPending
+    case 'approval_approved':
+      return appText.assistant.toolStatusApprovalApproved
+    case 'approval_rejected':
+      return appText.assistant.toolStatusApprovalRejected
+    case 'approval_canceled':
+      return appText.assistant.toolStatusApprovalCanceled
+    case 'approval_expired':
+      return appText.assistant.toolStatusApprovalExpired
     case 'completed':
       return appText.assistant.toolStatusCompleted
     case 'error':
@@ -89,7 +105,25 @@ const formatToolValue = (appText: AppTextBundle, value: unknown) => {
 const shouldRenderMarkdown = (message: AssistantMessageRecord) =>
   message.role === 'assistant' || message.role === 'system'
 
-export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
+const formatEventTimestamp = (value: string, languageCode: SupportedLanguageCode) => {
+  const timestamp = new Date(value)
+
+  if (Number.isNaN(timestamp.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat(languageCode, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(timestamp)
+}
+
+export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPanelProps) {
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null)
   const {
     appText,
@@ -107,6 +141,7 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
     pendingUserMessage,
     streamingMessage,
     streamingEvents,
+    resolvingApprovalRequestId,
     isTurnBusy,
     onCreateThread,
     onDeleteThread,
@@ -114,6 +149,7 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
     onDraftChange,
     onSubmit,
     onComposerKeyDown,
+    onResolveToolApproval,
   } = data
 
   const displayedMessages = selectedThread
@@ -126,6 +162,13 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
   const displayedEvents = selectedThread
     ? [...selectedThread.events, ...streamingEvents]
     : []
+  const latestEventIdByToolCallId = new Map<string, string>()
+
+  for (const event of displayedEvents) {
+    if (event.payload.toolCallId) {
+      latestEventIdByToolCallId.set(event.payload.toolCallId, event.id)
+    }
+  }
 
   useEffect(() => {
     if (turnState === 'completed' && !isTurnBusy) {
@@ -258,6 +301,22 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                                 <span>{appText.assistant.toolServerLabel}</span>
                                 <strong>{event.payload.serverName}</strong>
                               </p>
+                              {event.payload.approval?.expiresAt ? (
+                                <p>
+                                  <span>{appText.assistant.toolApprovalExpiresLabel}</span>
+                                  <strong>
+                                    {formatEventTimestamp(event.payload.approval.expiresAt, languageCode)}
+                                  </strong>
+                                </p>
+                              ) : null}
+                              {event.payload.approval?.resolvedAt ? (
+                                <p>
+                                  <span>{appText.assistant.toolApprovalResolvedLabel}</span>
+                                  <strong>
+                                    {formatEventTimestamp(event.payload.approval.resolvedAt, languageCode)}
+                                  </strong>
+                                </p>
+                              ) : null}
                             </div>
 
                             <div className="assistant-tool-event-body">
@@ -282,6 +341,47 @@ export function AssistantDetailPanel({ data }: AssistantDetailPanelProps) {
                                 </div>
                               ) : null}
                             </div>
+
+                            {event.payload.status === 'approval_pending' &&
+                            event.payload.approval &&
+                            latestEventIdByToolCallId.get(event.payload.toolCallId) === event.id ? (
+                              <div className="assistant-inline-actions assistant-inline-actions--tool-approval">
+                                <button
+                                  type="button"
+                                  className="widget-action-button"
+                                  disabled={isTurnBusy}
+                                  onClick={() =>
+                                    onResolveToolApproval(event.payload.approval!.requestId, 'approve')
+                                  }
+                                >
+                                  <span>
+                                    {resolvingApprovalRequestId === event.payload.approval.requestId
+                                      ? appText.assistant.toolStatusRunning
+                                      : appText.assistant.toolApprovalApproveAction}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="widget-action-button"
+                                  disabled={isTurnBusy}
+                                  onClick={() =>
+                                    onResolveToolApproval(event.payload.approval!.requestId, 'reject')
+                                  }
+                                >
+                                  <span>{appText.assistant.toolApprovalRejectAction}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="widget-action-button"
+                                  disabled={isTurnBusy}
+                                  onClick={() =>
+                                    onResolveToolApproval(event.payload.approval!.requestId, 'cancel')
+                                  }
+                                >
+                                  <span>{appText.assistant.toolApprovalCancelAction}</span>
+                                </button>
+                              </div>
+                            ) : null}
                           </article>
                         ))}
                       </div>

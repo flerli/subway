@@ -1,9 +1,12 @@
 import type {
   RegisteredWidget,
+  RegisteredWidgetMcpTool,
   WidgetEntityRecord,
   WidgetMicroAppContract,
+  WidgetSettingsValues,
   WidgetPresentation,
 } from './widgetTypes'
+import { normalizeWidgetMcpConfiguration } from './widgetMcpConfiguration'
 
 const discoveredWidgetModules = import.meta.glob('./*/index.ts', {
   eager: true,
@@ -73,3 +76,40 @@ export const buildWidgetRegistry = (
       },
     ]
   })
+
+export const buildRegisteredWidgetMcpToolCatalog = (
+  registeredWidgets: RegisteredWidget[],
+  widgetSettingsMap: Record<string, WidgetSettingsValues> = {},
+): RegisteredWidgetMcpTool[] =>
+  registeredWidgets.flatMap((widget) =>
+    (widget.module.mcpTools ?? []).flatMap((tool) => {
+      const mcpConfiguration = normalizeWidgetMcpConfiguration(
+        widget,
+        widgetSettingsMap[widget.entity.id] ?? {},
+      )
+      const toolPolicy = mcpConfiguration.toolPolicies[tool.name]
+
+      if (toolPolicy?.enabled === false) {
+        return []
+      }
+
+      return [
+        {
+          widgetId: widget.entity.id,
+          widgetTitle: widget.entity.title,
+          sourceLocation: widget.entity.sourceLocation,
+          toolName: tool.name,
+          description: tool.description,
+          humanAction: tool.humanAction,
+          parityScope: tool.parityScope,
+          approvalRequired:
+            typeof toolPolicy?.approvalRequired === 'boolean'
+              ? toolPolicy.approvalRequired
+              : tool.approvalRequired === true,
+          redactArguments: tool.redactArguments === true,
+          redactResults: tool.redactResults === true,
+          arguments: tool.arguments,
+        },
+      ]
+    }),
+  )

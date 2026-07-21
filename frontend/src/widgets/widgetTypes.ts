@@ -8,6 +8,7 @@ export type WidgetDataSource = 'database' | 'external-api' | 'system'
 export type WidgetRefreshStatus = 'idle' | 'ok' | 'live' | 'cached' | 'static' | 'error'
 export type WidgetScopeMode = 'all' | 'member' | 'members'
 export type WidgetSettingFieldType = 'text' | 'number' | 'boolean'
+export type WidgetMcpToolArgumentType = 'string' | 'number' | 'boolean'
 export type WidgetPlacementZoneId =
   | 'service-board'
   | 'a1'
@@ -102,12 +103,40 @@ export interface WidgetSettingsDefinition {
   normalize: (value: unknown) => WidgetSettingsValues
 }
 
+export interface WidgetMcpToolArgumentDefinition {
+  key: string
+  type: WidgetMcpToolArgumentType
+  description: string
+  required?: boolean
+}
+
+export interface WidgetMcpToolDefinition {
+  name: string
+  description: string
+  humanAction: string
+  parityScope: WidgetCapability[]
+  approvalRequired?: boolean
+  redactArguments?: boolean
+  redactResults?: boolean
+  arguments: WidgetMcpToolArgumentDefinition[]
+}
+
+export interface WidgetMcpToolPolicySettings {
+  enabled: boolean
+  approvalRequired: boolean
+}
+
+export interface WidgetMcpConfigurationSettings {
+  toolPolicies: Record<string, WidgetMcpToolPolicySettings>
+}
+
 export interface WidgetMicroAppContract {
   entityId: WidgetId
   folderName: string
   dataSource: WidgetDataSource
   capabilities: WidgetCapability[]
   hasSettingsPanel: boolean
+  mcpTools?: WidgetMcpToolDefinition[]
   settingsDefinition?: WidgetSettingsDefinition
   getTranslation: (languageCode: SupportedLanguageCode) => WidgetTranslationDefinition
   matchesDefaultTitle?: (title: string) => boolean
@@ -139,4 +168,18 @@ export interface RegisteredWidget {
   entity: WidgetEntityRecord
   module: WidgetMicroAppContract
   presentation: WidgetPresentation
+}
+
+export interface RegisteredWidgetMcpTool {
+  widgetId: WidgetId
+  widgetTitle: string
+  sourceLocation: string
+  toolName: string
+  description: string
+  humanAction: string
+  parityScope: WidgetCapability[]
+  approvalRequired: boolean
+  redactArguments: boolean
+  redactResults: boolean
+  arguments: WidgetMcpToolArgumentDefinition[]
 }

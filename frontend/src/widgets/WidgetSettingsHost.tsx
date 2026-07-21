@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AppTextBundle } from '../i18n/appText'
 import type { SupportedLanguageCode } from '../i18n/localization'
 import type { RegisteredWidget, WidgetSettingsValues } from './widgetTypes'
+import { WidgetMcpConfigurationCard } from './WidgetMcpConfigurationCard'
 import {
   getLocalizedSettingsDefinition,
   getWidgetBoardKicker,
@@ -52,102 +53,117 @@ function WidgetSettingsExpandedCard({
 
   const settingsDefinition = getLocalizedSettingsDefinition(widget.module, languageCode)
 
-  if (widget.module.renderSettingsPanel) {
-    return widget.module.renderSettingsPanel({
-      appText,
-      widget,
-      languageCode,
-      initialSettings,
-      onSave,
-    })
-  }
-
-  if (!settingsDefinition) {
-    return null
-  }
-
-  const handleSave = async () => {
-    setSaveState('saving')
-
-    try {
-      await onSave(widget.entity.id, draftSettings)
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
+  const renderWidgetSettingsCard = () => {
+    if (widget.module.renderSettingsPanel) {
+      return widget.module.renderSettingsPanel({
+        appText,
+        widget,
+        languageCode,
+        initialSettings,
+        onSave,
+      })
     }
-  }
 
-  return (
-    <article className="settings-card widget-settings-card widget-settings-card--expanded">
-      <div className="settings-card-head">
-        <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
-        <h3>{settingsDefinition.title}</h3>
-        <p>{settingsDefinition.description}</p>
-      </div>
+    if (!settingsDefinition) {
+      return null
+    }
 
-      <div className="widget-settings-fields">
-        {settingsDefinition.fields.map((field) => {
-          const fieldValue = draftSettings[field.key]
+    const handleSave = async () => {
+      setSaveState('saving')
 
-          if (field.type === 'boolean') {
+      try {
+        await onSave(widget.entity.id, draftSettings)
+        setSaveState('saved')
+      } catch {
+        setSaveState('error')
+      }
+    }
+
+    return (
+      <article className="settings-card widget-settings-card widget-settings-card--expanded">
+        <div className="settings-card-head">
+          <p className="widget-kicker">{getWidgetBoardKicker(widget, languageCode)}</p>
+          <h3>{settingsDefinition.title}</h3>
+          <p>{settingsDefinition.description}</p>
+        </div>
+
+        <div className="widget-settings-fields">
+          {settingsDefinition.fields.map((field) => {
+            const fieldValue = draftSettings[field.key]
+
+            if (field.type === 'boolean') {
+              return (
+                <label className="settings-toggle" key={field.key}>
+                  <span>{field.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(fieldValue)}
+                    onChange={(event) =>
+                      setDraftSettings((currentValues: WidgetSettingsValues) => ({
+                        ...currentValues,
+                        [field.key]: event.target.checked,
+                      }))
+                    }
+                  />
+                </label>
+              )
+            }
+
             return (
-              <label className="settings-toggle" key={field.key}>
+              <label className="settings-label" key={field.key}>
                 <span>{field.label}</span>
                 <input
-                  type="checkbox"
-                  checked={Boolean(fieldValue)}
+                  className="settings-input"
+                  type={field.type === 'number' ? 'number' : 'text'}
+                  value={String(fieldValue ?? '')}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                  placeholder={field.placeholder}
                   onChange={(event) =>
                     setDraftSettings((currentValues: WidgetSettingsValues) => ({
                       ...currentValues,
-                      [field.key]: event.target.checked,
+                      [field.key]:
+                        field.type === 'number'
+                          ? Number(event.target.value)
+                          : event.target.value,
                     }))
                   }
                 />
               </label>
             )
-          }
+          })}
+        </div>
 
-          return (
-            <label className="settings-label" key={field.key}>
-              <span>{field.label}</span>
-              <input
-                className="settings-input"
-                type={field.type === 'number' ? 'number' : 'text'}
-                value={String(fieldValue ?? '')}
-                min={field.min}
-                max={field.max}
-                step={field.step}
-                placeholder={field.placeholder}
-                onChange={(event) =>
-                  setDraftSettings((currentValues: WidgetSettingsValues) => ({
-                    ...currentValues,
-                    [field.key]:
-                      field.type === 'number'
-                        ? Number(event.target.value)
-                        : event.target.value,
-                  }))
-                }
-              />
-            </label>
-          )
-        })}
-      </div>
+        <div className="widget-settings-actions">
+          <button className="settings-submit" type="button" onClick={handleSave}>
+            {appText.widgetSettingsHost.saveAction}
+          </button>
+          <p className="settings-note">
+            {saveState === 'saving'
+              ? appText.widgetSettingsHost.savingState
+              : saveState === 'saved'
+                ? appText.widgetSettingsHost.savedState
+                : saveState === 'error'
+                  ? appText.widgetSettingsHost.saveFailedState
+                  : appText.widgetSettingsHost.pendingChangesState}
+          </p>
+        </div>
+      </article>
+    )
+  }
 
-      <div className="widget-settings-actions">
-        <button className="settings-submit" type="button" onClick={handleSave}>
-          {appText.widgetSettingsHost.saveAction}
-        </button>
-        <p className="settings-note">
-          {saveState === 'saving'
-            ? appText.widgetSettingsHost.savingState
-            : saveState === 'saved'
-              ? appText.widgetSettingsHost.savedState
-              : saveState === 'error'
-                ? appText.widgetSettingsHost.saveFailedState
-                : appText.widgetSettingsHost.pendingChangesState}
-        </p>
-      </div>
-    </article>
+  return (
+    <>
+      {renderWidgetSettingsCard()}
+      <WidgetMcpConfigurationCard
+        appText={appText}
+        languageCode={languageCode}
+        widget={widget}
+        initialSettings={initialSettings}
+        onSave={onSave}
+      />
+    </>
   )
 }
 

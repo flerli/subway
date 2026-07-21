@@ -2138,6 +2138,20 @@ select {
   border-color: rgba(126, 240, 200, 0.24);
 }
 
+.assistant-tool-event--approval_pending {
+  border-color: rgba(255, 208, 102, 0.28);
+}
+
+.assistant-tool-event--approval_approved {
+  border-color: rgba(126, 240, 200, 0.24);
+}
+
+.assistant-tool-event--approval_rejected,
+.assistant-tool-event--approval_canceled,
+.assistant-tool-event--approval_expired {
+  border-color: rgba(255, 166, 94, 0.28);
+}
+
 .assistant-tool-event--error {
   border-color: rgba(255, 123, 110, 0.28);
 }
@@ -2233,6 +2247,15 @@ select {
 .assistant-inline-actions--thread-list {
   margin-bottom: 2px;
 }
+
+.assistant-inline-actions--tool-approval {
+  margin-top: 2px;
+}
+
+.assistant-inline-actions--tool-approval .widget-action-button {
+  min-width: 132px;
+}
+
 .assistant-create-button {
   min-width: 180px;
 }
@@ -2719,7 +2742,7 @@ select {
   max-width: 100%;
   box-sizing: border-box;
   overflow: hidden;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.5fr);
   gap: 14px;
 }
 
@@ -3558,6 +3581,39 @@ select {
   gap: 12px;
 }
 
+.widget-mcp-log-list,
+.widget-mcp-tool-list {
+  gap: 14px;
+}
+
+.widget-mcp-tool-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.widget-mcp-tool-name,
+.widget-mcp-tool-description,
+.widget-mcp-tool-meta {
+  margin: 0;
+}
+
+.widget-mcp-tool-name {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.widget-mcp-tool-description,
+.widget-mcp-tool-meta {
+  color: var(--muted-soft);
+  line-height: 1.5;
+}
+
 .settings-toggle {
   display: flex;
   align-items: center;
@@ -3587,6 +3643,50 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.widget-settings-actions--log {
+  justify-content: space-between;
+}
+
+.widget-mcp-log-card {
+  gap: 12px;
+}
+
+.widget-mcp-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.widget-mcp-log-status,
+.widget-mcp-log-label {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.widget-mcp-log-block {
+  display: grid;
+  gap: 6px;
+}
+
+.widget-mcp-log-payload {
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(2, 8, 14, 0.44);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .widget-settings-actions--launcher {

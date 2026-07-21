@@ -132,7 +132,7 @@ Issues:
 ## 010 AI ASSISTANT PLATFORM
 
 Description:
-Introduce a Subway-owned AI assistant section with persistent per-user chat threads, admin-managed LLM routing, LiteLLM-backed upstream model access, direct custom backend support, MCP-based tool execution, tool-call rendering, and rich markdown response presentation.
+Introduce a Subway-owned AI assistant section with persistent per-user chat threads, configurable LLM routing, LiteLLM-backed upstream model access, direct custom backend support, MCP-based tool execution, tool-call rendering, rich markdown response presentation, and per-user multi-connection management with a default route for new conversations.
 
 Issues:
 
@@ -143,3 +143,22 @@ Issues:
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__003_PERSISTENT_AGENT_CHAT_SECTION_AND_STREAMING_THREADS.md | Build the authenticated assistant section with persistent threads, streaming message flow, and end-user chat UX without provider selection controls. | implemented |
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__004_MCP_TOOL_EXECUTION_ORCHESTRATION_AND_RENDERING.md | Add MCP-only tool execution, persisted tool-call event records, and structured tool activity rendering in the chat transcript. | implemented |
 | 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__005_MARKDOWN_TRANSCRIPT_RENDERING_AND_RESPONSE_PRESENTATION.md | Render assistant responses with safe rich markdown, syntax-highlighted code fences, tables, and task lists. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__006_MULTI_CONNECTION_ROUTE_REGISTRY_AND_DEFAULT_SELECTION_FOUNDATION.md | Extend the assistant route registry so each user can persist multiple LLM connections and choose one default route for all newly created conversations. | implemented |
+| 010_AI_ASSISTANT_PLATFORM__ISSUE_DEFINITION__007_ASSISTANT_SETTINGS_MULTI_CONNECTION_MANAGEMENT_UI.md | Build the assistant settings workflow for creating, editing, deleting, testing, and default-selecting multiple user-managed LLM connections. | planned |
+
+## 011 MCP TOOL INTERFACE
+
+Description:
+Give every Subway widget a standardized MCP tool interface inside the existing assistant MCP runtime so the assistant can perform every widget action a human user can perform, with automatic tool discovery, per-widget MCP configuration, persisted widget-scoped tool-call logs, optional human approval for sensitive tools, and reusable implementation guidance for all future widgets.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__001_SHARED_WIDGET_MCP_TOOL_CONTRACT_AND_DISCOVERY_FOUNDATION.md | Define the standardized per-widget MCP tool contract, human-parity mapping rules, and automatic assistant discovery path for widget-registered tools. | planned |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__002_MCP_CONFIGURATION_PANELS_AND_PER_USER_TOOL_POLICY_SETTINGS.md | Add an MCP configuration section to every widget settings panel with per-user tool enablement and approval policy controls. | planned |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__003_WIDGET_SCOPED_TOOL_CALL_PERSISTENCE_AND_SETTINGS_AUDIT_LOG.md | Persist widget-scoped MCP tool activity and surface a reload-safe tool-call log inside widget settings. | planned |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__004_HUMAN_IN_THE_LOOP_APPROVAL_WORKFLOW_FOR_SENSITIVE_WIDGET_TOOLS.md | Add per-tool human approval orchestration across assistant execution time and widget settings oversight surfaces. | planned |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__005_LOW_RISK_WIDGET_MCP_ROLLOUT_AND_SAFE_TOOL_PARITY.md | Roll out read-oriented and otherwise low-risk widget MCP tools with full human-feature parity for informational and safe configuration flows. | implemented |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__006_MUTATING_AND_INTEGRATION_WIDGET_MCP_ROLLOUT.md | Roll out mutating and integration-heavy widget MCP tools, including destructive, external-service, and device-control actions, with full human-feature parity. | implemented |
+| 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__007_GENERIC_WIDGET_IMPLEMENTATION_GUIDE_AND_ISSUE_WORKFLOW_EXTENSION.md | Add a dedicated generic widget implementation guide and extend the issue-writing workflow so future widgets plan their MCP tool interface from the start. | implemented |

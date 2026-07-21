@@ -91,6 +91,16 @@ export interface AppTextBundle {
     toolStatusRunning: string
     toolStatusCompleted: string
     toolStatusError: string
+    toolStatusApprovalPending: string
+    toolStatusApprovalApproved: string
+    toolStatusApprovalRejected: string
+    toolStatusApprovalCanceled: string
+    toolStatusApprovalExpired: string
+    toolApprovalApproveAction: string
+    toolApprovalRejectAction: string
+    toolApprovalCancelAction: string
+    toolApprovalExpiresLabel: string
+    toolApprovalResolvedLabel: string
     toolRedactedValue: string
   }
   filters: {
@@ -193,6 +203,25 @@ export interface AppTextBundle {
     expandedWidgetViewAriaLabel: string
     noExpandedWidgetTitle: string
     noExpandedWidgetCopy: string
+    mcpTitle: string
+    mcpDescription: string
+    mcpEmptyTitle: string
+    mcpEmptyCopy: string
+    mcpHumanActionLabel: string
+    mcpParityScopeLabel: string
+    mcpToolEnabledLabel: string
+    mcpToolApprovalLabel: string
+    mcpCapabilityRead: string
+    mcpCapabilityWrite: string
+    mcpLogTitle: string
+    mcpLogDescription: string
+    mcpLogEmptyTitle: string
+    mcpLogEmptyCopy: string
+    mcpLogRefreshAction: string
+    mcpLogThreadLabel: string
+    mcpLogTimestampLabel: string
+    mcpLogLoadingState: string
+    mcpLogLoadFailedState: string
   }
   debug: {
     kicker: string
@@ -360,6 +389,16 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolStatusRunning: 'Running',
       toolStatusCompleted: 'Completed',
       toolStatusError: 'Error',
+      toolStatusApprovalPending: 'Approval pending',
+      toolStatusApprovalApproved: 'Approved',
+      toolStatusApprovalRejected: 'Rejected',
+      toolStatusApprovalCanceled: 'Canceled',
+      toolStatusApprovalExpired: 'Expired',
+      toolApprovalApproveAction: 'Approve',
+      toolApprovalRejectAction: 'Reject',
+      toolApprovalCancelAction: 'Cancel',
+      toolApprovalExpiresLabel: 'Expires',
+      toolApprovalResolvedLabel: 'Resolved',
       toolRedactedValue: '[redacted]',
     },
     filters: {
@@ -475,6 +514,29 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       noExpandedWidgetTitle: 'No widget settings selected',
       noExpandedWidgetCopy:
         'Select Expand on a widget settings card to open its specific settings below.',
+      mcpTitle: 'MCP tool configuration',
+      mcpDescription:
+        'Review widget tools exposed to the assistant, disable tools for this user, and set approval policy per tool.',
+      mcpEmptyTitle: 'No widget MCP tools registered',
+      mcpEmptyCopy:
+        'This widget does not register any assistant-callable MCP tools yet.',
+      mcpHumanActionLabel: 'Human action',
+      mcpParityScopeLabel: 'Parity scope',
+      mcpToolEnabledLabel: 'Enable tool for this user',
+      mcpToolApprovalLabel: 'Require human approval',
+      mcpCapabilityRead: 'Read',
+      mcpCapabilityWrite: 'Write',
+      mcpLogTitle: 'MCP tool call log',
+      mcpLogDescription:
+        'Inspect persisted widget-scoped assistant tool activity for this user.',
+      mcpLogEmptyTitle: 'No widget MCP tool calls recorded',
+      mcpLogEmptyCopy:
+        'Tool activity will appear here after the assistant executes a tool for this widget.',
+      mcpLogRefreshAction: 'Refresh log',
+      mcpLogThreadLabel: 'Thread',
+      mcpLogTimestampLabel: 'Timestamp',
+      mcpLogLoadingState: 'Loading tool log...',
+      mcpLogLoadFailedState: 'Failed to load tool log.',
     },
     debug: {
       kicker: 'Maintenance',
@@ -647,6 +709,16 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolStatusRunning: 'Lauft',
       toolStatusCompleted: 'Abgeschlossen',
       toolStatusError: 'Fehler',
+      toolStatusApprovalPending: 'Freigabe ausstehend',
+      toolStatusApprovalApproved: 'Freigegeben',
+      toolStatusApprovalRejected: 'Abgelehnt',
+      toolStatusApprovalCanceled: 'Abgebrochen',
+      toolStatusApprovalExpired: 'Abgelaufen',
+      toolApprovalApproveAction: 'Freigeben',
+      toolApprovalRejectAction: 'Ablehnen',
+      toolApprovalCancelAction: 'Abbrechen',
+      toolApprovalExpiresLabel: 'Lauft ab',
+      toolApprovalResolvedLabel: 'Bearbeitet',
       toolRedactedValue: '[redacted]',
     },
     filters: {
@@ -765,6 +837,29 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       noExpandedWidgetTitle: 'Keine Widget-Einstellungen ausgewaehlt',
       noExpandedWidgetCopy:
         'Waehle Erweitern auf einer Widget-Einstellungskarte, um die spezifischen Einstellungen unten zu oeffnen.',
+      mcpTitle: 'MCP-Tool-Konfiguration',
+      mcpDescription:
+        'Pruefe die fuer den Assistenten verfuegbaren Widget-Tools, deaktiviere Tools fuer diesen Nutzer und setze die Freigabepolitik pro Tool.',
+      mcpEmptyTitle: 'Keine Widget-MCP-Tools registriert',
+      mcpEmptyCopy:
+        'Dieses Widget registriert derzeit noch keine vom Assistenten aufrufbaren MCP-Tools.',
+      mcpHumanActionLabel: 'Menschliche Aktion',
+      mcpParityScopeLabel: 'Paritaetsumfang',
+      mcpToolEnabledLabel: 'Tool fuer diesen Nutzer aktivieren',
+      mcpToolApprovalLabel: 'Menschliche Freigabe verlangen',
+      mcpCapabilityRead: 'Lesen',
+      mcpCapabilityWrite: 'Schreiben',
+      mcpLogTitle: 'MCP-Toolaufrufprotokoll',
+      mcpLogDescription:
+        'Pruefe das persistierte widgetbezogene Assistenten-Toolprotokoll fuer diesen Nutzer.',
+      mcpLogEmptyTitle: 'Keine Widget-MCP-Toolaufrufe erfasst',
+      mcpLogEmptyCopy:
+        'Tool-Aktivitaet erscheint hier, nachdem der Assistent ein Tool fuer dieses Widget ausgefuehrt hat.',
+      mcpLogRefreshAction: 'Protokoll aktualisieren',
+      mcpLogThreadLabel: 'Thread',
+      mcpLogTimestampLabel: 'Zeitstempel',
+      mcpLogLoadingState: 'Toolprotokoll wird geladen...',
+      mcpLogLoadFailedState: 'Toolprotokoll konnte nicht geladen werden.',
     },
     debug: {
       kicker: 'Wartung',
@@ -948,6 +1043,16 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolStatusRunning: 'En cours',
       toolStatusCompleted: 'Termine',
       toolStatusError: 'Erreur',
+      toolStatusApprovalPending: 'Approbation en attente',
+      toolStatusApprovalApproved: 'Approuve',
+      toolStatusApprovalRejected: 'Rejete',
+      toolStatusApprovalCanceled: 'Annule',
+      toolStatusApprovalExpired: 'Expire',
+      toolApprovalApproveAction: 'Approuver',
+      toolApprovalRejectAction: 'Rejeter',
+      toolApprovalCancelAction: 'Annuler',
+      toolApprovalExpiresLabel: 'Expire le',
+      toolApprovalResolvedLabel: 'Traite le',
       toolRedactedValue: '[redacted]',
     },
     filters: {
@@ -1067,6 +1172,29 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       noExpandedWidgetTitle: 'Aucun reglage de widget selectionne',
       noExpandedWidgetCopy:
         'Selectionnez Etendre sur une carte de reglages du widget pour ouvrir ses reglages specifiques ci-dessous.',
+      mcpTitle: 'Configuration des outils MCP',
+      mcpDescription:
+        'Examinez les outils du widget exposes a l assistant, desactivez des outils pour cet utilisateur et definissez la politique d approbation par outil.',
+      mcpEmptyTitle: 'Aucun outil MCP du widget enregistre',
+      mcpEmptyCopy:
+        'Ce widget n enregistre encore aucun outil MCP appelable par l assistant.',
+      mcpHumanActionLabel: 'Action humaine',
+      mcpParityScopeLabel: 'Portee de parite',
+      mcpToolEnabledLabel: 'Activer l outil pour cet utilisateur',
+      mcpToolApprovalLabel: 'Exiger une approbation humaine',
+      mcpCapabilityRead: 'Lecture',
+      mcpCapabilityWrite: 'Ecriture',
+      mcpLogTitle: 'Journal des appels d outils MCP',
+      mcpLogDescription:
+        'Inspectez l activite persistante des outils d assistant associes a ce widget pour cet utilisateur.',
+      mcpLogEmptyTitle: 'Aucun appel d outil MCP du widget enregistre',
+      mcpLogEmptyCopy:
+        'L activite des outils apparaitra ici apres qu un assistant aura execute un outil pour ce widget.',
+      mcpLogRefreshAction: 'Actualiser le journal',
+      mcpLogThreadLabel: 'Thread',
+      mcpLogTimestampLabel: 'Horodatage',
+      mcpLogLoadingState: 'Chargement du journal des outils...',
+      mcpLogLoadFailedState: 'Impossible de charger le journal des outils.',
     },
     debug: {
       kicker: 'Maintenance',
@@ -1250,6 +1378,16 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolStatusRunning: 'Ejecutando',
       toolStatusCompleted: 'Completado',
       toolStatusError: 'Error',
+      toolStatusApprovalPending: 'Aprobacion pendiente',
+      toolStatusApprovalApproved: 'Aprobado',
+      toolStatusApprovalRejected: 'Rechazado',
+      toolStatusApprovalCanceled: 'Cancelado',
+      toolStatusApprovalExpired: 'Expirado',
+      toolApprovalApproveAction: 'Aprobar',
+      toolApprovalRejectAction: 'Rechazar',
+      toolApprovalCancelAction: 'Cancelar',
+      toolApprovalExpiresLabel: 'Expira',
+      toolApprovalResolvedLabel: 'Resuelto',
       toolRedactedValue: '[redacted]',
     },
     filters: {
@@ -1368,6 +1506,29 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       noExpandedWidgetTitle: 'No hay configuracion de widget seleccionada',
       noExpandedWidgetCopy:
         'Selecciona Expandir en una tarjeta de configuracion del widget para abrir abajo su configuracion especifica.',
+      mcpTitle: 'Configuracion de herramientas MCP',
+      mcpDescription:
+        'Revisa las herramientas del widget expuestas al asistente, desactiva herramientas para este usuario y define la politica de aprobacion por herramienta.',
+      mcpEmptyTitle: 'No hay herramientas MCP del widget registradas',
+      mcpEmptyCopy:
+        'Este widget todavia no registra herramientas MCP invocables por el asistente.',
+      mcpHumanActionLabel: 'Accion humana',
+      mcpParityScopeLabel: 'Alcance de paridad',
+      mcpToolEnabledLabel: 'Activar herramienta para este usuario',
+      mcpToolApprovalLabel: 'Requerir aprobacion humana',
+      mcpCapabilityRead: 'Lectura',
+      mcpCapabilityWrite: 'Escritura',
+      mcpLogTitle: 'Registro de llamadas de herramientas MCP',
+      mcpLogDescription:
+        'Inspecciona la actividad persistida de herramientas del asistente asociadas a este widget para este usuario.',
+      mcpLogEmptyTitle: 'No hay llamadas MCP del widget registradas',
+      mcpLogEmptyCopy:
+        'La actividad de herramientas aparecera aqui despues de que el asistente ejecute una herramienta para este widget.',
+      mcpLogRefreshAction: 'Actualizar registro',
+      mcpLogThreadLabel: 'Hilo',
+      mcpLogTimestampLabel: 'Marca de tiempo',
+      mcpLogLoadingState: 'Cargando registro de herramientas...',
+      mcpLogLoadFailedState: 'No se pudo cargar el registro de herramientas.',
     },
     debug: {
       kicker: 'Mantenimiento',

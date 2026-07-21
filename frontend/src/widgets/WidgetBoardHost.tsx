@@ -8,6 +8,7 @@ import {
 import type { AppTextBundle } from '../i18n/appText'
 import type {
   AssistantAvailabilityRecord,
+  AssistantToolApprovalAction,
   AssistantMessageEventRecord,
   AssistantMessageRecord,
   AssistantThreadDetail,
@@ -118,6 +119,7 @@ interface WidgetBoardHostProps {
     pendingUserMessage: AssistantMessageRecord | null
     streamingMessage: AssistantMessageRecord | null
     streamingEvents: AssistantMessageEventRecord[]
+    resolvingApprovalRequestId: string | null
     isTurnBusy: boolean
   }
   assistantActions: {
@@ -127,6 +129,10 @@ interface WidgetBoardHostProps {
     onDraftChange: (value: string) => void
     onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
     onComposerKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void
+    onResolveToolApproval: (
+      approvalRequestId: string,
+      action: AssistantToolApprovalAction,
+    ) => void
   }
 }
 
@@ -981,7 +987,6 @@ export function WidgetBoardHost({
 
                       return 0
                     })
-                    .slice(0, 8)
                     .map((item) => (
                     <li
                       className="bring-row"
@@ -1173,6 +1178,7 @@ export function WidgetBoardHost({
                     pendingUserMessage: assistantState.pendingUserMessage,
                     streamingMessage: assistantState.streamingMessage,
                     streamingEvents: assistantState.streamingEvents,
+                    resolvingApprovalRequestId: assistantState.resolvingApprovalRequestId,
                     isTurnBusy: assistantState.isTurnBusy,
                     onCreateThread: assistantActions.onCreateThread,
                     onDeleteThread: assistantActions.onDeleteThread,
@@ -1180,6 +1186,7 @@ export function WidgetBoardHost({
                     onDraftChange: assistantActions.onDraftChange,
                     onSubmit: assistantActions.onSubmit,
                     onComposerKeyDown: assistantActions.onComposerKeyDown,
+                    onResolveToolApproval: assistantActions.onResolveToolApproval,
                   }
               : null
 

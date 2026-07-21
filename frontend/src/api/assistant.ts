@@ -1,4 +1,5 @@
 import { AuthRequiredError, fetchApi, getApiUrl } from './request'
+import type { RegisteredWidgetMcpTool } from '../widgets/widgetTypes'
 
 export type AssistantAvailabilityStatus =
   | 'available'
@@ -65,7 +66,25 @@ export interface AssistantToolEventPayload {
   toolCallId: string
   serverName: string
   toolName: string
-  status: 'running' | 'completed' | 'error'
+  widgetId: string | null
+  widgetTitle: string | null
+  sourceLocation: string | null
+  status:
+    | 'running'
+    | 'completed'
+    | 'error'
+    | 'approval_pending'
+    | 'approval_approved'
+    | 'approval_rejected'
+    | 'approval_canceled'
+    | 'approval_expired'
+  approval: {
+    requestId: string
+    required: boolean
+    state: 'pending' | 'approved' | 'rejected' | 'canceled' | 'expired'
+    expiresAt: string | null
+    resolvedAt: string | null
+  } | null
   displayArguments: unknown
   displayResult: unknown
   redactArguments: boolean
@@ -129,6 +148,16 @@ export interface AssistantMessageStreamHandlers {
   onChunk?: (event: AssistantTurnChunkEvent) => void
   onComplete?: (event: AssistantTurnResponse) => void
 }
+
+export interface AssistantMessageRequestOptions {
+  widgetTools?: RegisteredWidgetMcpTool[]
+}
+
+export interface AssistantMessageStreamOptions
+  extends AssistantMessageStreamHandlers,
+    AssistantMessageRequestOptions {}
+
+export type AssistantToolApprovalAction = 'approve' | 'reject' | 'cancel'
 
 const normalizeAssistantAvailabilityStatus = (
   value: unknown,
@@ -323,12 +352,23 @@ const normalizeAssistantToolEventPayload = (value: unknown): AssistantToolEventP
     toolCallId?: unknown
     serverName?: unknown
     toolName?: unknown
+    widgetId?: unknown
+    widgetTitle?: unknown
+    sourceLocation?: unknown
     status?: unknown
+    approval?: unknown
     displayArguments?: unknown
     displayResult?: unknown
     redactArguments?: unknown
     redactResults?: unknown
     error?: unknown
+  }
+  const approvalCandidate = candidate?.approval as {
+    requestId?: unknown
+    required?: unknown
+    state?: unknown
+    expiresAt?: unknown
+    resolvedAt?: unknown
   }
   const errorCandidate = candidate?.error as {
     message?: unknown
@@ -339,12 +379,43 @@ const normalizeAssistantToolEventPayload = (value: unknown): AssistantToolEventP
     toolCallId: typeof candidate?.toolCallId === 'string' ? candidate.toolCallId : '',
     serverName: typeof candidate?.serverName === 'string' ? candidate.serverName : '',
     toolName: typeof candidate?.toolName === 'string' ? candidate.toolName : '',
+    widgetId: typeof candidate?.widgetId === 'string' ? candidate.widgetId : null,
+    widgetTitle: typeof candidate?.widgetTitle === 'string' ? candidate.widgetTitle : null,
+    sourceLocation:
+      typeof candidate?.sourceLocation === 'string' ? candidate.sourceLocation : null,
     status:
       candidate?.status === 'running' ||
       candidate?.status === 'completed' ||
-      candidate?.status === 'error'
+      candidate?.status === 'error' ||
+      candidate?.status === 'approval_pending' ||
+      candidate?.status === 'approval_approved' ||
+      candidate?.status === 'approval_rejected' ||
+      candidate?.status === 'approval_canceled' ||
+      candidate?.status === 'approval_expired'
         ? candidate.status
         : 'running',
+    approval:
+      approvalCandidate &&
+      typeof approvalCandidate.requestId === 'string' &&
+      (approvalCandidate.state === 'pending' ||
+        approvalCandidate.state === 'approved' ||
+        approvalCandidate.state === 'rejected' ||
+        approvalCandidate.state === 'canceled' ||
+        approvalCandidate.state === 'expired')
+        ? {
+            requestId: approvalCandidate.requestId,
+            required: approvalCandidate.required === true,
+            state: approvalCandidate.state,
+            expiresAt:
+              typeof approvalCandidate.expiresAt === 'string'
+                ? approvalCandidate.expiresAt
+                : null,
+            resolvedAt:
+              typeof approvalCandidate.resolvedAt === 'string'
+                ? approvalCandidate.resolvedAt
+                : null,
+          }
+        : null,
     displayArguments: candidate?.displayArguments ?? null,
     displayResult: candidate?.displayResult ?? null,
     redactArguments: candidate?.redactArguments === true,
@@ -643,13 +714,19 @@ export const deleteAssistantThread = async (threadId: string) => {
 export const sendAssistantThreadMessage = async (
   threadId: string,
   content: string,
+  options: AssistantMessageRequestOptions = {},
 ): Promise<AssistantTurnResponse> => {
   const response = await fetchApi(`/assistant/threads/${threadId}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ content, stream: false }),
+    body: JSON.stringify({
+      content,
+      stream: false,
+      requestedTools: true,
+      widgetTools: options.widgetTools ?? [],
+    }),
   })
 
   if (!response.ok) {
@@ -662,7 +739,7 @@ export const sendAssistantThreadMessage = async (
 export const streamAssistantThreadMessage = async (
   threadId: string,
   content: string,
-  handlers: AssistantMessageStreamHandlers = {},
+  options: AssistantMessageStreamOptions = {},
 ): Promise<AssistantTurnResponse> => {
   const response = await fetch(getApiUrl(`/assistant/threads/${threadId}/messages`), {
     method: 'POST',
@@ -670,7 +747,12 @@ export const streamAssistantThreadMessage = async (
       'Content-Type': 'application/json',
     },
     credentials: 'same-origin',
-    body: JSON.stringify({ content, stream: true }),
+    body: JSON.stringify({
+      content,
+      stream: true,
+      requestedTools: true,
+      widgetTools: options.widgetTools ?? [],
+    }),
   })
 
   if (response.status === 401) {
@@ -721,7 +803,7 @@ export const streamAssistantThreadMessage = async (
       }
 
       if (parsedEvent.type === 'started') {
-        handlers.onStarted?.({
+        options.onStarted?.({
           thread: normalizeAssistantThreadSummary(parsedEvent.thread),
           userMessage: normalizeAssistantMessage(parsedEvent.userMessage),
           runtime: normalizeAssistantRuntime(parsedEvent.runtime),
@@ -730,7 +812,7 @@ export const streamAssistantThreadMessage = async (
       }
 
       if (parsedEvent.type === 'chunk') {
-        handlers.onChunk?.({
+        options.onChunk?.({
           messageId: typeof parsedEvent.messageId === 'string' ? parsedEvent.messageId : '',
           delta: typeof parsedEvent.delta === 'string' ? parsedEvent.delta : '',
           content: typeof parsedEvent.content === 'string' ? parsedEvent.content : '',
@@ -740,7 +822,7 @@ export const streamAssistantThreadMessage = async (
 
       if (parsedEvent.type === 'complete') {
         completedTurn = normalizeAssistantTurnResponse(parsedEvent)
-        handlers.onComplete?.(completedTurn)
+        options.onComplete?.(completedTurn)
       }
     }
   }
@@ -750,4 +832,37 @@ export const streamAssistantThreadMessage = async (
   }
 
   return completedTurn
+}
+
+export const resolveAssistantToolApproval = async (
+  approvalRequestId: string,
+  action: AssistantToolApprovalAction,
+): Promise<AssistantThreadDetail> => {
+  const response = await fetchApi(`/assistant/tool-approvals/${approvalRequestId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action }),
+  })
+
+  if (!response.ok) {
+    throw await buildAssistantApiError(response, 'Failed to resolve assistant tool approval.')
+  }
+
+  const payload = (await response.json()) as {
+    thread?: unknown
+    messages?: unknown[]
+    events?: unknown[]
+  }
+
+  if (!Array.isArray(payload.messages)) {
+    throw new Error('Backend returned an invalid assistant tool approval payload.')
+  }
+
+  return {
+    ...normalizeAssistantThreadSummary(payload.thread),
+    messages: payload.messages.map(normalizeAssistantMessage),
+    events: Array.isArray(payload.events) ? payload.events.map(normalizeAssistantMessageEvent) : [],
+  }
 }

@@ -69,4 +69,36 @@ for every new widget issue definition, the multilingual sectioning shall be expl
 - implementation plan: state that the widget-local `translations.ts` file is created or extended using the shared four-language schema
 - test cases: state that english, german, french, and spanish rendering is verified through the global language setting
 
+### widget MCP tool interface requirements
+if a widget issue introduces a new widget or changes what a widget can do, the issue definition shall explicitly cover the widget MCP tool interface.
+- every widget shall expose MCP tools through the shared Subway assistant MCP runtime rather than direct browser access
+- the widget MCP tool set shall cover every functionality the human user can perform for that widget, including read, configuration, and destructive actions when those actions already exist in the UI
+- each widget shall define a standardized tool contract with stable tool names, clear descriptions, argument schemas, approval metadata for sensitive tools, and discoverability through widget registration
+- each widget settings panel shall include an MCP configuration area; widgets without prior business settings shall still expose a widget settings surface for MCP configuration
+- widget settings shall cover per-user tool enablement and per-tool human-in-the-loop approval policy where applicable
+- widget tool activity shall be represented in a persisted tool-call log that can be inspected from the widget settings panel
+- any new widget-owned static UI copy introduced for MCP configuration, approval, or logging shall be translated through the widget-local `translations.ts` file when the copy belongs to the widget
+- any shared application shell text introduced for MCP configuration, approval, or logging shall remain in the shared application translation files
+
+### When writing a widget issue definition with MCP scope
+mention the widget MCP tool interface explicitly in the functional requirements, implementation plan, and test cases.
+- define in the functional requirements which human-visible widget capabilities must have MCP parity and which tools require human approval
+- require in the implementation plan that the widget registers its MCP tools through the shared runtime, makes them discoverable through shared assistant discovery, extends the widget settings panel with MCP configuration, and participates in the persisted tool-call logging contract
+- require in the test cases that assistant-driven execution, approval gating, logging visibility, and parity with the equivalent human UI flow are verified
+- require the issue definition to call out any intentionally deferred human-visible widget capability and explain why it is not yet a truthful MCP tool
+
+### Widget MCP issue definition checklist
+for every widget issue definition that creates or changes user-facing widget behavior, the MCP sectioning shall be explicit.
+- functional requirements: name the widget actions that must be callable through MCP and state whether each action is safe or approval-gated
+- implementation plan: state how the widget registers the tool contract, becomes discoverable to the assistant, extends settings, and persists or renders tool-call activity
+- test cases: state that the assistant path reaches the same outcome as the human path and that approval-gated tools cannot run without the configured approval step
+- deferred scope: name any human-visible capability that remains intentionally out of scope and the reason for the deferral
+
+### recommended widget MCP parity map section
+for widget issues with MCP scope, add one compact parity map section.
+- list each human-visible widget capability next to the MCP tool name that covers it
+- mark whether the capability is read, configuration, mutation, destructive, or integration-oriented
+- mark whether human approval is required
+- mark whether the capability is implemented in the issue or intentionally deferred
+
 ⁠*Issue Type on Repository*: ALWAYS add label type feature "type/feature" when creating the issue on the github repository!
