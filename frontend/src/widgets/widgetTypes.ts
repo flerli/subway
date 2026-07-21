@@ -175,6 +175,7 @@ export interface RegisteredWidgetMcpTool {
   widgetTitle: string
   sourceLocation: string
   toolName: string
+  providerToolName: string
   description: string
   humanAction: string
   parityScope: WidgetCapability[]

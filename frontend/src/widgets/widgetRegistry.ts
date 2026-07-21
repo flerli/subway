@@ -56,6 +56,13 @@ const widgetPresentation: Record<string, WidgetPresentation> = {
   },
 }
 
+const buildProviderToolName = (toolName: string) =>
+  toolName
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 64)
+
 export const buildWidgetRegistry = (
   widgetEntities: WidgetEntityRecord[],
 ): RegisteredWidget[] =>
@@ -99,6 +106,7 @@ export const buildRegisteredWidgetMcpToolCatalog = (
           widgetTitle: widget.entity.title,
           sourceLocation: widget.entity.sourceLocation,
           toolName: tool.name,
+          providerToolName: buildProviderToolName(tool.name),
           description: tool.description,
           humanAction: tool.humanAction,
           parityScope: tool.parityScope,

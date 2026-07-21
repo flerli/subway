@@ -472,6 +472,13 @@ const sanitizeAssistantWidgetSourceLocation = (value) => {
 
 const ASSISTANT_WIDGET_TOOL_ARGUMENT_TYPES = new Set(['string', 'number', 'boolean'])
 
+const buildAssistantProviderToolName = (value) =>
+  sanitizeAssistantToolName(value)
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 64)
+
 const normalizeAssistantWidgetToolArgument = (value) => {
   const candidate = value && typeof value === 'object' ? value : {}
   const key = sanitizeAssistantToolName(candidate.key ?? candidate.name)
@@ -505,6 +512,9 @@ const normalizeAssistantWidgetTools = (value) => {
     const widgetTitle = sanitizeAssistantWidgetLabel(candidate.widgetTitle)
     const sourceLocation = sanitizeAssistantWidgetSourceLocation(candidate.sourceLocation)
     const toolName = sanitizeAssistantToolName(candidate.toolName ?? candidate.name)
+    const providerToolName = buildAssistantProviderToolName(
+      candidate.providerToolName ?? candidate.toolName ?? candidate.name,
+    )
     const description = sanitizeAssistantToolDescription(candidate.description)
     const humanAction = sanitizeAssistantToolDescription(candidate.humanAction)
     const parityScope = Array.isArray(candidate.parityScope)
@@ -516,15 +526,16 @@ const normalizeAssistantWidgetTools = (value) => {
           .filter((argumentDefinition) => argumentDefinition !== null)
       : []
 
-    if (!widgetId || !toolName || !description) {
+    if (!widgetId || !toolName || !providerToolName || !description) {
       return
     }
 
-    widgetToolsByName.set(toolName, {
+    widgetToolsByName.set(providerToolName, {
       widgetId,
       widgetTitle: widgetTitle || widgetId,
       sourceLocation,
       toolName,
+      providerToolName,
       description,
       humanAction: humanAction || description,
       parityScope: parityScope.length > 0 ? parityScope : ['read'],
@@ -3591,7 +3602,7 @@ const buildAssistantProviderToolDefinitions = (widgetTools) =>
   widgetTools.map((tool) => ({
     type: 'function',
     function: {
-      name: tool.toolName,
+      name: tool.providerToolName,
       description: tool.description,
       parameters: {
         type: 'object',
@@ -3632,8 +3643,13 @@ const normalizeAssistantToolApprovalState = (value) =>
 
 const resolveAssistantMcpToolConfig = (toolName, widgetTools = []) => {
   const discoveredWidgetTool =
-    widgetTools.find((widgetTool) => widgetTool.toolName === toolName) ?? null
-  const internalWidgetToolHandler = assistantInternalWidgetToolHandlers.get(toolName) ?? null
+    widgetTools.find(
+      (widgetTool) =>
+        widgetTool.toolName === toolName || widgetTool.providerToolName === toolName,
+    ) ?? null
+  const canonicalToolName = discoveredWidgetTool?.toolName ?? toolName
+  const internalWidgetToolHandler =
+    assistantInternalWidgetToolHandlers.get(canonicalToolName) ?? null
 
   if (internalWidgetToolHandler) {
     return {
@@ -3642,7 +3658,7 @@ const resolveAssistantMcpToolConfig = (toolName, widgetTools = []) => {
         name: internalWidgetToolHandler.serverName,
       },
       tool: {
-        name: toolName,
+        name: canonicalToolName,
         redactArguments: discoveredWidgetTool?.redactArguments === true,
         redactResults: discoveredWidgetTool?.redactResults === true,
       },
@@ -3652,7 +3668,9 @@ const resolveAssistantMcpToolConfig = (toolName, widgetTools = []) => {
   }
 
   for (const server of configuredAssistantMcpServers) {
-    const matchedTool = server.tools.find((tool) => tool.name === toolName) ?? null
+    const matchedTool =
+      server.tools.find((tool) => tool.name === canonicalToolName || tool.name === toolName) ??
+      null
 
     if (matchedTool) {
       return {
@@ -3768,7 +3786,7 @@ const callAssistantMcpTool = async (ownerUserId, toolCall, widgetTools = []) => 
 
     return {
       serverName: resolvedToolConfig.server.name,
-      toolName: toolCall.toolName,
+      toolName: resolvedToolConfig.tool.name,
       toolId: toolCall.id,
       widgetId: resolvedToolConfig.widgetTool?.widgetId ?? null,
       widgetTitle: resolvedToolConfig.widgetTool?.widgetTitle ?? null,
@@ -3833,7 +3851,7 @@ const callAssistantMcpTool = async (ownerUserId, toolCall, widgetTools = []) => 
 
     return {
       serverName: resolvedToolConfig.server.name,
-      toolName: toolCall.toolName,
+      toolName: resolvedToolConfig.tool.name,
       toolId: toolCall.id,
       widgetId: resolvedToolConfig.widgetTool?.widgetId ?? null,
       widgetTitle: resolvedToolConfig.widgetTool?.widgetTitle ?? null,
