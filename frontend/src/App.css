@@ -1143,9 +1143,6 @@ select {
 }
 
 .weather-forecast-plot {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
   min-height: 0;
   height: 100%;
   align-self: stretch;
@@ -1155,7 +1152,7 @@ select {
   position: relative;
   min-height: 14rem;
   height: 100%;
-  padding: 8px 10px 6px;
+  padding: 8px 10px 18px;
   border-radius: 22px;
   overflow: hidden;
   background:
@@ -1166,6 +1163,7 @@ select {
 
 .weather-forecast-plot--detail .weather-forecast-plot__surface {
   min-height: 22rem;
+  padding-bottom: 24px;
 }
 
 .weather-forecast-plot__svg {
@@ -1270,14 +1268,18 @@ select {
 }
 
 .weather-forecast-plot__ticks {
-  display: grid;
-  gap: 8px;
-  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 1rem;
+  pointer-events: none;
 }
 
 .weather-forecast-plot__tick {
-  display: grid;
-  justify-items: center;
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
   min-width: 0;
 }
 

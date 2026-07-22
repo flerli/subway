@@ -68,7 +68,7 @@ export function WeatherForecastPlot({
   const leftPadding = forecast.length === 1 ? 20 : 8
   const rightPadding = forecast.length === 1 ? 20 : 8
   const topPadding = size === 'detail' ? 30 : 24
-  const bottomPadding = size === 'detail' ? 10 : 8
+  const bottomPadding = size === 'detail' ? 18 : 16
   const plotWidth = chartWidth - leftPadding - rightPadding
   const plotHeight = chartHeight - topPadding - bottomPadding
   const iconTrackY = size === 'detail' ? 12 : 10
@@ -185,23 +185,20 @@ export function WeatherForecastPlot({
             </div>
           </div>
         ))}
-      </div>
 
-      <div
-        className="weather-forecast-plot__ticks"
-        style={{
-          gridTemplateColumns: `repeat(${forecast.length}, minmax(0, 1fr))`,
-          paddingLeft: `${leftPadding}%`,
-          paddingRight: `${rightPadding}%`,
-        }}
-      >
-        {chartPoints.map((point) => (
-          <div className="weather-forecast-plot__tick" key={`${point.day.day}-tick`}>
-            <p className="weather-forecast-plot__tick-day">
-              {formatForecastDayLabel(point.day.day, languageCode)}
-            </p>
-          </div>
-        ))}
+        <div className="weather-forecast-plot__ticks" aria-hidden="true">
+          {chartPoints.map((point) => (
+            <div
+              className="weather-forecast-plot__tick"
+              key={`${point.day.day}-tick`}
+              style={{ left: `${point.x}%` }}
+            >
+              <p className="weather-forecast-plot__tick-day">
+                {formatForecastDayLabel(point.day.day, languageCode)}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
