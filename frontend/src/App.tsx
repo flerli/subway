@@ -296,7 +296,7 @@ const buildArrivalBoardEvents = (
       const eventDateTime = new Date(`${agendaItem.date}T${agendaItem.time}:00`)
       const visibilityEndDateTime = agendaItem.rangeEndDate
         ? new Date(`${agendaItem.rangeEndDate}T23:59:59`)
-        : eventDateTime
+        : new Date(`${agendaItem.date}T23:59:59`)
       const eventTime = eventDateTime.getTime()
       const visibilityEndTime = visibilityEndDateTime.getTime()
 
