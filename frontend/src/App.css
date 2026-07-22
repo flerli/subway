@@ -4099,14 +4099,36 @@ select {
     font-size: 1.62rem;
   }
 
+  .terminal-cell--filters {
+    align-items: start;
+  }
+
+  .terminal-cell--filters .filter-actions,
+  .terminal-cell--filters .terminal-actions {
+    align-items: start;
+  }
+
+  .filter-actions .terminal-button {
+    min-height: auto;
+  }
+
   .arrival-strip {
-    min-height: 148px;
-    padding: 12px;
-    gap: 12px;
+    min-height: 108px;
+    padding: 10px 12px;
+    gap: 10px;
   }
 
   .arrival-destination h3 {
-    font-size: 1.16rem;
+    font-size: 1rem;
+  }
+
+  .arrival-count {
+    font-size: 2.4rem;
+  }
+
+  .widget-zone--expanded-stage {
+    flex: 0 0 220px;
+    min-height: 220px;
   }
 
   .arrival-destination p,
