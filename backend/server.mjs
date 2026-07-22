@@ -4381,8 +4381,9 @@ const normalizeLiteLlmAssistantResponse = (responseBody, streamRequested) => {
       ? firstChoice.message
       : {}
   const content = normalizeAssistantProviderContent(message.content)
+  const toolCalls = normalizeAssistantProviderToolCalls(candidate)
 
-  if (!content) {
+  if (!content && toolCalls.length === 0) {
     throw new AssistantRuntimeError(
       'Assistant provider returned an invalid response payload.',
       502,
@@ -4394,7 +4395,7 @@ const normalizeLiteLlmAssistantResponse = (responseBody, streamRequested) => {
     providerMessageId: typeof candidate.id === 'string' ? candidate.id : null,
     role: 'assistant',
     content,
-    toolCalls: normalizeAssistantProviderToolCalls(candidate),
+    toolCalls,
     finishReason:
       typeof firstChoice.finish_reason === 'string' ? firstChoice.finish_reason : null,
     usage: normalizeAssistantUsagePayload(candidate.usage),
@@ -4419,8 +4420,9 @@ const normalizeCustomAssistantResponse = (responseBody, streamRequested) => {
       candidate.reply ??
       '',
   )
+  const toolCalls = normalizeAssistantProviderToolCalls(candidate)
 
-  if (!content) {
+  if (!content && toolCalls.length === 0) {
     throw new AssistantRuntimeError(
       'Assistant provider returned an invalid response payload.',
       502,
@@ -4432,7 +4434,7 @@ const normalizeCustomAssistantResponse = (responseBody, streamRequested) => {
     providerMessageId: typeof candidate.id === 'string' ? candidate.id : null,
     role: 'assistant',
     content,
-    toolCalls: normalizeAssistantProviderToolCalls(candidate),
+    toolCalls,
     finishReason:
       typeof candidate.finishReason === 'string'
         ? candidate.finishReason
@@ -4459,10 +4461,20 @@ const buildAssistantProviderTranscriptMessages = (messages) =>
   messages.map((message) => {
     const payload = {
       role: message.role,
-      content: message.content,
     }
 
-    if (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) {
+    const hasToolCalls = Array.isArray(message.toolCalls) && message.toolCalls.length > 0
+
+    if (hasToolCalls) {
+      payload.content =
+        typeof message.content === 'string' && message.content.trim().length > 0
+          ? message.content
+          : null
+    } else {
+      payload.content = typeof message.content === 'string' ? message.content : ''
+    }
+
+    if (hasToolCalls) {
       payload.tool_calls = message.toolCalls.map((toolCall) => ({
         id: toolCall.id,
         type: 'function',
