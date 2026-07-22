@@ -687,7 +687,7 @@ export function WidgetBoardHost({
           }`,
           mode,
           children: (
-            <>
+            <div className="weather-widget-content">
               <div className="weather-summary">
                 <div className="weather-hero-stack">
                   <WeatherIcon state={weatherData.visualState} size="hero" />
@@ -710,7 +710,7 @@ export function WidgetBoardHost({
                 languageCode={languageCode}
                 size={mode === 'expanded' ? 'detail' : 'compact'}
               />
-            </>
+            </div>
           ),
         })
       }

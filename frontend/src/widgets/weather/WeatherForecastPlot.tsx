@@ -60,18 +60,18 @@ export function WeatherForecastPlot({
 
   const domainMin = Math.min(...domainValues)
   const domainMax = Math.max(...domainValues)
-  const temperaturePadding = Math.max(2, Math.ceil((domainMax - domainMin) * 0.15))
+  const temperaturePadding = Math.max(1, Math.ceil((domainMax - domainMin) * 0.08))
   const paddedMin = domainMin - temperaturePadding
   const paddedMax = domainMax + temperaturePadding
   const chartWidth = 100
   const chartHeight = 100
   const leftPadding = forecast.length === 1 ? 20 : 8
   const rightPadding = forecast.length === 1 ? 20 : 8
-  const topPadding = size === 'detail' ? 10 : 8
-  const bottomPadding = size === 'detail' ? 28 : 24
+  const topPadding = size === 'detail' ? 30 : 24
+  const bottomPadding = size === 'detail' ? 10 : 8
   const plotWidth = chartWidth - leftPadding - rightPadding
   const plotHeight = chartHeight - topPadding - bottomPadding
-  const iconTrackY = chartHeight - (size === 'detail' ? 16 : 14)
+  const iconTrackY = size === 'detail' ? 12 : 10
 
   const resolveX = (index: number) =>
     forecast.length === 1
@@ -86,9 +86,9 @@ export function WeatherForecastPlot({
     const highY = resolveY(day.high)
     const lowY = resolveY(day.low)
     const pointGap = Math.abs(highY - lowY)
-    const needsSplitOffset = pointGap < 12
-    const highX = needsSplitOffset ? clampValue(x - 2.8, leftPadding, chartWidth - rightPadding) : x
-    const lowX = needsSplitOffset ? clampValue(x + 2.8, leftPadding, chartWidth - rightPadding) : x
+    const needsSplitOffset = pointGap < 18
+    const highX = needsSplitOffset ? clampValue(x - 4.2, leftPadding, chartWidth - rightPadding) : x
+    const lowX = needsSplitOffset ? clampValue(x + 4.2, leftPadding, chartWidth - rightPadding) : x
 
     return {
       day,
@@ -97,7 +97,7 @@ export function WeatherForecastPlot({
       lowX,
       highY,
       lowY,
-      iconY: clampValue(Math.max(highY, lowY) + 13, topPadding + 8, iconTrackY),
+      iconY: iconTrackY,
     }
   })
 
