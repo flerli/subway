@@ -2,10 +2,10 @@ import type { SupportedLanguageCode } from '../../i18n/localization'
 import { WeatherIcon } from './WeatherIcon'
 import type { WeatherWidgetData } from '../widgetHostModels'
 import type { WeatherWidgetTranslation } from './translations'
+import { WeatherForecastPlot } from './WeatherForecastPlot'
 
 interface WeatherDetailViewData {
   weatherData: WeatherWidgetData
-  commuteNote: string
 }
 
 const isWeatherDetailViewData = (
@@ -13,29 +13,9 @@ const isWeatherDetailViewData = (
 ): value is WeatherDetailViewData => {
   const candidate = value as {
     weatherData?: WeatherWidgetData
-    commuteNote?: unknown
   }
 
-  return (
-    Boolean(candidate?.weatherData) &&
-    Array.isArray(candidate.weatherData?.forecast) &&
-    typeof candidate?.commuteNote === 'string'
-  )
-}
-
-const formatForecastDayLabel = (
-  day: string,
-  languageCode: SupportedLanguageCode,
-) => {
-  const parsedDay = new Date(`${day}T00:00:00`)
-
-  if (Number.isNaN(parsedDay.getTime())) {
-    return day
-  }
-
-  return new Intl.DateTimeFormat(languageCode, {
-    weekday: 'short',
-  }).format(parsedDay)
+  return Boolean(candidate?.weatherData) && Array.isArray(candidate.weatherData?.forecast)
 }
 
 export function WeatherDetailView({
@@ -51,7 +31,7 @@ export function WeatherDetailView({
     return null
   }
 
-  const { weatherData, commuteNote } = data
+  const { weatherData } = data
   const focusLocation =
     weatherData.locations.find((location) => location.id === weatherData.focusLocationId) ??
     weatherData
@@ -73,7 +53,6 @@ export function WeatherDetailView({
               <p className="weather-detail-location">
                 {focusLocation.source} · {focusLocation.stale ? widgetText.copy.statusCached : widgetText.copy.statusLive}
               </p>
-              <p className="weather-note">{commuteNote}</p>
               <p className="weather-updated">
                 {widgetText.copy.updatedPrefix}{' '}
                 {new Intl.DateTimeFormat(languageCode, {
@@ -84,23 +63,12 @@ export function WeatherDetailView({
             </div>
           </div>
 
-          <div className="forecast-grid forecast-grid--expanded weather-focus-forecast-grid">
-            {focusLocation.forecast.map((day) => (
-              <div className="forecast-card forecast-card--expanded" key={day.day}>
-                <div className="forecast-copy-stack">
-                  <p className="forecast-day">{formatForecastDayLabel(day.day, languageCode)}</p>
-                  <div className="forecast-range" aria-label={`High ${day.high} degrees, low ${day.low} degrees`}>
-                    <span>{day.high}°</span>
-                    <span className="forecast-range-divider" aria-hidden="true"></span>
-                    <span>{day.low}°</span>
-                  </div>
-                </div>
-                <div className="forecast-icon-wrap">
-                  <WeatherIcon state={day.visualState} size="forecast-expanded" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <WeatherForecastPlot
+            currentTemperature={focusLocation.currentTemperature}
+            forecast={focusLocation.forecast}
+            languageCode={languageCode}
+            size="detail"
+          />
         </div>
 
         {secondaryLocations.length > 0 ? (

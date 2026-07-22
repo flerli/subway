@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { BringWidgetTranslation } from './translations'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import type { BringWidgetData, BringListItem } from '../widgetHostModels'
@@ -45,6 +45,7 @@ const isBringDetailViewData = (value: unknown): value is BringDetailViewData => 
 
 export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
   const itemNameInputRef = useRef<HTMLInputElement | null>(null)
+  const autoRefreshKeyRef = useRef<string | null>(null)
   const [draftItemName, setDraftItemName] = useState('')
   const [draftSpecification, setDraftSpecification] = useState('')
   const [requestState, setRequestState] = useState<string | null>(null)
@@ -138,6 +139,22 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
     )
   }
 
+  useEffect(() => {
+    const autoRefreshKey =
+      data.bringData.status === 'ready' && bringList
+        ? bringList.listUuid
+        : data.bringData.status === 'error'
+          ? 'error'
+          : null
+
+    if (!autoRefreshKey || autoRefreshKeyRef.current === autoRefreshKey || requestState !== null) {
+      return
+    }
+
+    autoRefreshKeyRef.current = autoRefreshKey
+    void handleRefresh()
+  }, [bringList, data.bringData.status, requestState])
+
   const handleAddItem = async (event: FormEvent) => {
     event.preventDefault()
 
@@ -188,6 +205,27 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
         })
       },
       widgetText.detail.reopenFailedFallback,
+    )
+  }
+
+  const handleDeleteItem = async (item: BringListItem) => {
+    const confirmed = window.confirm(
+      formatLocalizedText(widgetText.detail.deleteConfirm, { name: item.itemName }),
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    await runAction(
+      `delete:${item.uuid}`,
+      async () => {
+        await data.onDeleteItem({
+          itemName: item.itemName,
+          itemUuid: item.uuid || undefined,
+        })
+      },
+      widgetText.detail.deleteFailedFallback,
     )
   }
 
@@ -276,31 +314,27 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
 
                   <div className="bring-detail-matrix">
                     {group.items.map((item) => {
-                const itemKey = item.uuid || `${item.itemName}-${item.specification}`
+                      const itemKey = item.uuid || `${item.itemName}-${item.specification}`
 
-                return (
-                  <article className="bring-detail-item-card" key={itemKey}>
-                    <div className="bring-detail-row-copy">
-                      <p className="bring-item-name">{item.itemName}</p>
-                      {item.category ? (
-                        <p className="bring-item-category">{item.category}</p>
-                      ) : null}
-                      {item.specification ? (
-                        <p className="bring-item-specification">{item.specification}</p>
-                      ) : null}
-                    </div>
-                    <div className="bring-detail-actions">
-                      <button
-                        type="button"
-                        className="bring-detail-action"
-                        disabled={isReadOnly || requestState !== null}
-                        onClick={() => void handleCompleteItem(item)}
-                      >
-                        {widgetText.detail.completeAction}
-                      </button>
-                    </div>
-                  </article>
-                )
+                      return (
+                        <button
+                          type="button"
+                          className="bring-detail-item-card bring-detail-item-card--interactive"
+                          key={itemKey}
+                          disabled={isReadOnly || requestState !== null}
+                          onClick={() => void handleCompleteItem(item)}
+                        >
+                          <div className="bring-detail-row-copy">
+                            <p className="bring-item-name">{item.itemName}</p>
+                            {item.category ? (
+                              <p className="bring-item-category">{item.category}</p>
+                            ) : null}
+                            {item.specification ? (
+                              <p className="bring-item-specification">{item.specification}</p>
+                            ) : null}
+                          </div>
+                        </button>
+                      )
                     })}
                   </div>
                 </li>
@@ -378,6 +412,14 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
                         onClick={() => void handleReopenItem(item)}
                       >
                         {widgetText.detail.reopenAction}
+                      </button>
+                      <button
+                        type="button"
+                        className="bring-detail-action bring-detail-action--danger"
+                        disabled={isReadOnly || requestState !== null}
+                        onClick={() => void handleDeleteItem(item)}
+                      >
+                        {widgetText.detail.deleteAction}
                       </button>
                     </div>
                   </li>

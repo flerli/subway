@@ -410,19 +410,6 @@ const bringNotConfiguredErrorCodes = new Set([
   'bring_selected_list_missing',
 ])
 
-const commuteNotes: Record<string, string> = {
-  [ALL_FILTER_ID]:
-    'Household advisory: dry commute now, light rain most likely after the evening return window.',
-  'family-1':
-    'Alex: cooler north hall start, keep a light shell in the top basket.',
-  'family-2':
-    'Bianca: east window glare is strongest until 10:00, close shade B after departure.',
-  'family-3':
-    'Chris: best errand gap is 13:00 to 15:00 before the wind picks up.',
-  'family-4':
-    'Dana: clear dinner arrival window, no umbrella needed for the evening run.',
-}
-
 const sanitizeMemberName = (value: string) =>
   value.trim().replace(/\s+/g, ' ').slice(0, 24)
 
@@ -2146,9 +2133,6 @@ function App() {
     arrivalBoardChromeSettings.boardSubheading.trim().length > 0
       ? arrivalBoardChromeSettings.boardSubheading
       : defaultArrivalBoardSettings.boardSubheading
-  const commuteNote =
-    commuteNotes[activeFilter] ??
-    `${activeProfile ? getMemberLabel(activeProfile) : 'This view'}: color and badge are ready. Personal items can be assigned next.`
 
   const updateMember = (
     memberId: MemberId,
@@ -3342,7 +3326,6 @@ function App() {
               calendarSettings={combinedWidgetSettingsMap.calendar ?? {}}
               widgetSettingsMap={combinedWidgetSettingsMap}
               weatherData={weatherWidgetData}
-              commuteNote={commuteNote}
               focusedCalendarEventId={calendarFocusSelection?.eventId ?? null}
               focusedCalendarEventDate={calendarFocusSelection?.eventDate ?? null}
               onBringRefresh={handleBringRefresh}

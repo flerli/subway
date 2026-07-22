@@ -35,6 +35,7 @@ import type {
   WeatherWidgetData,
 } from './widgetHostModels'
 import { WeatherIcon } from './weather/WeatherIcon'
+import { WeatherForecastPlot } from './weather/WeatherForecastPlot'
 import type {
   RegisteredWidget,
   WidgetPlacementAssignment,
@@ -80,7 +81,6 @@ interface WidgetBoardHostProps {
   calendarSettings: WidgetSettingsValues
   widgetSettingsMap: Record<string, WidgetSettingsValues>
   weatherData: WeatherWidgetData
-  commuteNote: string
   focusedCalendarEventId: string | null
   focusedCalendarEventDate: string | null
   onBringRefresh: () => Promise<unknown>
@@ -316,21 +316,6 @@ const renderEmptyState = (title: string, copy: string, className?: string) => (
   </div>
 )
 
-const formatForecastDayLabel = (
-  day: string,
-  languageCode: SupportedLanguageCode,
-) => {
-  const parsedDay = new Date(`${day}T00:00:00`)
-
-  if (Number.isNaN(parsedDay.getTime())) {
-    return day
-  }
-
-  return new Intl.DateTimeFormat(languageCode, {
-    weekday: 'short',
-  }).format(parsedDay)
-}
-
 export function WidgetBoardHost({
   appText,
   languageCode,
@@ -354,7 +339,6 @@ export function WidgetBoardHost({
   calendarSettings,
   widgetSettingsMap,
   weatherData,
-  commuteNote,
   focusedCalendarEventId,
   focusedCalendarEventDate,
   onBringRefresh,
@@ -370,6 +354,7 @@ export function WidgetBoardHost({
   assistantState,
   assistantActions,
 }: WidgetBoardHostProps) {
+  const [bringMiniRefreshPending, setBringMiniRefreshPending] = useState(false)
   const [youtubeQuery, setYoutubeQuery] = useState('')
   const [youtubeResults, setYoutubeResults] = useState<YoutubeVideo[]>([])
   const [youtubeSelectedVideoId, setYoutubeSelectedVideoId] = useState<string | null>(null)
@@ -709,7 +694,6 @@ export function WidgetBoardHost({
                   <p className="weather-temp">{weatherData.currentTemperature}</p>
                 </div>
                 <div className="weather-copy">
-                  <p className="weather-note">{commuteNote}</p>
                   <p className="weather-updated">
                     {weatherWidgetText.copy.updatedPrefix}{' '}
                     {new Intl.DateTimeFormat(languageCode, {
@@ -720,29 +704,12 @@ export function WidgetBoardHost({
                 </div>
               </div>
 
-              <div className={`forecast-grid${mode === 'expanded' ? ' forecast-grid--expanded' : ''}`}>
-                {weatherData.forecast.map((day) => (
-                  <div
-                    className={`forecast-card${mode === 'expanded' ? ' forecast-card--expanded' : ''}`}
-                    key={day.day}
-                  >
-                    <div className="forecast-copy-stack">
-                      <p className="forecast-day">{formatForecastDayLabel(day.day, languageCode)}</p>
-                      <div className="forecast-range" aria-label={`High ${day.high} degrees, low ${day.low} degrees`}>
-                        <span>{day.high}°</span>
-                        <span className="forecast-range-divider" aria-hidden="true"></span>
-                        <span>{day.low}°</span>
-                      </div>
-                    </div>
-                    <div className="forecast-icon-wrap">
-                      <WeatherIcon
-                        state={day.visualState}
-                        size={mode === 'expanded' ? 'forecast-expanded' : 'forecast'}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <WeatherForecastPlot
+                currentTemperature={weatherData.currentTemperature}
+                forecast={weatherData.forecast}
+                languageCode={languageCode}
+                size={mode === 'expanded' ? 'detail' : 'compact'}
+              />
             </>
           ),
         })
@@ -926,6 +893,15 @@ export function WidgetBoardHost({
           languageCode,
         ) as BringWidgetTranslation
         const bringList = bringData.list
+        const handleBringMiniRefresh = async () => {
+          setBringMiniRefreshPending(true)
+
+          try {
+            await onBringRefresh()
+          } finally {
+            setBringMiniRefreshPending(false)
+          }
+        }
         const bringMeta =
           bringData.status === 'ready' && bringList
             ? `${formatLocalizedText(bringWidgetText.copy.openItemsMeta, {
@@ -963,9 +939,23 @@ export function WidgetBoardHost({
               )
             ) : (
               <div className="bring-widget-shell">
-                {bringList.freshness === 'stale' ? (
-                  <p className="bring-state-banner">{bringWidgetText.copy.staleMeta}</p>
-                ) : null}
+                <div className="bring-widget-toolbar">
+                  {bringList.freshness === 'stale' ? (
+                    <p className="bring-state-banner">{bringWidgetText.copy.staleMeta}</p>
+                  ) : <span />}
+                  <button
+                    type="button"
+                    className="bring-detail-action bring-mini-refresh-action"
+                    disabled={bringMiniRefreshPending}
+                    onClick={() => {
+                      void handleBringMiniRefresh()
+                    }}
+                  >
+                    {bringMiniRefreshPending
+                      ? bringWidgetText.detail.refreshingState
+                      : bringWidgetText.detail.refreshAction}
+                  </button>
+                </div>
 
                 <ul className="bring-list">
                   {[...bringList.openItems]
@@ -1115,7 +1105,6 @@ export function WidgetBoardHost({
         widget.entity.id === 'weather'
           ? {
               weatherData,
-              commuteNote,
             }
           : widget.entity.id === 'calendar'
             ? {
