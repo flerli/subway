@@ -29,6 +29,13 @@ export const deriveWeatherVisualState = (
   }
 
   if (
+    normalizedCondition.includes('partly cloudy') ||
+    normalizedCondition.includes('mainly clear')
+  ) {
+    return 'partly-cloudy'
+  }
+
+  if (
     normalizedCondition.includes('cloud') ||
     normalizedCondition.includes('overcast') ||
     normalizedCondition.includes('fog')

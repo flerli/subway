@@ -2184,25 +2184,40 @@ function App() {
     })),
   ]
   const activeProfile = familyMembers.find((member) => member.id === activeFilter)
-  const visibleAgenda = filterCalendarAgendaItems(
-    calendarEvents,
-    activeFilter === ALL_FILTER_ID ? null : activeFilter,
-    widgetSettingsMap.calendar,
+  const focusedMemberId = activeFilter === ALL_FILTER_ID ? null : activeFilter
+  const visibleAgenda = useMemo(
+    () =>
+      filterCalendarAgendaItems(
+        calendarEvents,
+        focusedMemberId,
+        widgetSettingsMap.calendar,
+      ),
+    [calendarEvents, focusedMemberId, widgetSettingsMap.calendar],
   )
-  const visibleArrivals = buildArrivalBoardEvents(
-    visibleAgenda,
-    now,
-    arrivalBoardWidgetText.copy.arrivalLabel,
-    {
-      hourAbbr: arrivalBoardWidgetText.copy.hourAbbr,
-      minuteAbbr: arrivalBoardWidgetText.copy.minuteAbbr,
-      dayAbbr: arrivalBoardWidgetText.copy.dayAbbr,
-    },
+  const visibleArrivals = useMemo(
+    () =>
+      buildArrivalBoardEvents(
+        visibleAgenda,
+        now,
+        arrivalBoardWidgetText.copy.arrivalLabel,
+        {
+          hourAbbr: arrivalBoardWidgetText.copy.hourAbbr,
+          minuteAbbr: arrivalBoardWidgetText.copy.minuteAbbr,
+          dayAbbr: arrivalBoardWidgetText.copy.dayAbbr,
+        },
+      ),
+    [
+      visibleAgenda,
+      now,
+      arrivalBoardWidgetText.copy.arrivalLabel,
+      arrivalBoardWidgetText.copy.hourAbbr,
+      arrivalBoardWidgetText.copy.minuteAbbr,
+      arrivalBoardWidgetText.copy.dayAbbr,
+    ],
   )
-  const visibleTodos = filterTodoItemsForView(
-    todoWidgetItems,
-    activeFilter === ALL_FILTER_ID ? null : activeFilter,
-    widgetSettingsMap.todo,
+  const visibleTodos = useMemo(
+    () => filterTodoItemsForView(todoWidgetItems, focusedMemberId, widgetSettingsMap.todo),
+    [todoWidgetItems, focusedMemberId, widgetSettingsMap.todo],
   )
   const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
     hour: '2-digit',

@@ -68,6 +68,13 @@ const renderFallback = () => (
   </g>
 )
 
+const renderPartlyCloudy = () => (
+  <>
+    <g transform="translate(-8, -8) scale(0.82)">{renderSun()}</g>
+    {renderCloud()}
+  </>
+)
+
 export function WeatherIcon({
   state,
   size = 'hero',
@@ -84,6 +91,7 @@ export function WeatherIcon({
         focusable="false"
       >
         {state === 'sun' ? renderSun() : null}
+        {state === 'partly-cloudy' ? renderPartlyCloudy() : null}
         {state === 'cloudy' ? renderCloud() : null}
         {state === 'rain' ? renderRain() : null}
         {state === 'thunderstorm' ? renderThunderstorm() : null}

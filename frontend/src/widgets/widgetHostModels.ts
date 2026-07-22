@@ -99,6 +99,7 @@ export interface ForecastDay {
 
 export type WeatherVisualState =
   | 'sun'
+  | 'partly-cloudy'
   | 'cloudy'
   | 'rain'
   | 'thunderstorm'

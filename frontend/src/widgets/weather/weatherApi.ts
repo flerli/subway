@@ -109,6 +109,17 @@ const normalizeWeatherLocationData = (
   }
 
   const canonicalCondition = candidate.condition.trim()
+  const currentVisualState = deriveWeatherVisualState(canonicalCondition)
+  const forecast = candidate.forecast
+    .map((forecastDay) => normalizeForecastDay(forecastDay, languageCode))
+    .filter((forecastDay): forecastDay is ForecastDay => Boolean(forecastDay))
+
+  if (forecast.length > 0) {
+    forecast[0] = {
+      ...forecast[0],
+      visualState: currentVisualState,
+    }
+  }
 
   return {
     id,
@@ -118,11 +129,9 @@ const normalizeWeatherLocationData = (
     updatedAt: candidate.updatedAt,
     currentTemperature: candidate.currentTemperature,
     condition: localizeWeatherCondition(canonicalCondition, languageCode),
-    visualState: deriveWeatherVisualState(canonicalCondition),
+    visualState: currentVisualState,
     rangeSummary: candidate.rangeSummary,
-    forecast: candidate.forecast
-      .map((forecastDay) => normalizeForecastDay(forecastDay, languageCode))
-      .filter((forecastDay): forecastDay is ForecastDay => Boolean(forecastDay)),
+    forecast,
   }
 }
 
