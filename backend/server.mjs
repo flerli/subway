@@ -3365,6 +3365,16 @@ const insertAssistantMessage = (ownerUserId, message, createdAt, updatedAt) =>
       updatedAt,
     )
 
+const updateAssistantMessageContent = (ownerUserId, messageId, content, updatedAt) =>
+  db
+    .prepare(`
+      UPDATE assistant_messages
+      SET content = ?,
+          updated_at = ?
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(content, updatedAt, ownerUserId, messageId)
+
 const insertAssistantMessageEvent = (ownerUserId, event, createdAt, updatedAt) =>
   db
     .prepare(`
@@ -4445,11 +4455,33 @@ const normalizeAssistantProviderResponse = (route, responseBody, streamRequested
   return normalizeCustomAssistantResponse(responseBody, streamRequested)
 }
 
+const buildAssistantProviderTranscriptMessages = (messages) =>
+  messages.map((message) => {
+    const payload = {
+      role: message.role,
+      content: message.content,
+    }
+
+    if (Array.isArray(message.toolCalls) && message.toolCalls.length > 0) {
+      payload.tool_calls = message.toolCalls.map((toolCall) => ({
+        id: toolCall.id,
+        type: 'function',
+        function: {
+          name: toolCall.toolName,
+          arguments: JSON.stringify(toolCall.arguments ?? {}),
+        },
+      }))
+    }
+
+    if (typeof message.toolCallId === 'string' && message.toolCallId.length > 0) {
+      payload.tool_call_id = message.toolCallId
+    }
+
+    return payload
+  })
+
 const buildAssistantProviderRequestPayload = (route, executionRequest) => {
-  const transcriptMessages = executionRequest.messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-  }))
+  const transcriptMessages = buildAssistantProviderTranscriptMessages(executionRequest.messages)
   const widgetTools = executionRequest.toolsRequested === true
     ? normalizeAssistantWidgetTools(executionRequest.widgetTools)
     : []
@@ -4707,18 +4739,21 @@ const executeAssistantTurn = async (
   )
 
   try {
-    const providerResponse = await callAssistantProviderRoute(route, {
+    const widgetTools = normalizeAssistantWidgetTools(options.widgetTools)
+    let providerTranscriptMessages = [
+      ...selectAssistantMessagesByThreadId(ownerUserId, threadId).map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    ]
+
+    let providerResponse = await callAssistantProviderRoute(route, {
       ownerUserId,
       threadId,
-      messages: [
-        ...selectAssistantMessagesByThreadId(ownerUserId, threadId).map((message) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      ],
+      messages: providerTranscriptMessages,
       streamRequested: options.streamRequested === true,
       toolsRequested: options.toolsRequested === true,
-      widgetTools: normalizeAssistantWidgetTools(options.widgetTools),
+      widgetTools,
     })
 
     const assistantMessageTimestamp = new Date().toISOString()
@@ -4742,9 +4777,11 @@ const executeAssistantTurn = async (
     )
 
     if (options.toolsRequested === true && providerResponse.toolCalls.length > 0) {
-      const widgetTools = normalizeAssistantWidgetTools(options.widgetTools)
+      while (providerResponse.toolCalls.length > 0) {
+        const toolResultMessages = []
+        let hasPendingApproval = false
 
-      for (const toolCall of providerResponse.toolCalls) {
+        for (const toolCall of providerResponse.toolCalls) {
         const resolvedToolConfig = resolveAssistantMcpToolConfig(
           toolCall.toolName,
           widgetTools,
@@ -4798,6 +4835,7 @@ const executeAssistantTurn = async (
             pendingApprovalEvent.updatedAt,
           )
           toolEvents.push(pendingApprovalEvent)
+          hasPendingApproval = true
           continue
         }
 
@@ -4836,6 +4874,11 @@ const executeAssistantTurn = async (
             completedEvent.updatedAt,
           )
           toolEvents.push(completedEvent)
+          toolResultMessages.push({
+            role: 'tool',
+            toolCallId: toolCall.id,
+            content: JSON.stringify(toolExecution.result ?? null),
+          })
         } catch (error) {
           if (!(error instanceof AssistantRuntimeError)) {
             throw error
@@ -4856,8 +4899,55 @@ const executeAssistantTurn = async (
             errorEvent.updatedAt,
           )
           toolEvents.push(errorEvent)
+          toolResultMessages.push({
+            role: 'tool',
+            toolCallId: toolCall.id,
+            content: JSON.stringify({
+              error: {
+                message: error.message,
+                errorCode: error.errorCode,
+              },
+            }),
+          })
         }
       }
+
+        if (hasPendingApproval) {
+          break
+        }
+
+        providerTranscriptMessages = [
+          ...providerTranscriptMessages,
+          {
+            role: 'assistant',
+            content: providerResponse.content,
+            toolCalls: providerResponse.toolCalls,
+          },
+          ...toolResultMessages,
+        ]
+
+        providerResponse = await callAssistantProviderRoute(route, {
+          ownerUserId,
+          threadId,
+          messages: providerTranscriptMessages,
+          streamRequested: options.streamRequested === true,
+          toolsRequested: options.toolsRequested === true,
+          widgetTools,
+        })
+      }
+    }
+
+    const finalAssistantContent = providerResponse.content
+
+    if (typeof finalAssistantContent === 'string' && finalAssistantContent !== assistantMessage.content) {
+      updateAssistantMessageContent(
+        ownerUserId,
+        assistantMessageId,
+        finalAssistantContent,
+        new Date().toISOString(),
+      )
+      assistantMessage.content = finalAssistantContent
+      assistantMessage.updatedAt = new Date().toISOString()
     }
 
     updateAssistantThreadRuntimeState(
