@@ -1134,15 +1134,18 @@ select {
 
 .weather-widget-content,
 .weather-detail-focus-column {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   min-height: 0;
   height: 100%;
   align-self: stretch;
+  flex: 1 1 auto;
 }
 
 .weather-forecast-plot {
+  display: flex;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   align-self: stretch;
@@ -1150,8 +1153,9 @@ select {
 
 .weather-forecast-plot__surface {
   position: relative;
+  flex: 1 1 auto;
   min-height: 14rem;
-  height: 100%;
+  height: auto;
   padding: 8px 10px 18px;
   border-radius: 22px;
   overflow: hidden;
