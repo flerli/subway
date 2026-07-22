@@ -61,25 +61,35 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
 
   const normalizeItemNameKey = (item: BringListItem) => item.itemName.trim().toLowerCase()
 
-  const sortByRecentness = (items: BringListItem[]) =>
-    [...items].sort((left, right) => {
-      const leftTimestamp = Date.parse(left.recentAt)
-      const rightTimestamp = Date.parse(right.recentAt)
+  const sortByRecentness = (items: BringListItem[]) => {
+    const itemsWithIndex = items.map((item, index) => ({
+      item,
+      index,
+      timestamp: Date.parse(item.recentAt),
+    }))
+    const hasAnyTimestamp = itemsWithIndex.some(({ timestamp }) => !Number.isNaN(timestamp))
 
-      if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp)) {
-        return rightTimestamp - leftTimestamp
-      }
+    if (!hasAnyTimestamp) {
+      return [...items].reverse()
+    }
 
-      if (!Number.isNaN(rightTimestamp)) {
-        return 1
-      }
+    return itemsWithIndex
+      .sort((left, right) => {
+        const leftHasTimestamp = !Number.isNaN(left.timestamp)
+        const rightHasTimestamp = !Number.isNaN(right.timestamp)
 
-      if (!Number.isNaN(leftTimestamp)) {
-        return -1
-      }
+        if (leftHasTimestamp && rightHasTimestamp && left.timestamp !== right.timestamp) {
+          return right.timestamp - left.timestamp
+        }
 
-      return 0
-    })
+        if (rightHasTimestamp !== leftHasTimestamp) {
+          return rightHasTimestamp ? 1 : -1
+        }
+
+        return right.index - left.index
+      })
+      .map(({ item }) => item)
+  }
 
   const openItemNameSet = new Set((bringList?.openItems ?? []).map(normalizeItemNameKey))
   const filteredRecentItems = bringList

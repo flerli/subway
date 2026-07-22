@@ -1138,6 +1138,8 @@ select {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
+  height: 100%;
+  align-self: stretch;
 }
 
 .weather-forecast-plot {
@@ -1146,6 +1148,7 @@ select {
   gap: 10px;
   min-height: 0;
   height: 100%;
+  align-self: stretch;
 }
 
 .weather-forecast-plot__surface {
@@ -1269,6 +1272,7 @@ select {
 .weather-forecast-plot__ticks {
   display: grid;
   gap: 8px;
+  box-sizing: border-box;
 }
 
 .weather-forecast-plot__tick {

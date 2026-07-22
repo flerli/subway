@@ -57,6 +57,36 @@ import { searchYoutubeVideos, type YoutubeVideo } from './youtube/youtubeApi'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { WeatherWidgetTranslation } from './weather/translations'
 
+const sortBringItemsByLatestFirst = <T extends { recentAt: string }>(items: T[]) => {
+  const itemsWithIndex = items.map((item, index) => ({
+    item,
+    index,
+    timestamp: Date.parse(item.recentAt),
+  }))
+  const hasAnyTimestamp = itemsWithIndex.some(({ timestamp }) => !Number.isNaN(timestamp))
+
+  if (!hasAnyTimestamp) {
+    return [...items].reverse()
+  }
+
+  return itemsWithIndex
+    .sort((left, right) => {
+      const leftHasTimestamp = !Number.isNaN(left.timestamp)
+      const rightHasTimestamp = !Number.isNaN(right.timestamp)
+
+      if (leftHasTimestamp && rightHasTimestamp && left.timestamp !== right.timestamp) {
+        return right.timestamp - left.timestamp
+      }
+
+      if (rightHasTimestamp !== leftHasTimestamp) {
+        return rightHasTimestamp ? 1 : -1
+      }
+
+      return right.index - left.index
+    })
+    .map(({ item }) => item)
+}
+
 interface WidgetBoardHostProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
@@ -958,26 +988,7 @@ export function WidgetBoardHost({
                 </div>
 
                 <ul className="bring-list">
-                  {[...bringList.openItems]
-                    .sort((left, right) => {
-                      const leftTimestamp = Date.parse(left.recentAt)
-                      const rightTimestamp = Date.parse(right.recentAt)
-
-                      if (!Number.isNaN(leftTimestamp) && !Number.isNaN(rightTimestamp)) {
-                        return rightTimestamp - leftTimestamp
-                      }
-
-                      if (!Number.isNaN(rightTimestamp)) {
-                        return 1
-                      }
-
-                      if (!Number.isNaN(leftTimestamp)) {
-                        return -1
-                      }
-
-                      return 0
-                    })
-                    .map((item) => (
+                  {sortBringItemsByLatestFirst(bringList.openItems).map((item) => (
                     <li
                       className="bring-row"
                       key={item.uuid || `${item.itemName}-${item.specification}`}

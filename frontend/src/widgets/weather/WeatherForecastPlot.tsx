@@ -191,6 +191,8 @@ export function WeatherForecastPlot({
         className="weather-forecast-plot__ticks"
         style={{
           gridTemplateColumns: `repeat(${forecast.length}, minmax(0, 1fr))`,
+          paddingLeft: `${leftPadding}%`,
+          paddingRight: `${rightPadding}%`,
         }}
       >
         {chartPoints.map((point) => (
