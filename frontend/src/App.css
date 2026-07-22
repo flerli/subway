@@ -499,7 +499,8 @@ select {
   --widget-cell-radius: 20px;
   min-width: 0;
   min-height: 100%;
-  align-content: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
   overflow: hidden;
   border: 1px solid rgba(214, 232, 255, 0.16) !important;
   border-radius: var(--widget-cell-radius);
@@ -1134,18 +1135,54 @@ select {
 
 .weather-widget-content,
 .weather-detail-focus-column {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   min-height: 0;
   height: 100%;
   align-self: stretch;
+  flex: 1 1 auto;
+}
+
+.weather-widget-content {
+  gap: 10px;
+}
+
+.weather-widget-content .weather-summary {
+  align-items: end;
+  gap: 12px;
+}
+
+.weather-widget-content .weather-hero-stack {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.weather-widget-content .weather-copy {
+  display: grid;
+  gap: 4px;
+  align-self: end;
+  padding-bottom: 0.35rem;
+}
+
+.weather-widget-content .weather-icon-shell--hero {
+  width: 9.3rem;
+  height: 9.3rem;
+}
+
+.weather-widget-content .weather-temp {
+  font-size: clamp(5.7rem, 10.4cqw, 8rem);
+}
+
+.weather-widget-content .weather-focus-location-name {
+  font-size: 1.35rem;
 }
 
 .weather-forecast-plot {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  display: flex;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   align-self: stretch;
@@ -1153,9 +1190,10 @@ select {
 
 .weather-forecast-plot__surface {
   position: relative;
+  flex: 1 1 auto;
   min-height: 14rem;
-  height: 100%;
-  padding: 8px 10px 6px;
+  height: auto;
+  padding: 8px 10px 18px;
   border-radius: 22px;
   overflow: hidden;
   background:
@@ -1166,6 +1204,7 @@ select {
 
 .weather-forecast-plot--detail .weather-forecast-plot__surface {
   min-height: 22rem;
+  padding-bottom: 24px;
 }
 
 .weather-forecast-plot__svg {
@@ -1270,14 +1309,18 @@ select {
 }
 
 .weather-forecast-plot__ticks {
-  display: grid;
-  gap: 8px;
-  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 1rem;
+  pointer-events: none;
 }
 
 .weather-forecast-plot__tick {
-  display: grid;
-  justify-items: center;
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
   min-width: 0;
 }
 
@@ -4056,14 +4099,36 @@ select {
     font-size: 1.62rem;
   }
 
+  .terminal-cell--filters {
+    align-items: start;
+  }
+
+  .terminal-cell--filters .filter-actions,
+  .terminal-cell--filters .terminal-actions {
+    align-items: start;
+  }
+
+  .filter-actions .terminal-button {
+    min-height: auto;
+  }
+
   .arrival-strip {
-    min-height: 148px;
-    padding: 12px;
-    gap: 12px;
+    min-height: 108px;
+    padding: 10px 12px;
+    gap: 10px;
   }
 
   .arrival-destination h3 {
-    font-size: 1.16rem;
+    font-size: 1rem;
+  }
+
+  .arrival-count {
+    font-size: 2.4rem;
+  }
+
+  .widget-zone--expanded-stage {
+    flex: 0 0 220px;
+    min-height: 220px;
   }
 
   .arrival-destination p,

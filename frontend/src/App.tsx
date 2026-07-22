@@ -135,6 +135,7 @@ const ALL_FILTER_ID = 'all'
 const HOUSEHOLD_BADGE_TEXT = 'ALL'
 const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
 const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
+const CALENDAR_BOARD_RANGE_DAYS = 60
 const LOCAL_APP_SHELL_STORAGE_KEY_PREFIX = 'subway-app-shell'
 
 const formatLocalIsoDate = (value: Date) => {
@@ -675,7 +676,7 @@ function App() {
     assistantTurnState === 'streaming' ||
     assistantResolvingApprovalRequestId !== null
   const calendarRangeStart = formatLocalIsoDate(now)
-  const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, 30))
+  const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, CALENDAR_BOARD_RANGE_DAYS))
   const combinedWidgetSettingsMap: Record<string, WidgetSettingsValues> = {
     ...widgetSettingsMap,
     'audio-visual': audioVisualPreferenceSettings,
@@ -1067,6 +1068,7 @@ function App() {
           ...nextThreads,
         ]
       })
+      await syncAssistantDrivenWidgetEffects(threadDetail.events)
       await refreshAssistantThreadList()
     } catch (error) {
       if (isAuthRequiredError(error)) {
@@ -1128,6 +1130,70 @@ function App() {
     } catch (error) {
       if (isAuthRequiredError(error)) {
         handleAuthRequired()
+      }
+    }
+  }
+
+  const syncAssistantDrivenWidgetEffects = async (
+    events: AssistantMessageEventRecord[],
+  ) => {
+    const completedWidgetEvents = events.filter(
+      (event) =>
+        event.eventType === 'tool_call' &&
+        event.payload.status === 'completed' &&
+        typeof event.payload.widgetId === 'string' &&
+        event.payload.widgetId.length > 0,
+    )
+
+    if (completedWidgetEvents.length === 0) {
+      return
+    }
+
+    const completedWidgetIds = new Set(
+      completedWidgetEvents
+        .map((event) => event.payload.widgetId)
+        .filter((widgetId): widgetId is string => typeof widgetId === 'string'),
+    )
+    const updatedWidgetSettings = completedWidgetEvents.some((event) =>
+      event.payload.toolName.endsWith('update_widget_settings'),
+    )
+
+    if (updatedWidgetSettings) {
+      try {
+        const widgetSettings = await fetchWidgetSettings()
+
+        setWidgetSettingsMap(
+          Object.fromEntries(
+            widgetSettings.map((widgetSetting) => [widgetSetting.widgetId, widgetSetting.settings]),
+          ),
+        )
+      } catch (error) {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+          return
+        }
+      }
+    }
+
+    if (completedWidgetIds.has('calendar')) {
+      setCalendarRefreshToken((currentValue) => currentValue + 1)
+    }
+
+    if (completedWidgetIds.has('todo')) {
+      setTodoRefreshToken((currentValue) => currentValue + 1)
+    }
+
+    if (completedWidgetIds.has('weather')) {
+      setWeatherRefreshToken((currentValue) => currentValue + 1)
+    }
+
+    if (completedWidgetIds.has('bring')) {
+      try {
+        await refreshBringWidgetData()
+      } catch (error) {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+        }
       }
     }
   }
@@ -1259,6 +1325,7 @@ function App() {
                   events: [...currentThread.events, ...completedTurn.events],
                 }
               })
+              void syncAssistantDrivenWidgetEffects(completedTurn.events)
             }
 
             commitAssistantTurn(
@@ -1306,6 +1373,7 @@ function App() {
               events: [...currentThread.events, ...completedTurn.events],
             }
           })
+          void syncAssistantDrivenWidgetEffects(completedTurn.events)
         }
       }
     } catch (error) {

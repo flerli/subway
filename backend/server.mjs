@@ -2489,8 +2489,8 @@ const selectActiveAssistantBackendRouteRow = (ownerUserId) =>
         created_at AS createdAt,
         updated_at AS updatedAt
       FROM assistant_backend_routes
-      WHERE owner_user_id = ? AND is_default = 1
-      ORDER BY updated_at DESC, id ASC
+      WHERE owner_user_id = ?
+      ORDER BY is_default DESC, is_active DESC, updated_at DESC, id ASC
       LIMIT 1
     `)
     .get(ownerUserId)
