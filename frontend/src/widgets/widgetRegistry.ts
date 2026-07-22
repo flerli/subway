@@ -63,6 +63,9 @@ const buildProviderToolName = (toolName: string) =>
     .replace(/^_+|_+$/g, '')
     .slice(0, 64)
 
+const isWidgetVisibleOnBoard = (widget: RegisteredWidget) =>
+  widget.entity.placementZones.length > 0
+
 export const buildWidgetRegistry = (
   widgetEntities: WidgetEntityRecord[],
 ): RegisteredWidget[] =>
@@ -89,6 +92,9 @@ export const buildRegisteredWidgetMcpToolCatalog = (
   widgetSettingsMap: Record<string, WidgetSettingsValues> = {},
 ): RegisteredWidgetMcpTool[] =>
   registeredWidgets.flatMap((widget) =>
+    !isWidgetVisibleOnBoard(widget)
+      ? []
+      :
     (widget.module.mcpTools ?? []).flatMap((tool) => {
       const mcpConfiguration = normalizeWidgetMcpConfiguration(
         widget,

@@ -38,6 +38,9 @@ const parseTemperatureValue = (value: string) => {
 
 const formatTemperatureLabel = (value: number) => `${Math.round(value)}°`
 
+const clampValue = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max)
+
 export function WeatherForecastPlot({
   forecast,
   currentTemperature,
@@ -62,12 +65,13 @@ export function WeatherForecastPlot({
   const paddedMax = domainMax + temperaturePadding
   const chartWidth = 100
   const chartHeight = 100
-  const leftPadding = 8
-  const rightPadding = 8
-  const topPadding = 16
-  const bottomPadding = 22
+  const leftPadding = forecast.length === 1 ? 20 : 8
+  const rightPadding = forecast.length === 1 ? 20 : 8
+  const topPadding = size === 'detail' ? 10 : 8
+  const bottomPadding = size === 'detail' ? 28 : 24
   const plotWidth = chartWidth - leftPadding - rightPadding
   const plotHeight = chartHeight - topPadding - bottomPadding
+  const iconTrackY = chartHeight - (size === 'detail' ? 16 : 14)
 
   const resolveX = (index: number) =>
     forecast.length === 1
@@ -77,15 +81,28 @@ export function WeatherForecastPlot({
   const resolveY = (value: number) =>
     topPadding + ((paddedMax - value) / (paddedMax - paddedMin || 1)) * plotHeight
 
-  const chartPoints = forecast.map((day, index) => ({
-    day,
-    x: resolveX(index),
-    highY: resolveY(day.high),
-    lowY: resolveY(day.low),
-  }))
+  const chartPoints = forecast.map((day, index) => {
+    const x = resolveX(index)
+    const highY = resolveY(day.high)
+    const lowY = resolveY(day.low)
+    const pointGap = Math.abs(highY - lowY)
+    const needsSplitOffset = pointGap < 12
+    const highX = needsSplitOffset ? clampValue(x - 2.8, leftPadding, chartWidth - rightPadding) : x
+    const lowX = needsSplitOffset ? clampValue(x + 2.8, leftPadding, chartWidth - rightPadding) : x
 
-  const highLinePoints = chartPoints.map((point) => `${point.x},${point.highY}`).join(' ')
-  const lowLinePoints = chartPoints.map((point) => `${point.x},${point.lowY}`).join(' ')
+    return {
+      day,
+      x,
+      highX,
+      lowX,
+      highY,
+      lowY,
+      iconY: clampValue(Math.max(highY, lowY) + 13, topPadding + 8, iconTrackY),
+    }
+  })
+
+  const highLinePoints = chartPoints.map((point) => `${point.highX},${point.highY}`).join(' ')
+  const lowLinePoints = chartPoints.map((point) => `${point.lowX},${point.lowY}`).join(' ')
   const currentLineY =
     currentTemperatureValue === null ? null : resolveY(currentTemperatureValue)
 
@@ -121,18 +138,6 @@ export function WeatherForecastPlot({
                 y1={point.highY}
                 y2={point.lowY}
               />
-              <circle
-                className="weather-forecast-plot__point weather-forecast-plot__point--high"
-                cx={point.x}
-                cy={point.highY}
-                r={2.4}
-              />
-              <circle
-                className="weather-forecast-plot__point weather-forecast-plot__point--low"
-                cx={point.x}
-                cy={point.lowY}
-                r={2.4}
-              />
             </g>
           ))}
         </svg>
@@ -149,22 +154,34 @@ export function WeatherForecastPlot({
         {chartPoints.map((point) => (
           <div key={`${point.day.day}-high`}>
             <div
-              className="weather-forecast-plot__value weather-forecast-plot__value--high"
+              className="weather-forecast-plot__badge weather-forecast-plot__badge--high"
               style={{
-                left: `${point.x}%`,
-                top: `calc(${point.highY}% - 1.1rem)`,
+                left: `${point.highX}%`,
+                top: `${point.highY}%`,
               }}
             >
               {formatTemperatureLabel(point.day.high)}
             </div>
             <div
-              className="weather-forecast-plot__value weather-forecast-plot__value--low"
+              className="weather-forecast-plot__badge weather-forecast-plot__badge--low"
               style={{
-                left: `${point.x}%`,
-                top: `calc(${point.lowY}% + 0.35rem)`,
+                left: `${point.lowX}%`,
+                top: `${point.lowY}%`,
               }}
             >
               {formatTemperatureLabel(point.day.low)}
+            </div>
+            <div
+              className="weather-forecast-plot__icon"
+              style={{
+                left: `${point.x}%`,
+                top: `${point.iconY}%`,
+              }}
+            >
+              <WeatherIcon
+                state={point.day.visualState}
+                size={size === 'detail' ? 'forecast-expanded' : 'forecast'}
+              />
             </div>
           </div>
         ))}
@@ -178,12 +195,6 @@ export function WeatherForecastPlot({
       >
         {chartPoints.map((point) => (
           <div className="weather-forecast-plot__tick" key={`${point.day.day}-tick`}>
-            <div className="weather-forecast-plot__tick-icon">
-              <WeatherIcon
-                state={point.day.visualState}
-                size={size === 'detail' ? 'forecast-expanded' : 'forecast'}
-              />
-            </div>
             <p className="weather-forecast-plot__tick-day">
               {formatForecastDayLabel(point.day.day, languageCode)}
             </p>

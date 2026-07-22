@@ -91,28 +91,24 @@ export function BringDetailView({ data, widgetText }: BringDetailViewProps) {
       return [] as Array<{ category: string; items: BringListItem[] }>
     }
 
-    const hasAnyCategory = bringList.openItems.some((item) => item.category.trim().length > 0)
+    const sortedOpenItems = sortByRecentness(bringList.openItems)
+
+    const hasAnyCategory = sortedOpenItems.some((item) => item.category.trim().length > 0)
 
     if (!hasAnyCategory) {
-      return [{ category: '', items: bringList.openItems }]
+      return [{ category: '', items: sortedOpenItems }]
     }
 
     const groupedItems = new Map<string, BringListItem[]>()
 
-    for (const item of bringList.openItems) {
+    for (const item of sortedOpenItems) {
       const categoryKey = item.category.trim()
       const items = groupedItems.get(categoryKey) ?? []
       items.push(item)
       groupedItems.set(categoryKey, items)
     }
 
-    return Array.from(groupedItems.entries())
-      .sort(([leftCategory], [rightCategory]) => {
-        if (!leftCategory) return 1
-        if (!rightCategory) return -1
-        return leftCategory.localeCompare(rightCategory)
-      })
-      .map(([category, items]) => ({ category, items }))
+    return Array.from(groupedItems.entries()).map(([category, items]) => ({ category, items }))
   })()
 
   const runAction = async (actionState: string, action: () => Promise<void>, fallbackMessage: string) => {

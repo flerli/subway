@@ -85,6 +85,22 @@ export const bringWidget: WidgetMicroAppContract = {
       ],
     },
     {
+      name: 'widget.bring.update_item',
+      description:
+        'Update an existing Bring item title and specification on the selected list.',
+      humanAction:
+        'Update an existing Bring item title or specification.',
+      parityScope: ['write'],
+      approvalRequired: false,
+      redactArguments: false,
+      redactResults: false,
+      arguments: [
+        { key: 'itemName', type: 'string', description: 'Updated Bring item name.', required: true },
+        { key: 'specification', type: 'string', description: 'Updated Bring item specification.', required: false },
+        { key: 'itemUuid', type: 'string', description: 'Bring item uuid used to target the existing item.', required: false },
+      ],
+    },
+    {
       name: 'widget.bring.complete_item',
       description:
         'Complete an open item on the selected Bring list.',

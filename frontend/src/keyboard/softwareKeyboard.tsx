@@ -1,7 +1,6 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
@@ -135,8 +134,6 @@ export const SoftwareKeyboardOverlay = ({
 }: SoftwareKeyboardOverlayProps) => {
   const [shiftActive, setShiftActive] = useState(false)
   const [pressedKeyId, setPressedKeyId] = useState<string | null>(null)
-  const pressedKeyClearTimeoutRef = useRef<number | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
 
   const normalizedTarget = useMemo(
     () => normalizeKeyboardTarget(activeTarget),
@@ -148,59 +145,9 @@ export const SoftwareKeyboardOverlay = ({
     setPressedKeyId(null)
   }, [normalizedTarget])
 
-  useEffect(() => {
-    return () => {
-      if (pressedKeyClearTimeoutRef.current !== null) {
-        window.clearTimeout(pressedKeyClearTimeoutRef.current)
-      }
-    }
-  }, [])
-
   if (!normalizedTarget) return null
 
   const keepFocus = () => normalizedTarget.focus({ preventScroll: true })
-
-  const playTick = () => {
-    const AudioContextCtor = window.AudioContext
-
-    if (!AudioContextCtor) {
-      return
-    }
-
-    const audioContext = audioContextRef.current ?? new AudioContextCtor()
-    audioContextRef.current = audioContext
-
-    if (audioContext.state === 'suspended') {
-      void audioContext.resume().catch(() => {})
-    }
-
-    const oscillator = audioContext.createOscillator()
-    const gain = audioContext.createGain()
-    const startTime = audioContext.currentTime
-
-    oscillator.type = 'square'
-    oscillator.frequency.setValueAtTime(720, startTime)
-    gain.gain.setValueAtTime(0.001, startTime)
-    gain.gain.linearRampToValueAtTime(0.028, startTime + 0.003)
-    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.045)
-
-    oscillator.connect(gain)
-    gain.connect(audioContext.destination)
-    oscillator.start(startTime)
-    oscillator.stop(startTime + 0.05)
-  }
-
-  const setPressedKeyWithMinimumVisibility = (keyId: string) => {
-    if (pressedKeyClearTimeoutRef.current !== null) {
-      window.clearTimeout(pressedKeyClearTimeoutRef.current)
-    }
-
-    setPressedKeyId(keyId)
-    pressedKeyClearTimeoutRef.current = window.setTimeout(() => {
-      setPressedKeyId((currentKeyId) => (currentKeyId === keyId ? null : currentKeyId))
-      pressedKeyClearTimeoutRef.current = null
-    }, 85)
-  }
 
   const handleKeyPress = (key: string) => {
     keepFocus()
@@ -232,16 +179,14 @@ export const SoftwareKeyboardOverlay = ({
     action: () => void,
   ) => (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    setPressedKeyWithMinimumVisibility(keyId)
-    playTick()
-    window.requestAnimationFrame(() => {
-      action()
-    })
+    setPressedKeyId(keyId)
+    action()
   }
 
-  const handleKeyPressEnd = () => {
-    // Keep the pressed state visible briefly even on very fast taps.
-  }
+  const handleKeyPressEnd =
+    (keyId: string) => () => {
+      setPressedKeyId((currentKeyId) => (currentKeyId === keyId ? null : currentKeyId))
+    }
 
   const renderKey = (key: string) => (
     <button
@@ -249,9 +194,9 @@ export const SoftwareKeyboardOverlay = ({
       type="button"
       className={`software-keyboard__key${pressedKeyId === key ? ' is-pressed' : ''}`}
       onPointerDown={handleKeyPressStart(key, () => handleKeyPress(key))}
-      onPointerUp={handleKeyPressEnd}
-      onPointerCancel={handleKeyPressEnd}
-      onPointerLeave={handleKeyPressEnd}
+      onPointerUp={handleKeyPressEnd(key)}
+      onPointerCancel={handleKeyPressEnd(key)}
+      onPointerLeave={handleKeyPressEnd(key)}
     >
       {shiftActive ? key.toUpperCase() : key}
     </button>
@@ -270,9 +215,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className="software-keyboard__close"
             onPointerDown={handleKeyPressStart('close', onRequestClose)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('close')}
+            onPointerCancel={handleKeyPressEnd('close')}
+            onPointerLeave={handleKeyPressEnd('close')}
           >
             ✕ Close
           </button>
@@ -285,9 +230,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'backspace' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('backspace', handleBackspace)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('backspace')}
+            onPointerCancel={handleKeyPressEnd('backspace')}
+            onPointerLeave={handleKeyPressEnd('backspace')}
           >
             ⌫
           </button>
@@ -306,9 +251,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${shiftActive ? ' is-active' : ''}${pressedKeyId === 'shift' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('shift', () => setShiftActive((v) => !v))}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('shift')}
+            onPointerCancel={handleKeyPressEnd('shift')}
+            onPointerLeave={handleKeyPressEnd('shift')}
           >
             ⇧
           </button>
@@ -316,9 +261,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--space${pressedKeyId === 'space' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('space', handleSpace)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('space')}
+            onPointerCancel={handleKeyPressEnd('space')}
+            onPointerLeave={handleKeyPressEnd('space')}
           >
             space
           </button>
@@ -326,9 +271,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'left' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('left', handleLeft)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('left')}
+            onPointerCancel={handleKeyPressEnd('left')}
+            onPointerLeave={handleKeyPressEnd('left')}
           >
             ◀
           </button>
@@ -336,9 +281,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'up' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('up', handleUp)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('up')}
+            onPointerCancel={handleKeyPressEnd('up')}
+            onPointerLeave={handleKeyPressEnd('up')}
           >
             ▲
           </button>
@@ -346,9 +291,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'down' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('down', handleDown)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('down')}
+            onPointerCancel={handleKeyPressEnd('down')}
+            onPointerLeave={handleKeyPressEnd('down')}
           >
             ▼
           </button>
@@ -356,9 +301,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'right' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('right', handleRight)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('right')}
+            onPointerCancel={handleKeyPressEnd('right')}
+            onPointerLeave={handleKeyPressEnd('right')}
           >
             ▶
           </button>
@@ -366,9 +311,9 @@ export const SoftwareKeyboardOverlay = ({
             type="button"
             className={`software-keyboard__key software-keyboard__key--action${pressedKeyId === 'enter' ? ' is-pressed' : ''}`}
             onPointerDown={handleKeyPressStart('enter', handleEnter)}
-            onPointerUp={handleKeyPressEnd}
-            onPointerCancel={handleKeyPressEnd}
-            onPointerLeave={handleKeyPressEnd}
+            onPointerUp={handleKeyPressEnd('enter')}
+            onPointerCancel={handleKeyPressEnd('enter')}
+            onPointerLeave={handleKeyPressEnd('enter')}
           >
             ↵
           </button>

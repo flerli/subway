@@ -6603,6 +6603,27 @@ const executeBringAddItemTool = async (ownerUserId, argumentsValue) => {
   }
 }
 
+const executeBringUpdateItemTool = async (ownerUserId, argumentsValue) => {
+  const itemName = sanitizeBringItemName(argumentsValue?.itemName)
+
+  if (!itemName) {
+    throw new AssistantRuntimeError(
+      'Bring update_item requires an itemName argument.',
+      400,
+      'assistant_tool_arguments_invalid',
+    )
+  }
+
+  return {
+    widgetId: 'bring',
+    bringList: await mutateBringSelectedList(ownerUserId, '/selected-list/items/update', {
+      itemName,
+      specification: sanitizeBringItemSpecification(argumentsValue?.specification),
+      itemUuid: normalizeBringItemUuid(argumentsValue?.itemUuid),
+    }),
+  }
+}
+
 const executeBringCompleteItemTool = async (ownerUserId, argumentsValue) => {
   const itemName = sanitizeBringItemName(argumentsValue?.itemName)
 
@@ -6905,6 +6926,13 @@ const assistantInternalWidgetToolHandlers = new Map([
     {
       serverName: 'subway-widget-runtime',
       execute: executeBringAddItemTool,
+    },
+  ],
+  [
+    'widget.bring.update_item',
+    {
+      serverName: 'subway-widget-runtime',
+      execute: executeBringUpdateItemTool,
     },
   ],
   [

@@ -68,6 +68,7 @@ import {
   SoftwareKeyboardOverlay,
   type SoftwareKeyboardTarget,
 } from './keyboard/softwareKeyboard'
+import { isUiClickSoundTarget, playUiClickSound } from './uiClickSound'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import {
@@ -812,6 +813,26 @@ function App() {
     return () => {
       document.removeEventListener('focusin', handleFocusIn)
       document.removeEventListener('focusout', handleFocusOut)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || !event.isPrimary) {
+        return
+      }
+
+      if (!isUiClickSoundTarget(event.target)) {
+        return
+      }
+
+      playUiClickSound()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
     }
   }, [])
 
