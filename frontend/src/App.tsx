@@ -281,49 +281,65 @@ const buildArrivalBoardEvents = (
     minuteAbbr: string
     dayAbbr: string
   },
+  weekdayFormatter: Intl.DateTimeFormat,
 ): Arrival[] => {
   const nowTime = referenceTime.getTime()
   const referenceYear = referenceTime.getFullYear()
   const referenceMonth = referenceTime.getMonth()
   const referenceDay = referenceTime.getDate()
 
+  const formatWeekdayLabel = (timestamp: number) =>
+    weekdayFormatter.format(new Date(timestamp)).replace(/\.$/, '')
+
   return agendaItems
     .map((agendaItem) => {
       const eventDateTime = new Date(`${agendaItem.date}T${agendaItem.time}:00`)
+      const visibilityEndDateTime = agendaItem.rangeEndDate
+        ? new Date(`${agendaItem.rangeEndDate}T23:59:59`)
+        : eventDateTime
+      const eventTime = eventDateTime.getTime()
+      const visibilityEndTime = visibilityEndDateTime.getTime()
 
       return {
         agendaItem,
         eventDateTime,
+        countdownTargetTime: eventTime >= nowTime ? eventTime : visibilityEndTime,
+        sortTime: Math.max(eventTime, nowTime),
+        visibilityEndTime,
       }
     })
-    .filter(({ eventDateTime }) => !Number.isNaN(eventDateTime.getTime()))
-    .filter(({ eventDateTime }) => eventDateTime.getTime() >= nowTime)
-    .sort((left, right) => left.eventDateTime.getTime() - right.eventDateTime.getTime())
+    .filter(
+      ({ eventDateTime, visibilityEndTime }) =>
+        !Number.isNaN(eventDateTime.getTime()) && !Number.isNaN(visibilityEndTime),
+    )
+    .filter(({ visibilityEndTime }) => visibilityEndTime >= nowTime)
+    .sort(
+      (left, right) =>
+        left.sortTime - right.sortTime ||
+        left.eventDateTime.getTime() - right.eventDateTime.getTime(),
+    )
     .slice(0, 6)
-    .map(({ agendaItem, eventDateTime }) => {
-      const diffMs = Math.max(eventDateTime.getTime() - nowTime, 0)
+    .map(({ agendaItem, countdownTargetTime, eventDateTime }) => {
+      const diffMs = Math.max(countdownTargetTime - nowTime, 0)
       const totalHours = diffMs / (1000 * 60 * 60)
       const totalMinutes = Math.round(diffMs / (1000 * 60))
-      
+
       let value: string
-      let unit: string
-      
+      let unit = ''
+
       if (totalHours < 5) {
-        // Show hours + minutes for < 5 hours
         const hours = Math.floor(totalMinutes / 60)
         const mins = totalMinutes % 60
-        value = hours > 0 ? `${hours}${units.hourAbbr} ${mins}${units.minuteAbbr}` : `${Math.max(1, mins)}${units.minuteAbbr}`
-        unit = ''
+        value =
+          hours > 0
+            ? `${hours}${units.hourAbbr} ${mins}${units.minuteAbbr}`
+            : `${Math.max(1, mins)}${units.minuteAbbr}`
       } else if (totalHours < 24) {
-        // Show hours only for 5-24 hours
         const hours = Math.max(1, Math.round(totalHours))
         value = `${hours}${units.hourAbbr}`
-        unit = ''
       } else {
-        // Show days for 24+ hours
         const days = Math.max(1, Math.ceil(totalHours / 24))
-        value = `${days}${units.dayAbbr}`
-        unit = ''
+        value = `${days} ${units.dayAbbr} (${formatWeekdayLabel(countdownTargetTime)})`
       }
 
       const isSameDay =
@@ -650,6 +666,10 @@ function App() {
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
   const arrivalBoardWidgetText = getArrivalBoardWidgetTranslation(selectedLanguageCode)
   const weatherWidgetText = getWeatherWidgetTranslation(selectedLanguageCode)
+  const arrivalWeekdayFormatter = useMemo(
+    () => new Intl.DateTimeFormat(selectedLanguageCode, { weekday: 'short' }),
+    [selectedLanguageCode],
+  )
   const fallbackWeatherData = buildFallbackWeatherData(
     weatherWidgetText,
     selectedLanguageCode,
@@ -681,6 +701,7 @@ function App() {
     assistantTurnState === 'sending' ||
     assistantTurnState === 'streaming' ||
     assistantResolvingApprovalRequestId !== null
+  const calendarRefreshMinute = Math.floor(now.getTime() / 60_000)
   const calendarRangeStart = formatLocalIsoDate(now)
   const calendarRangeEnd = formatLocalIsoDate(addLocalDays(now, CALENDAR_BOARD_RANGE_DAYS))
   const combinedWidgetSettingsMap: Record<string, WidgetSettingsValues> = {
@@ -1997,7 +2018,14 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authStatus, calendarRangeEnd, calendarRangeStart, calendarRefreshToken, selectedCountryCode])
+  }, [
+    authStatus,
+    calendarRangeEnd,
+    calendarRangeStart,
+    calendarRefreshMinute,
+    calendarRefreshToken,
+    selectedCountryCode,
+  ])
 
   const handleCalendarDataChanged = () => {
     setCalendarRefreshToken((currentValue) => currentValue + 1)
@@ -2205,6 +2233,7 @@ function App() {
           minuteAbbr: arrivalBoardWidgetText.copy.minuteAbbr,
           dayAbbr: arrivalBoardWidgetText.copy.dayAbbr,
         },
+        arrivalWeekdayFormatter,
       ),
     [
       visibleAgenda,
@@ -2213,6 +2242,7 @@ function App() {
       arrivalBoardWidgetText.copy.hourAbbr,
       arrivalBoardWidgetText.copy.minuteAbbr,
       arrivalBoardWidgetText.copy.dayAbbr,
+      arrivalWeekdayFormatter,
     ],
   )
   const visibleTodos = useMemo(

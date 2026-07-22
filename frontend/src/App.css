@@ -585,6 +585,7 @@ select {
 
 .board-head,
 .widget-head,
+.board-title-group,
 .widget-flag,
 .weather-summary,
 .arrival-route,
@@ -733,37 +734,6 @@ select {
   margin: 0;
   font-size: clamp(1.3rem, 2.2cqw, 2.1rem);
   line-height: 1.02;
-}
-
-.arrival-feature-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.arrival-feature-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.65rem;
-  height: 1.65rem;
-  border-radius: 999px;
-  border: 1px solid rgba(216, 230, 255, 0.24);
-  background: rgba(7, 16, 28, 0.32);
-  color: #d8e6ff;
-}
-
-.arrival-feature-badge--range {
-  color: #8ce4ff;
-}
-
-.arrival-feature-badge--recurrence {
-  color: #fccc0a;
-}
-
-.arrival-feature-icon {
-  width: 0.95rem;
-  height: 0.95rem;
 }
 
 .arrival-destination p {

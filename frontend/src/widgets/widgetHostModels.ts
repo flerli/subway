@@ -34,8 +34,6 @@ export interface Arrival extends ScopedItem {
   unit: string
   isSameDay: boolean
   cancelled: boolean
-  hasDateRange: boolean
-  hasRecurrence: boolean
 }
 
 export interface AgendaItem extends ScopedItem {
