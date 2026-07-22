@@ -613,8 +613,14 @@ function App() {
     Record<string, WidgetSettingsValues>
   >({})
   const registeredWidgetMcpTools = useMemo(
-    () => buildRegisteredWidgetMcpToolCatalog(registeredWidgets, widgetSettingsMap),
-    [registeredWidgets, widgetSettingsMap],
+    () =>
+      buildRegisteredWidgetMcpToolCatalog(
+        registeredWidgets,
+        widgetSettingsMap,
+        familyMembers,
+        authenticatedUser,
+      ),
+    [registeredWidgets, widgetSettingsMap, familyMembers, authenticatedUser],
   )
   const [widgetHealthMap, setWidgetHealthMap] = useState<Record<string, WidgetHealthState>>({})
   const [, setDebugTapTimestamps] = useState<number[]>([])

@@ -1,3 +1,5 @@
+import type { AuthUser } from '../api/auth'
+import type { FamilyMember } from './widgetHostModels'
 import type {
   RegisteredWidget,
   RegisteredWidgetMcpTool,
@@ -66,6 +68,50 @@ const buildProviderToolName = (toolName: string) =>
 const isWidgetVisibleOnBoard = (widget: RegisteredWidget) =>
   widget.entity.placementZones.length > 0
 
+const buildCalendarScopeGuidance = (
+  familyMembers: FamilyMember[],
+  authenticatedUser: AuthUser | null,
+) => {
+  const memberScopeList = familyMembers
+    .map((member) => `${member.firstName}=${member.id}`)
+    .join(', ')
+  const userLabel = authenticatedUser?.username?.trim() || 'the signed-in user'
+
+  if (familyMembers.length === 0) {
+    return `Valid calendar scopes for ${userLabel}: only scopeMode="all" is currently safe because no family member ids are loaded. Do not invent member ids.`
+  }
+
+  return `Valid calendar scopes for ${userLabel}: use scopeMode="all" for household-wide events, or scopeMode="members" with scopeMemberIdsJson set to a JSON array containing only these exact member ids: ${memberScopeList}. Never use first names as ids and never invent ids.`
+}
+
+const applyDynamicWidgetToolDescription = (
+  widget: RegisteredWidget,
+  tool: RegisteredWidgetMcpTool,
+  familyMembers: FamilyMember[],
+  authenticatedUser: AuthUser | null,
+): RegisteredWidgetMcpTool => {
+  if (widget.entity.id !== 'calendar') {
+    return tool
+  }
+
+  const scopeGuidance = buildCalendarScopeGuidance(familyMembers, authenticatedUser)
+  const scopeArgumentKeys = new Set(['scopeMode', 'scopeMemberIdsJson', 'focusedMemberId'])
+  const nextDescription = `${tool.description} ${scopeGuidance}`.trim()
+
+  return {
+    ...tool,
+    description: nextDescription,
+    arguments: tool.arguments.map((argumentDefinition) =>
+      scopeArgumentKeys.has(argumentDefinition.key)
+        ? {
+            ...argumentDefinition,
+            description: `${argumentDefinition.description} ${scopeGuidance}`.trim(),
+          }
+        : argumentDefinition,
+    ),
+  }
+}
+
 export const buildWidgetRegistry = (
   widgetEntities: WidgetEntityRecord[],
 ): RegisteredWidget[] =>
@@ -90,6 +136,8 @@ export const buildWidgetRegistry = (
 export const buildRegisteredWidgetMcpToolCatalog = (
   registeredWidgets: RegisteredWidget[],
   widgetSettingsMap: Record<string, WidgetSettingsValues> = {},
+  familyMembers: FamilyMember[] = [],
+  authenticatedUser: AuthUser | null = null,
 ): RegisteredWidgetMcpTool[] =>
   registeredWidgets.flatMap((widget) =>
     !isWidgetVisibleOnBoard(widget)
@@ -107,7 +155,7 @@ export const buildRegisteredWidgetMcpToolCatalog = (
       }
 
       return [
-        {
+        applyDynamicWidgetToolDescription(widget, {
           widgetId: widget.entity.id,
           widgetTitle: widget.entity.title,
           sourceLocation: widget.entity.sourceLocation,
@@ -123,7 +171,7 @@ export const buildRegisteredWidgetMcpToolCatalog = (
           redactArguments: tool.redactArguments === true,
           redactResults: tool.redactResults === true,
           arguments: tool.arguments,
-        },
+        }, familyMembers, authenticatedUser),
       ]
     }),
   )
