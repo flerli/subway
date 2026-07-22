@@ -609,6 +609,8 @@ select {
 
 .widget-title-stack {
   gap: 4px;
+  min-width: 0;
+  align-content: center;
 }
 
 .board-title-group,
@@ -620,6 +622,7 @@ select {
 
 .board-head h2,
 .widget h2 {
+  margin: 0;
   font-size: 1.74rem;
   letter-spacing: -0.03em;
 }
@@ -720,9 +723,47 @@ select {
   align-items: center;
 }
 
+.arrival-destination {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
 .arrival-destination h3 {
+  margin: 0;
   font-size: clamp(1.3rem, 2.2cqw, 2.1rem);
   line-height: 1.02;
+}
+
+.arrival-feature-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.arrival-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 230, 255, 0.24);
+  background: rgba(7, 16, 28, 0.32);
+  color: #d8e6ff;
+}
+
+.arrival-feature-badge--range {
+  color: #8ce4ff;
+}
+
+.arrival-feature-badge--recurrence {
+  color: #fccc0a;
+}
+
+.arrival-feature-icon {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .arrival-destination p {
@@ -749,6 +790,9 @@ select {
 .arrival-unit {
   margin: 0;
   color: #d8e6ff;
+  font-size: clamp(0.82rem, 1.45cqw, 1.05rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .board-footer {
@@ -1193,7 +1237,7 @@ select {
   flex: 1 1 auto;
   min-height: 14rem;
   height: auto;
-  padding: 8px 10px 18px;
+  padding: 18px 10px 18px;
   border-radius: 22px;
   overflow: hidden;
   background:
@@ -1204,6 +1248,7 @@ select {
 
 .weather-forecast-plot--detail .weather-forecast-plot__surface {
   min-height: 22rem;
+  padding-top: 28px;
   padding-bottom: 24px;
 }
 
@@ -1285,10 +1330,12 @@ select {
 
 .weather-forecast-plot__badge--high {
   background: rgba(255, 177, 116, 0.98);
+  z-index: 2;
 }
 
 .weather-forecast-plot__badge--low {
   background: rgba(122, 196, 255, 0.98);
+  z-index: 1;
 }
 
 .weather-forecast-plot__icon {
@@ -3036,7 +3083,7 @@ select {
 
 .bring-detail-matrix {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -3064,19 +3111,27 @@ select {
 .bring-detail-item-card .bring-item-name {
   font-size: 1.18rem;
   line-height: 1.28;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .bring-detail-item-card .bring-item-category {
   font-size: 0.72rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .bring-detail-item-card .bring-item-specification {
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .bring-detail-item-card .bring-detail-row-copy {
+  width: 100%;
+  min-width: 0;
   justify-items: center;
   text-align: center;
   gap: 8px;
@@ -4346,7 +4401,7 @@ select {
   border-bottom: 1px solid rgba(214, 232, 255, 0.13);
 
   display: grid;
-  grid-template-rows: auto repeat(5, auto);
+  grid-template-rows: auto repeat(6, auto);
   gap: 5px;
   padding: 8px 12px 12px;
 
@@ -4365,20 +4420,32 @@ select {
 }
 
 .software-keyboard__close {
+  width: calc((100cqi - 10 * 5px) / 11);
+  height: calc((100cqi - 10 * 5px) / 11);
   border: 1px solid rgba(214, 232, 255, 0.2);
-  border-radius: 8px;
-  padding: 4px 12px;
+  border-radius: 7px;
+  padding: 0;
   background: rgba(214, 232, 255, 0.07);
-  color: var(--muted-soft);
+  color: var(--text);
   font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
+  font-size: clamp(4rem, 16cqw, 6rem);
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
-  transition: background-color 100ms ease;
+  transition: background-color 40ms linear, border-color 40ms linear;
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .software-keyboard__close:hover {
   background: rgba(214, 232, 255, 0.14);
+}
+
+.software-keyboard__close.is-pressed {
+  background: rgba(214, 232, 255, 0.22);
+  border-color: rgba(214, 232, 255, 0.36);
 }
 
 /*
@@ -4420,7 +4487,6 @@ select {
   place-items: center;
 }
 
-.software-keyboard__key:active,
 .software-keyboard__key.is-pressed {
   background: rgba(214, 232, 255, 0.22);
   border-color: rgba(214, 232, 255, 0.36);

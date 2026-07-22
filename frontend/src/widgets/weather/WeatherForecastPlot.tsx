@@ -38,9 +38,6 @@ const parseTemperatureValue = (value: string) => {
 
 const formatTemperatureLabel = (value: number) => `${Math.round(value)}°`
 
-const clampValue = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max)
-
 export function WeatherForecastPlot({
   forecast,
   currentTemperature,
@@ -67,11 +64,11 @@ export function WeatherForecastPlot({
   const chartHeight = 100
   const leftPadding = forecast.length === 1 ? 20 : 8
   const rightPadding = forecast.length === 1 ? 20 : 8
-  const topPadding = size === 'detail' ? 30 : 24
+  const topPadding = size === 'detail' ? 33 : 27
   const bottomPadding = size === 'detail' ? 18 : 16
   const plotWidth = chartWidth - leftPadding - rightPadding
   const plotHeight = chartHeight - topPadding - bottomPadding
-  const iconTrackY = size === 'detail' ? 12 : 10
+  const iconTrackY = size === 'detail' ? 16 : 14
 
   const resolveX = (index: number) =>
     forecast.length === 1
@@ -85,16 +82,12 @@ export function WeatherForecastPlot({
     const x = resolveX(index)
     const highY = resolveY(day.high)
     const lowY = resolveY(day.low)
-    const pointGap = Math.abs(highY - lowY)
-    const needsSplitOffset = pointGap < 18
-    const highX = needsSplitOffset ? clampValue(x - 4.2, leftPadding, chartWidth - rightPadding) : x
-    const lowX = needsSplitOffset ? clampValue(x + 4.2, leftPadding, chartWidth - rightPadding) : x
 
     return {
       day,
       x,
-      highX,
-      lowX,
+      highX: x,
+      lowX: x,
       highY,
       lowY,
       iconY: iconTrackY,
@@ -154,15 +147,6 @@ export function WeatherForecastPlot({
         {chartPoints.map((point) => (
           <div key={`${point.day.day}-high`}>
             <div
-              className="weather-forecast-plot__badge weather-forecast-plot__badge--high"
-              style={{
-                left: `${point.highX}%`,
-                top: `${point.highY}%`,
-              }}
-            >
-              {formatTemperatureLabel(point.day.high)}
-            </div>
-            <div
               className="weather-forecast-plot__badge weather-forecast-plot__badge--low"
               style={{
                 left: `${point.lowX}%`,
@@ -170,6 +154,15 @@ export function WeatherForecastPlot({
               }}
             >
               {formatTemperatureLabel(point.day.low)}
+            </div>
+            <div
+              className="weather-forecast-plot__badge weather-forecast-plot__badge--high"
+              style={{
+                left: `${point.highX}%`,
+                top: `${point.highY}%`,
+              }}
+            >
+              {formatTemperatureLabel(point.day.high)}
             </div>
             <div
               className="weather-forecast-plot__icon"

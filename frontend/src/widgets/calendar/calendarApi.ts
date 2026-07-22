@@ -3,6 +3,7 @@ import { fetchApi } from '../../api/request'
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 const TIME_LABEL_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
+const MULTI_DAY_EVENT_RANGE_PATTERN = /\b(?:through|until)\s+(\d{4}-\d{2}-\d{2})\b/i
 
 export type CalendarRecurrenceFrequency =
   | 'none'
@@ -64,6 +65,16 @@ export interface CalendarEventWriteInput {
 
 export interface CalendarAgendaMappingOptions {
   homeCountryCode?: string | null
+}
+
+const extractRangeEndDateFromNote = (note: string, startDate: string) => {
+  const match = MULTI_DAY_EVENT_RANGE_PATTERN.exec(note)
+
+  if (!match || !ISO_DATE_PATTERN.test(match[1]) || match[1] < startDate) {
+    return null
+  }
+
+  return match[1]
 }
 
 const normalizeCalendarEventScope = (
@@ -210,6 +221,7 @@ export const mapCalendarEventRecordToAgendaItem = (
   const isForeign =
     Boolean(normalizedHomeCountryCode) &&
     normalizedHomeCountryCode !== record.locationCountry
+  const rangeEndDate = extractRangeEndDateFromNote(record.note, record.date)
 
   return {
     line: `calendar-${record.id.toLowerCase().replace(/\s+/g, '-')}`,
@@ -223,6 +235,8 @@ export const mapCalendarEventRecordToAgendaItem = (
     isForeign,
     members: record.members,
     cancelled: record.cancelled,
+    rangeEndDate,
+    recurrenceFrequency: record.recurrence.frequency,
   }
 }
 

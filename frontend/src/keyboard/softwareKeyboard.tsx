@@ -21,7 +21,8 @@ export const FOUNDATION_LAYOUT: KeyboardLayoutDefinition = {
   rows: [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
     ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-    ['z', 'x', 'c', 'v', 'b', 'n', 'm', '.', ','],
+    ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
+    ['.', ',', '?', '!', '+'],
   ],
 }
 
@@ -225,7 +226,7 @@ export const SoftwareKeyboardOverlay = ({
         <div className="software-keyboard__head">
           <button
             type="button"
-            className="software-keyboard__close"
+            className={`software-keyboard__close${pressedKeyId === 'close' ? ' is-pressed' : ''}`}
             aria-label="Close keyboard"
             onPointerDown={handleKeyPressStart('close', onRequestClose)}
           >

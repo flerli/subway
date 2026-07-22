@@ -87,6 +87,25 @@ const sortBringItemsByLatestFirst = <T extends { recentAt: string }>(items: T[])
     .map(({ item }) => item)
 }
 
+function ArrivalFeatureIcon({ kind }: { kind: 'range' | 'recurrence' }) {
+  if (kind === 'range') {
+    return (
+      <svg className="arrival-feature-icon" viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="2.25" y="3.25" width="11.5" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M5 1.75v3M11 1.75v3M2.75 6.5h10.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M5 9h2.5M5 11h5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg className="arrival-feature-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4.5 4.5V2l-2.5 2.5 2.5 2.5V4.5h4a4 4 0 0 1 3.6 2.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11.5 11.5V14l2.5-2.5-2.5-2.5v2.5h-4a4 4 0 0 1-3.6-2.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
 interface WidgetBoardHostProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
@@ -637,7 +656,7 @@ export function WidgetBoardHost({
                 <span className="route-bullet route-bullet--large" style={badgeStyle}>
                   {widget.entity.subwayLetter}
                 </span>
-                <div>
+                <div className="widget-title-stack">
                   <h2>
                     {activeProfileLabel
                       ? formatLocalizedText(
@@ -660,7 +679,7 @@ export function WidgetBoardHost({
                       {column.map((item) => (
                         <article
                           className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
-                          key={`${item.line}-${item.destination}`}
+                          key={item.eventId}
                           role="button"
                           tabIndex={0}
                           onClick={() => {
@@ -683,6 +702,20 @@ export function WidgetBoardHost({
                             {renderAudienceBadge(item.members, 'route-bullet--large')}
                             <div className="arrival-destination">
                               <h3>{item.destination}</h3>
+                              {item.hasDateRange || item.hasRecurrence ? (
+                                <div className="arrival-feature-list" aria-hidden="true">
+                                  {item.hasDateRange ? (
+                                    <span className="arrival-feature-badge arrival-feature-badge--range">
+                                      <ArrivalFeatureIcon kind="range" />
+                                    </span>
+                                  ) : null}
+                                  {item.hasRecurrence ? (
+                                    <span className="arrival-feature-badge arrival-feature-badge--recurrence">
+                                      <ArrivalFeatureIcon kind="recurrence" />
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                           <div className="arrival-minute-stack">

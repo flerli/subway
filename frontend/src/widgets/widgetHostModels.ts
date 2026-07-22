@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react'
 export type MemberId = string
 export type FilterId = string
 export type AudienceId = string
+export type AgendaRecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
 export interface FamilyMember {
   id: MemberId
@@ -33,6 +34,8 @@ export interface Arrival extends ScopedItem {
   unit: string
   isSameDay: boolean
   cancelled: boolean
+  hasDateRange: boolean
+  hasRecurrence: boolean
 }
 
 export interface AgendaItem extends ScopedItem {
@@ -45,6 +48,8 @@ export interface AgendaItem extends ScopedItem {
   note: string
   isForeign: boolean
   cancelled: boolean
+  rangeEndDate: string | null
+  recurrenceFrequency: AgendaRecurrenceFrequency
 }
 
 export interface TodoItem extends ScopedItem {
