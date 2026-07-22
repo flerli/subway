@@ -724,6 +724,7 @@ export function WidgetBoardHost({
                   <p className="weather-temp">{weatherData.currentTemperature}</p>
                 </div>
                 <div className="weather-copy">
+                  <p className="weather-focus-location-name">{weatherData.location}</p>
                   <p className="weather-updated">
                     {weatherWidgetText.copy.updatedPrefix}{' '}
                     {new Intl.DateTimeFormat(languageCode, {
