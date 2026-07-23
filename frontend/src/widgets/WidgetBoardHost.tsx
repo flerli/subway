@@ -659,7 +659,7 @@ export function WidgetBoardHost({
                     <div className="arrival-board-column" key={`arrival-column-${columnIndex}`}>
                       {column.map((item) => (
                         <article
-                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
+                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.completed ? ' is-completed' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
                           key={item.eventId}
                           role="button"
                           tabIndex={0}
@@ -685,9 +685,19 @@ export function WidgetBoardHost({
                               <h3>{item.destination}</h3>
                             </div>
                           </div>
-                          <div className="arrival-minute-stack">
-                            <p className="arrival-count">{item.value}</p>
-                            {item.unit ? <p className="arrival-unit">{item.unit}</p> : null}
+                          <div
+                            className={`arrival-minute-stack${item.completed ? ' arrival-minute-stack--completed' : ''}`}
+                          >
+                            {item.completed ? (
+                              <span className="arrival-status-checkmark" aria-hidden="true">
+                                ✔
+                              </span>
+                            ) : (
+                              <>
+                                <p className="arrival-count">{item.value}</p>
+                                {item.unit ? <p className="arrival-unit">{item.unit}</p> : null}
+                              </>
+                            )}
                           </div>
                         </article>
                       ))}

@@ -745,6 +745,11 @@ select {
   text-align: right;
 }
 
+.arrival-minute-stack--completed {
+  min-width: clamp(4.4rem, 7.6cqw, 6.2rem);
+  align-items: center;
+}
+
 .arrival-count,
 .weather-temp {
   margin: 0;
@@ -763,6 +768,21 @@ select {
   font-size: clamp(0.82rem, 1.45cqw, 1.05rem);
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.arrival-status-checkmark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(3rem, 5.6cqw, 4.3rem);
+  height: clamp(3rem, 5.6cqw, 4.3rem);
+  border-radius: 999px;
+  background: rgba(209, 224, 236, 0.18);
+  border: 1px solid rgba(209, 224, 236, 0.28);
+  color: rgba(244, 249, 255, 0.96);
+  font-size: clamp(2rem, 3.8cqw, 3rem);
+  font-weight: 900;
+  line-height: 1;
 }
 
 .board-footer {
@@ -3373,6 +3393,28 @@ select {
 
 .arrival-strip.is-cancelled {
   opacity: 0.6;
+}
+
+.arrival-strip.is-completed {
+  opacity: 0.56;
+  background: linear-gradient(180deg, rgba(79, 91, 109, 0.72) 0%, rgba(48, 58, 74, 0.88) 100%);
+  border-color: rgba(181, 194, 210, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.arrival-strip.is-completed.arrival-strip--same-day {
+  background:
+    linear-gradient(180deg, rgba(96, 92, 69, 0.26) 0%, rgba(56, 63, 76, 0.9) 100%),
+    linear-gradient(180deg, rgba(79, 91, 109, 0.72) 0%, rgba(48, 58, 74, 0.88) 100%);
+  border-color: rgba(201, 179, 111, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(201, 179, 111, 0.08);
+}
+
+.arrival-strip.is-completed .arrival-destination h3,
+.arrival-strip.is-completed .arrival-route .route-bullet {
+  color: rgba(228, 236, 245, 0.84);
 }
 
 .arrival-strip.is-cancelled .arrival-destination h3,

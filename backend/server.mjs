@@ -4338,6 +4338,38 @@ const normalizeAssistantUsagePayload = (value) => {
   }
 }
 
+const SCAICO_SESSION_MARKER_PATTERN = /<!--\s*scaico-session:[\s\S]*?-->/gi
+
+const extractScaicoSessionMarkers = (value) => {
+  if (typeof value !== 'string' || value.length === 0) {
+    return []
+  }
+
+  return Array.from(new Set(value.match(SCAICO_SESSION_MARKER_PATTERN) ?? []))
+}
+
+const mergeScaicoSessionMarkers = (currentMarkers, value) =>
+  Array.from(new Set([...currentMarkers, ...extractScaicoSessionMarkers(value)]))
+
+const appendScaicoSessionMarkers = (content, markers) => {
+  if (!Array.isArray(markers) || markers.length === 0) {
+    return typeof content === 'string' ? content : ''
+  }
+
+  const normalizedContent = typeof content === 'string' ? content : ''
+  const missingMarkers = markers.filter((marker) => !normalizedContent.includes(marker))
+
+  if (missingMarkers.length === 0) {
+    return normalizedContent
+  }
+
+  if (normalizedContent.trim().length === 0) {
+    return missingMarkers.join('\n')
+  }
+
+  return `${normalizedContent}\n${missingMarkers.join('\n')}`
+}
+
 const normalizeAssistantProviderContent = (value) => {
   if (typeof value === 'string') {
     return value.trim()
@@ -4767,6 +4799,7 @@ const executeAssistantTurn = async (
       toolsRequested: options.toolsRequested === true,
       widgetTools,
     })
+    let preservedScaicoSessionMarkers = extractScaicoSessionMarkers(providerResponse.content)
 
     const assistantMessageTimestamp = new Date().toISOString()
     const assistantMessageId = `assistant-message-${randomUUID()}`
@@ -4774,7 +4807,10 @@ const executeAssistantTurn = async (
       id: assistantMessageId,
       threadId,
       role: 'assistant',
-      content: providerResponse.content,
+      content: appendScaicoSessionMarkers(
+        providerResponse.content,
+        preservedScaicoSessionMarkers,
+      ),
       sequenceIndex: selectNextAssistantMessageSequenceIndex(ownerUserId, threadId),
       createdAt: assistantMessageTimestamp,
       updatedAt: assistantMessageTimestamp,
@@ -4946,10 +4982,17 @@ const executeAssistantTurn = async (
           toolsRequested: options.toolsRequested === true,
           widgetTools,
         })
+        preservedScaicoSessionMarkers = mergeScaicoSessionMarkers(
+          preservedScaicoSessionMarkers,
+          providerResponse.content,
+        )
       }
     }
 
-    const finalAssistantContent = providerResponse.content
+    const finalAssistantContent = appendScaicoSessionMarkers(
+      providerResponse.content,
+      preservedScaicoSessionMarkers,
+    )
 
     if (typeof finalAssistantContent === 'string' && finalAssistantContent !== assistantMessage.content) {
       updateAssistantMessageContent(

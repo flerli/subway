@@ -299,13 +299,15 @@ const buildArrivalBoardEvents = (
         : new Date(`${agendaItem.date}T23:59:59`)
       const eventTime = eventDateTime.getTime()
       const visibilityEndTime = visibilityEndDateTime.getTime()
+      const completed = eventTime < nowTime && visibilityEndTime >= nowTime
 
       return {
         agendaItem,
         eventDateTime,
-        countdownTargetTime: eventTime >= nowTime ? eventTime : visibilityEndTime,
+        countdownTargetTime: eventTime,
         sortTime: Math.max(eventTime, nowTime),
         visibilityEndTime,
+        completed,
       }
     })
     .filter(
@@ -319,7 +321,7 @@ const buildArrivalBoardEvents = (
         left.eventDateTime.getTime() - right.eventDateTime.getTime(),
     )
     .slice(0, 6)
-    .map(({ agendaItem, countdownTargetTime, eventDateTime }) => {
+    .map(({ agendaItem, countdownTargetTime, eventDateTime, completed }) => {
       const diffMs = Math.max(countdownTargetTime - nowTime, 0)
       const totalHours = diffMs / (1000 * 60 * 60)
       const totalMinutes = Math.round(diffMs / (1000 * 60))
@@ -327,7 +329,9 @@ const buildArrivalBoardEvents = (
       let value: string
       let unit = ''
 
-      if (totalHours < 5) {
+      if (completed) {
+        value = ''
+      } else if (totalHours < 5) {
         const hours = Math.floor(totalMinutes / 60)
         const mins = totalMinutes % 60
         value =
@@ -358,6 +362,7 @@ const buildArrivalBoardEvents = (
         isSameDay,
         unit,
         members: agendaItem.members,
+        completed,
         cancelled: agendaItem.cancelled,
       }
     })

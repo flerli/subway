@@ -33,6 +33,7 @@ export interface Arrival extends ScopedItem {
   value: string
   unit: string
   isSameDay: boolean
+  completed: boolean
   cancelled: boolean
 }
 
