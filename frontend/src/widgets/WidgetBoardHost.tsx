@@ -690,7 +690,10 @@ export function WidgetBoardHost({
                           >
                             {item.completed ? (
                               <span className="arrival-status-checkmark" aria-hidden="true">
-                                ✔
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="M7.5 12.5 10.5 15.5 16.75 8.75" />
+                                </svg>
                               </span>
                             ) : (
                               <>

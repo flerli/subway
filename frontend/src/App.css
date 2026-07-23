@@ -774,15 +774,28 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(3rem, 5.6cqw, 4.3rem);
-  height: clamp(3rem, 5.6cqw, 4.3rem);
-  border-radius: 999px;
-  background: rgba(209, 224, 236, 0.18);
-  border: 1px solid rgba(209, 224, 236, 0.28);
-  color: rgba(244, 249, 255, 0.96);
-  font-size: clamp(2rem, 3.8cqw, 3rem);
-  font-weight: 900;
-  line-height: 1;
+  width: clamp(3.15rem, 5.9cqw, 4.5rem);
+  height: clamp(3.15rem, 5.9cqw, 4.5rem);
+}
+
+.arrival-status-checkmark svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0.2rem 0.5rem rgba(34, 94, 54, 0.32));
+}
+
+.arrival-status-checkmark circle {
+  fill: #2eb85c;
+  stroke: #8ef0ae;
+  stroke-width: 1.1;
+}
+
+.arrival-status-checkmark path {
+  fill: none;
+  stroke: #f7fff9;
+  stroke-width: 2.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .board-footer {
@@ -2818,7 +2831,9 @@ select {
 
 .calendar-detail-main-body {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
+  height: 100%;
   margin-top: 0;
   padding-top: 0;
 }
@@ -3258,9 +3273,21 @@ select {
   max-width: 100%;
 }
 
+.calendar-month-matrix-wrap {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
 .calendar-month-weekdays,
 .calendar-month-matrix {
   grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-month-matrix {
+  min-height: 0;
+  height: 100%;
+  align-content: stretch;
 }
 
 .calendar-month-weekday,
@@ -3292,7 +3319,12 @@ select {
 .calendar-month-cell,
 .calendar-year-card {
   min-height: 108px;
+  height: 100%;
   padding: 10px;
+  align-content: start;
+}
+
+.calendar-month-cell-events {
   align-content: start;
 }
 

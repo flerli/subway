@@ -91,17 +91,34 @@ const startOfWeek = (value: Date) => {
   return nextDate
 }
 
+const endOfWeek = (value: Date) => addDays(startOfWeek(value), 6)
+
+const isSameMonth = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth()
+
+const buildMonthGridBounds = (anchorDate: string) => {
+  const anchor = parseIsoDate(anchorDate)
+  const today = parseIsoDate(getTodayIsoDate())
+  const firstDayOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+  const lastDayOfMonth = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
+  const isCurrentMonth = isSameMonth(anchor, today)
+
+  return {
+    gridStart: isCurrentMonth ? startOfWeek(today) : startOfWeek(firstDayOfMonth),
+    gridEnd: endOfWeek(lastDayOfMonth),
+  }
+}
+
 const buildRangeForView = (mode: CalendarDetailViewMode, anchorDate: string) => {
   const anchor = parseIsoDate(anchorDate)
 
   switch (mode) {
     case 'month': {
-      const rangeStartDate = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-      const rangeEndDate = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
+      const { gridStart, gridEnd } = buildMonthGridBounds(anchorDate)
 
       return {
-        rangeStart: formatIsoDate(rangeStartDate),
-        rangeEnd: formatIsoDate(rangeEndDate),
+        rangeStart: formatIsoDate(gridStart),
+        rangeEnd: formatIsoDate(gridEnd),
       }
     }
     case 'year': {
@@ -167,22 +184,24 @@ const isHouseholdEvent = (event: CalendarEventRecord) => event.members.includes(
 
 const formatRangeLabel = (
   mode: CalendarDetailViewMode,
+  anchorDate: string,
   rangeStart: string,
   rangeEnd: string,
   languageCode: SupportedLanguageCode,
 ) => {
+  const anchor = parseIsoDate(anchorDate)
   const startDate = parseIsoDate(rangeStart)
   const endDate = parseIsoDate(rangeEnd)
 
   if (mode === 'year') {
-    return new Intl.DateTimeFormat(languageCode, { year: 'numeric' }).format(startDate)
+    return new Intl.DateTimeFormat(languageCode, { year: 'numeric' }).format(anchor)
   }
 
   if (mode === 'month') {
     return new Intl.DateTimeFormat(languageCode, {
       month: 'long',
       year: 'numeric',
-    }).format(startDate)
+    }).format(anchor)
   }
 
   const startLabel = new Intl.DateTimeFormat(languageCode, {
@@ -240,8 +259,7 @@ const buildWeekdayHeaders = (languageCode: SupportedLanguageCode) => {
 
 const buildMonthMatrix = (anchorDate: string, events: CalendarEventRecord[]) => {
   const anchor = parseIsoDate(anchorDate)
-  const gridStart = startOfWeek(anchor)
-  const gridEnd = addDays(gridStart, 27)
+  const { gridStart, gridEnd } = buildMonthGridBounds(anchorDate)
   const monthEventMap = new Map<string, CalendarEventRecord[]>()
 
   for (const event of events) {
@@ -1174,6 +1192,7 @@ export function CalendarDetailView({
     }
 
     const todayIsoDate = getTodayIsoDate()
+    const monthRowCount = Math.ceil(monthMatrix.length / 7)
 
     return (
       <div className="calendar-month-matrix-wrap">
@@ -1184,7 +1203,10 @@ export function CalendarDetailView({
             </p>
           ))}
         </div>
-        <div className="calendar-month-matrix">
+        <div
+          className="calendar-month-matrix"
+          style={{ gridTemplateRows: `repeat(${monthRowCount}, minmax(0, 1fr))` }}
+        >
           {monthMatrix.map((cell) => {
             const isSelected = cell.events.some((event) => event.id === selectedEventId)
             const isToday = cell.date === todayIsoDate
@@ -1285,7 +1307,7 @@ export function CalendarDetailView({
               </button>
             </div>
             <h3 className="calendar-detail-range-title">
-              {formatRangeLabel(viewMode, rangeStart, rangeEnd, languageCode)}
+              {formatRangeLabel(viewMode, anchorDate, rangeStart, rangeEnd, languageCode)}
             </h3>
             <p className="calendar-detail-range-meta">
               {formatLocalizedText(widgetText.detail.rangeEventCountMeta, {
