@@ -2444,6 +2444,19 @@ function App() {
     () => filterTodoItemsForView(todoWidgetItems, focusedMemberId, widgetSettingsMap.todo),
     [todoWidgetItems, focusedMemberId, widgetSettingsMap.todo],
   )
+  const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now)
+  const boardDate = new Intl.DateTimeFormat(selectedLanguageCode, {
+    weekday: 'short',
+    month: 'short',
+    day: '2-digit',
+  })
+    .format(now)
+    .replace(',', '')
+    .toUpperCase()
   const arrivalBoardChromeSettings = normalizeArrivalBoardSettings(
     widgetSettingsMap['arrival-board'],
   )
@@ -3670,6 +3683,16 @@ function App() {
               </h1>
             </div>
           </div>
+
+          {!isMobileLayout ? (
+            <div className="terminal-cell terminal-cell--clock">
+              <div className="clock-stack">
+                <p className="board-datetime">
+                  {boardDate} {boardTime}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <div
             className={`terminal-cell terminal-cell--filters${isMobileLayout ? ' terminal-cell--filters-mobile' : ''}${isMobileBoardHeaderCollapseEnabled && isMobileBoardHeaderCollapsed ? ' terminal-cell--filters-collapsed' : ''}`}

@@ -840,6 +840,7 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  min-height: clamp(5.25rem, 8.2cqw, 6.1rem);
   gap: 16px;
   padding: 12px 14px;
   border-radius: 6px;

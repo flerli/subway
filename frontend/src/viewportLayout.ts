@@ -12,8 +12,8 @@ export interface ViewportLayoutState {
   orientation: ViewportOrientation
 }
 
-const MOBILE_MAX_SHORTEST_SIDE = 900
-const MOBILE_MAX_LONGEST_SIDE = 1400
+const MOBILE_MAX_SHORTEST_SIDE = 840
+const MOBILE_MAX_LONGEST_SIDE = 1180
 
 const defaultViewportLayoutState: ViewportLayoutState = {
   layoutMode: 'desktop',
