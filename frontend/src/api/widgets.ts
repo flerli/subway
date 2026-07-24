@@ -144,6 +144,7 @@ const normalizePlacementZones = (
 const normalizeWidgetEntity = (value: unknown) => {
   const candidate = value as {
     id?: unknown
+    widgetTypeId?: unknown
     title?: unknown
     subwayLetter?: unknown
     subwayColor?: unknown
@@ -163,6 +164,10 @@ const normalizeWidgetEntity = (value: unknown) => {
 
   return {
     id: candidate.id,
+    widgetTypeId:
+      typeof candidate.widgetTypeId === 'string'
+        ? candidate.widgetTypeId
+        : candidate.id,
     title: candidate.title,
     subwayLetter:
       typeof candidate.subwayLetter === 'string'
@@ -238,4 +243,40 @@ export const updateWidgetEntity = async (
   }
 
   return mergeWidgetEntitiesWithSeed([widget])[0]
+}
+
+export const createWidgetEntity = async (payload: {
+  sourceLocation?: string
+  duplicateFromWidgetId?: string
+}) => {
+  const response = await fetchApi('/widgets', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to create widget instance in backend.')
+  }
+
+  const responsePayload = (await response.json()) as { widget?: unknown }
+  const widget = normalizeWidgetEntity(responsePayload.widget)
+
+  if (!widget) {
+    throw new Error('Backend returned an invalid widget metadata payload.')
+  }
+
+  return mergeWidgetEntitiesWithSeed([widget])[0]
+}
+
+export const deleteWidgetEntity = async (widgetId: string) => {
+  const response = await fetchApi(`/widgets/${widgetId}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to delete widget instance in backend.')
+  }
 }

@@ -28,6 +28,10 @@ export interface AppTextBundle {
     boardTab: string
     assistantTab: string
     settingsTab: string
+    memberNavigationLabel: string
+    widgetNavigationLabel: string
+    widgetSelectPlaceholder: string
+    widgetShowAction: string
     signOutAction: string
     signingOutAction: string
   }
@@ -165,6 +169,7 @@ export interface AppTextBundle {
   boardHost: {
     expandAction: string
     collapseAction: string
+    backToBoardAction: string
     expandAriaLabel: string
     collapseAriaLabel: string
     filtersAriaLabel: string
@@ -183,6 +188,11 @@ export interface AppTextBundle {
     synced: string
     syncFailed: string
     idle: string
+    createSourceLabel: string
+    createInstanceAction: string
+    duplicateInstanceAction: string
+    deleteInstanceAction: string
+    deleteInstanceConfirm: string
     openSettingsAction: string
     titleLabel: string
     letterLabel: string
@@ -229,6 +239,7 @@ export interface AppTextBundle {
     copy: string
     closeAction: string
     performanceTitle: string
+    viewportTitle: string
     sourceLabel: string
     scopeLabel: string
     visibleNowLabel: string
@@ -240,6 +251,9 @@ export interface AppTextBundle {
     itemsLabel: string
     failureLabel: string
     lastInteractionLabel: string
+    layoutModeLabel: string
+    viewportSizeLabel: string
+    viewportOrientationLabel: string
     interactionDurationLabel: string
     interactionMeasuredAtLabel: string
     longTaskCountLabel: string
@@ -247,6 +261,10 @@ export interface AppTextBundle {
     lastLongTaskLabel: string
     notAvailableValue: string
     noneValue: string
+    layoutModeDesktopValue: string
+    layoutModeMobileValue: string
+    portraitValue: string
+    landscapeValue: string
     allMembersScope: string
     memberScope: string
     membersScope: string
@@ -316,6 +334,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       boardTab: 'Board',
       assistantTab: 'Assistant',
       settingsTab: 'Settings',
+      memberNavigationLabel: 'Members',
+      widgetNavigationLabel: 'Widget',
+      widgetSelectPlaceholder: 'No widgets available',
+      widgetShowAction: 'Show',
       signOutAction: 'Log out',
       signingOutAction: 'Signing out...',
     },
@@ -473,6 +495,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     boardHost: {
       expandAction: 'Expand',
       collapseAction: 'Close',
+      backToBoardAction: 'Back to board',
       expandAriaLabel: 'Expand {title} into the lower panel',
       collapseAriaLabel: 'Collapse {title} expanded view',
       filtersAriaLabel: 'Household filters',
@@ -493,6 +516,11 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synced',
       syncFailed: 'Sync failed',
       idle: 'Idle',
+      createSourceLabel: 'Add widget type',
+      createInstanceAction: 'Add widget',
+      duplicateInstanceAction: 'Duplicate',
+      deleteInstanceAction: 'Delete',
+      deleteInstanceConfirm: 'Delete {title}? This cannot be undone.',
       openSettingsAction: 'Open',
       titleLabel: 'Title',
       letterLabel: 'Letter',
@@ -544,6 +572,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       copy: 'Hidden overlay for source, scope, refresh status, and failure inspection.',
       closeAction: 'Close',
       performanceTitle: 'Performance',
+      viewportTitle: 'Viewport',
       sourceLabel: 'Source',
       scopeLabel: 'Scope',
       visibleNowLabel: 'Visible now',
@@ -555,6 +584,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       itemsLabel: 'Items',
       failureLabel: 'Failure',
       lastInteractionLabel: 'Last interaction',
+      layoutModeLabel: 'Layout mode',
+      viewportSizeLabel: 'Viewport size',
+      viewportOrientationLabel: 'Orientation',
       interactionDurationLabel: 'Click to paint',
       interactionMeasuredAtLabel: 'Measured at',
       longTaskCountLabel: 'Long tasks',
@@ -562,6 +594,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastLongTaskLabel: 'Last long task',
       notAvailableValue: 'n/a',
       noneValue: 'none',
+      layoutModeDesktopValue: 'desktop',
+      layoutModeMobileValue: 'mobile',
+      portraitValue: 'portrait',
+      landscapeValue: 'landscape',
       allMembersScope: 'All members',
       memberScope: 'Member: {memberId}',
       membersScope: 'Members: {memberIds}',
@@ -635,6 +671,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       boardTab: 'Board',
       assistantTab: 'Assistent',
       settingsTab: 'Einstellungen',
+      memberNavigationLabel: 'Mitglieder',
+      widgetNavigationLabel: 'Widget',
+      widgetSelectPlaceholder: 'Keine Widgets verfuegbar',
+      widgetShowAction: 'Anzeigen',
       signOutAction: 'Abmelden',
       signingOutAction: 'Abmeldung laeuft...',
     },
@@ -796,6 +836,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     boardHost: {
       expandAction: 'Oeffnen',
       collapseAction: 'Schliessen',
+      backToBoardAction: 'Zurueck zum Board',
       expandAriaLabel: '{title} im unteren Bereich oeffnen',
       collapseAriaLabel: 'Erweiterte Ansicht von {title} schliessen',
       filtersAriaLabel: 'Haushaltsfilter',
@@ -816,6 +857,11 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synchronisiert',
       syncFailed: 'Synchronisierung fehlgeschlagen',
       idle: 'Leerlauf',
+      createSourceLabel: 'Widget-Typ hinzufuegen',
+      createInstanceAction: 'Widget hinzufuegen',
+      duplicateInstanceAction: 'Duplizieren',
+      deleteInstanceAction: 'Loeschen',
+      deleteInstanceConfirm: '{title} loeschen? Dies kann nicht rueckgaengig gemacht werden.',
       openSettingsAction: 'Oeffnen',
       titleLabel: 'Titel',
       letterLabel: 'Buchstabe',
@@ -867,6 +913,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       copy: 'Verstecktes Overlay fuer Quelle, Umfang, Aktualisierungsstatus und Fehlerpruefung.',
       closeAction: 'Schliessen',
       performanceTitle: 'Performance',
+      viewportTitle: 'Viewport',
       sourceLabel: 'Quelle',
       scopeLabel: 'Umfang',
       visibleNowLabel: 'Jetzt sichtbar',
@@ -878,6 +925,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       itemsLabel: 'Eintraege',
       failureLabel: 'Fehler',
       lastInteractionLabel: 'Letzte Interaktion',
+      layoutModeLabel: 'Layout-Modus',
+      viewportSizeLabel: 'Viewport-Groesse',
+      viewportOrientationLabel: 'Ausrichtung',
       interactionDurationLabel: 'Klick bis Anzeige',
       interactionMeasuredAtLabel: 'Gemessen um',
       longTaskCountLabel: 'Long Tasks',
@@ -885,6 +935,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastLongTaskLabel: 'Letzter Long Task',
       notAvailableValue: 'k. A.',
       noneValue: 'kein',
+      layoutModeDesktopValue: 'desktop',
+      layoutModeMobileValue: 'mobil',
+      portraitValue: 'hochformat',
+      landscapeValue: 'querformat',
       allMembersScope: 'Alle Mitglieder',
       memberScope: 'Mitglied: {memberId}',
       membersScope: 'Mitglieder: {memberIds}',
@@ -969,6 +1023,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       boardTab: 'Tableau',
       assistantTab: 'Assistant',
       settingsTab: 'Reglages',
+      memberNavigationLabel: 'Membres',
+      widgetNavigationLabel: 'Widget',
+      widgetSelectPlaceholder: 'Aucun widget disponible',
+      widgetShowAction: 'Afficher',
       signOutAction: 'Se deconnecter',
       signingOutAction: 'Deconnexion...',
     },
@@ -1131,6 +1189,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     boardHost: {
       expandAction: 'Etendre',
       collapseAction: 'Fermer',
+      backToBoardAction: 'Retour au tableau',
       expandAriaLabel: 'Etendre {title} dans le panneau inferieur',
       collapseAriaLabel: 'Fermer la vue detaillee de {title}',
       filtersAriaLabel: 'Filtres du foyer',
@@ -1151,6 +1210,11 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Synchronise',
       syncFailed: 'Echec de synchronisation',
       idle: 'Inactif',
+      createSourceLabel: 'Ajouter un type de widget',
+      createInstanceAction: 'Ajouter le widget',
+      duplicateInstanceAction: 'Dupliquer',
+      deleteInstanceAction: 'Supprimer',
+      deleteInstanceConfirm: 'Supprimer {title} ? Cette action est irreversible.',
       openSettingsAction: 'Ouvrir',
       titleLabel: 'Titre',
       letterLabel: 'Lettre',
@@ -1202,6 +1266,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       copy: 'Overlay cache pour la source, la portee, l etat de rafraichissement et l inspection des echecs.',
       closeAction: 'Fermer',
       performanceTitle: 'Performance',
+      viewportTitle: 'Viewport',
       sourceLabel: 'Source',
       scopeLabel: 'Portee',
       visibleNowLabel: 'Visible maintenant',
@@ -1213,6 +1278,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       itemsLabel: 'Elements',
       failureLabel: 'Echec',
       lastInteractionLabel: 'Derniere interaction',
+      layoutModeLabel: 'Mode de mise en page',
+      viewportSizeLabel: 'Taille du viewport',
+      viewportOrientationLabel: 'Orientation',
       interactionDurationLabel: 'Clic jusqu a l affichage',
       interactionMeasuredAtLabel: 'Mesure a',
       longTaskCountLabel: 'Taches longues',
@@ -1220,6 +1288,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastLongTaskLabel: 'Derniere tache longue',
       notAvailableValue: 'n/d',
       noneValue: 'aucun',
+      layoutModeDesktopValue: 'desktop',
+      layoutModeMobileValue: 'mobile',
+      portraitValue: 'portrait',
+      landscapeValue: 'paysage',
       allMembersScope: 'Tous les membres',
       memberScope: 'Membre : {memberId}',
       membersScope: 'Membres : {memberIds}',
@@ -1304,6 +1376,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       boardTab: 'Tablero',
       assistantTab: 'Asistente',
       settingsTab: 'Configuracion',
+      memberNavigationLabel: 'Miembros',
+      widgetNavigationLabel: 'Widget',
+      widgetSelectPlaceholder: 'No hay widgets disponibles',
+      widgetShowAction: 'Mostrar',
       signOutAction: 'Cerrar sesion',
       signingOutAction: 'Cerrando sesion...',
     },
@@ -1465,6 +1541,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
     boardHost: {
       expandAction: 'Expandir',
       collapseAction: 'Cerrar',
+      backToBoardAction: 'Volver al tablero',
       expandAriaLabel: 'Expandir {title} en el panel inferior',
       collapseAriaLabel: 'Cerrar la vista ampliada de {title}',
       filtersAriaLabel: 'Filtros del hogar',
@@ -1485,6 +1562,11 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       synced: 'Sincronizado',
       syncFailed: 'Fallo de sincronizacion',
       idle: 'En espera',
+      createSourceLabel: 'Agregar tipo de widget',
+      createInstanceAction: 'Agregar widget',
+      duplicateInstanceAction: 'Duplicar',
+      deleteInstanceAction: 'Eliminar',
+      deleteInstanceConfirm: 'Eliminar {title}? Esta accion no se puede deshacer.',
       openSettingsAction: 'Abrir',
       titleLabel: 'Titulo',
       letterLabel: 'Letra',
@@ -1536,6 +1618,7 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       copy: 'Overlay oculto para revisar fuente, alcance, estado de refresco y fallos.',
       closeAction: 'Cerrar',
       performanceTitle: 'Rendimiento',
+      viewportTitle: 'Viewport',
       sourceLabel: 'Fuente',
       scopeLabel: 'Alcance',
       visibleNowLabel: 'Visible ahora',
@@ -1547,6 +1630,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       itemsLabel: 'Elementos',
       failureLabel: 'Fallo',
       lastInteractionLabel: 'Ultima interaccion',
+      layoutModeLabel: 'Modo de diseno',
+      viewportSizeLabel: 'Tamano del viewport',
+      viewportOrientationLabel: 'Orientacion',
       interactionDurationLabel: 'Clic hasta pintar',
       interactionMeasuredAtLabel: 'Medido a las',
       longTaskCountLabel: 'Tareas largas',
@@ -1554,6 +1640,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       lastLongTaskLabel: 'Ultima tarea larga',
       notAvailableValue: 'n/d',
       noneValue: 'ninguno',
+      layoutModeDesktopValue: 'desktop',
+      layoutModeMobileValue: 'mobile',
+      portraitValue: 'vertical',
+      landscapeValue: 'horizontal',
       allMembersScope: 'Todos los miembros',
       memberScope: 'Miembro: {memberId}',
       membersScope: 'Miembros: {memberIds}',

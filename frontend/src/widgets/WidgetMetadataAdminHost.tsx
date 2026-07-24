@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppTextBundle } from '../i18n/appText'
 import {
   formatLocalizedText,
@@ -34,9 +34,13 @@ interface WidgetMetadataAdminHostProps {
   registeredWidgets: RegisteredWidget[]
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
+  multiInstanceSourceLocations: string[]
   expandedWidgetId: string | null
   onExpandedWidgetChange: (widgetId: string | null) => void
   onSaveWidgetMetadata: (widgetId: string, draft: WidgetMetadataDraft) => Promise<void>
+  onCreateWidgetInstance: (sourceLocation: string) => Promise<void>
+  onDuplicateWidgetInstance: (widgetId: string) => Promise<void>
+  onDeleteWidgetInstance: (widgetId: string) => Promise<void>
 }
 
 const zoneOptions: WidgetPlacementZoneId[] = widgetPlacementZoneIds
@@ -91,6 +95,8 @@ function WidgetMetadataCard({
   isSettingsOpen,
   onToggleSettings,
   onSave,
+  onDuplicate,
+  onDelete,
 }: {
   widget: RegisteredWidget
   appText: AppTextBundle
@@ -100,6 +106,8 @@ function WidgetMetadataCard({
   isSettingsOpen: boolean
   onToggleSettings: (widgetId: string) => void
   onSave: (widgetId: string, draft: WidgetMetadataDraft) => Promise<void>
+  onDuplicate: (widgetId: string) => Promise<void>
+  onDelete: (widgetId: string) => Promise<void>
 }) {
   const [draft, setDraft] = useState<WidgetMetadataDraft>(buildDraftFromWidget(widget))
   const [syncState, setSyncState] = useState<SyncState>('idle')
@@ -109,6 +117,7 @@ function WidgetMetadataCard({
   const lastSavedMetadataRef = useRef(buildMetadataSnapshot(buildDraftFromWidget(widget)))
 
   const isAllScope = draft.userScopeMode === 'all'
+  const supportsMultipleInstances = widget.module.supportsMultipleInstances === true
 
   const queueSync = (nextMetadataDraft: WidgetMetadataDraft) => {
     metadataDraftRef.current = nextMetadataDraft
@@ -253,6 +262,38 @@ function WidgetMetadataCard({
             <p className={`widget-sync-state widget-sync-state--${syncState}`}>
               {syncStateLabel}
             </p>
+          ) : null}
+
+          {supportsMultipleInstances ? (
+            <button
+              type="button"
+              className="widget-action-button"
+              onClick={() => {
+                void onDuplicate(widget.entity.id)
+              }}
+            >
+              <span>{appText.widgetAdmin.duplicateInstanceAction}</span>
+            </button>
+          ) : null}
+
+          {supportsMultipleInstances ? (
+            <button
+              type="button"
+              className="widget-action-button"
+              onClick={() => {
+                const confirmed = window.confirm(
+                  formatLocalizedText(appText.widgetAdmin.deleteInstanceConfirm, {
+                    title: resolveWidgetTitle(widget, languageCode),
+                  }),
+                )
+
+                if (confirmed) {
+                  void onDelete(widget.entity.id)
+                }
+              }}
+            >
+              <span>{appText.widgetAdmin.deleteInstanceAction}</span>
+            </button>
           ) : null}
 
           {widget.module.hasSettingsPanel ? (
@@ -434,12 +475,87 @@ export function WidgetMetadataAdminHost({
   registeredWidgets,
   familyMembers,
   availableSourceLocations,
+  multiInstanceSourceLocations,
   expandedWidgetId,
   onExpandedWidgetChange,
   onSaveWidgetMetadata,
+  onCreateWidgetInstance,
+  onDuplicateWidgetInstance,
+  onDeleteWidgetInstance,
 }: WidgetMetadataAdminHostProps) {
+  const createableWidgetOptions = useMemo(
+    () =>
+      availableSourceLocations.flatMap((sourceLocation) => {
+        if (!multiInstanceSourceLocations.includes(sourceLocation)) {
+          return []
+        }
+
+        const widget = registeredWidgets.find(
+          (candidate) => candidate.entity.sourceLocation === sourceLocation,
+        )
+
+        return [
+          {
+            sourceLocation,
+            label: widget ? resolveWidgetTitle(widget, languageCode) : sourceLocation,
+          },
+        ]
+      }),
+    [availableSourceLocations, languageCode, multiInstanceSourceLocations, registeredWidgets],
+  )
+  const [createSourceLocation, setCreateSourceLocation] = useState('')
+
+  useEffect(() => {
+    setCreateSourceLocation((currentValue) => {
+      if (
+        currentValue &&
+        createableWidgetOptions.some((option) => option.sourceLocation === currentValue)
+      ) {
+        return currentValue
+      }
+
+      return createableWidgetOptions[0]?.sourceLocation ?? ''
+    })
+  }, [createableWidgetOptions])
+
   return (
     <section className="widget-metadata-host">
+      {createableWidgetOptions.length > 0 ? (
+        <article className="settings-card widget-config-row">
+          <div className="widget-config-body">
+            <div className="widget-config-fields widget-config-fields--meta">
+              <label className="settings-label">
+                <span>{appText.widgetAdmin.createSourceLabel}</span>
+                <select
+                  className="settings-input settings-select"
+                  value={createSourceLocation}
+                  onChange={(event) => setCreateSourceLocation(event.target.value)}
+                >
+                  {createableWidgetOptions.map((option) => (
+                    <option key={option.sourceLocation} value={option.sourceLocation}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                className="settings-submit"
+                disabled={!createSourceLocation}
+                onClick={() => {
+                  if (createSourceLocation) {
+                    void onCreateWidgetInstance(createSourceLocation)
+                  }
+                }}
+              >
+                {appText.widgetAdmin.createInstanceAction}
+              </button>
+            </div>
+          </div>
+        </article>
+      ) : null}
+
       {registeredWidgets.map((widget) => (
         <WidgetMetadataCard
           key={widget.entity.id}
@@ -455,6 +571,8 @@ export function WidgetMetadataAdminHost({
             )
           }
           onSave={onSaveWidgetMetadata}
+          onDuplicate={onDuplicateWidgetInstance}
+          onDelete={onDeleteWidgetInstance}
         />
       ))}
     </section>

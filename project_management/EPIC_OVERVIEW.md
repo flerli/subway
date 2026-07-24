@@ -17,6 +17,7 @@ Issues:
 | 001_WIDGET_ARCHITECTURE__ISSUE_DEFINITION__006_WIDGET_SETTINGS_PANELS.md | Add per-widget settings panels after the sample widgets are working. | implemented |
 | 001_WIDGET_ARCHITECTURE__ISSUE_DEFINITION__007_WIDGET_HEALTH_DEBUG_OVERLAY.md | Add a hidden widget health and debug overlay for maintenance and diagnostics. | implemented |
 | 001_WIDGET_ARCHITECTURE__ISSUE_DEFINITION__008_WIDGET_METADATA_ADMINISTRATION.md | Add backend-backed administration for widget metadata such as title, badge, scope, placement, and source location. | implemented |
+| 001_WIDGET_ARCHITECTURE__ISSUE_DEFINITION__009_MULTI_INSTANCE_WIDGETS_AND_INSTANCE_SCOPED_SETTINGS.md | Separate widget type from widget instance so the board can host multiple instances of the same widget module with independent metadata, placement, and settings. | planned |
 
 ## 002 WEATHER WIDGET
 
@@ -162,3 +163,18 @@ Issues:
 | 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__005_LOW_RISK_WIDGET_MCP_ROLLOUT_AND_SAFE_TOOL_PARITY.md | Roll out read-oriented and otherwise low-risk widget MCP tools with full human-feature parity for informational and safe configuration flows. | implemented |
 | 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__006_MUTATING_AND_INTEGRATION_WIDGET_MCP_ROLLOUT.md | Roll out mutating and integration-heavy widget MCP tools, including destructive, external-service, and device-control actions, with full human-feature parity. | implemented |
 | 011_MCP_TOOL_INTERFACE__ISSUE_DEFINITION__007_GENERIC_WIDGET_IMPLEMENTATION_GUIDE_AND_ISSUE_WORKFLOW_EXTENSION.md | Add a dedicated generic widget implementation guide and extend the issue-writing workflow so future widgets plan their MCP tool interface from the start. | implemented |
+
+## 012 MOBILE DEVICES
+
+Description:
+Make Subway usable on phones and small tablets by introducing a dedicated mobile layout mode that detects narrow viewport devices, collapses the board into a one-column mobile shell, replaces the desktop lower detail stage with full-screen widget drill-down navigation, and adds dropdown-based widget navigation that remains practical on touch devices.
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| 012_MOBILE_DEVICES__ISSUE_DEFINITION__001_VIEWPORT_CLASSIFICATION_AND_MOBILE_LAYOUT_MODE_FOUNDATION.md | Define the shared viewport classification contract and mobile layout-mode state for phones and small tablets. | planned |
+| 012_MOBILE_DEVICES__ISSUE_DEFINITION__002_MOBILE_SHELL_CONTROLS_AND_WIDGET_DROPDOWN_NAVIGATION.md | Adapt the top shell for mobile by keeping member filtering, settings access, and widget dropdown navigation touch-usable in narrow viewports. | planned |
+| 012_MOBILE_DEVICES__ISSUE_DEFINITION__003_SINGLE_COLUMN_BOARD_LAYOUT_AND_ZONE_STACKING.md | Reflow the board into a one-column mobile layout with A1, A2, A3 above B1, B2, B3 while preserving widget visibility and ordering semantics. | planned |
+| 012_MOBILE_DEVICES__ISSUE_DEFINITION__004_FULL_SCREEN_WIDGET_DETAIL_NAVIGATION.md | Replace the desktop lower expanded panel on mobile with a full-screen widget detail flow and explicit back navigation. | planned |
+| 012_MOBILE_DEVICES__ISSUE_DEFINITION__005_MOBILE_DEVICE_VALIDATION_SAFE_AREA_AND_REGRESSION_HARDENING.md | Validate the mobile rollout across iPhone and small-tablet viewports, including safe-area behavior, scroll containment, and interaction regressions. | planned |

@@ -53,7 +53,12 @@ import {
   fetchWidgetSettings,
   updateWidgetSettings,
 } from './api/widgetSettings'
-import { fetchWidgetEntities, updateWidgetEntity } from './api/widgets'
+import {
+  createWidgetEntity,
+  deleteWidgetEntity,
+  fetchWidgetEntities,
+  updateWidgetEntity,
+} from './api/widgets'
 import { appTextCatalog, type AppTextBundle } from './i18n/appText'
 import {
   DEFAULT_LANGUAGE_CODE,
@@ -69,6 +74,7 @@ import {
   type SoftwareKeyboardTarget,
 } from './keyboard/softwareKeyboard'
 import { isUiClickSoundTarget, playUiClickSound } from './uiClickSound'
+import { useViewportLayoutState } from './viewportLayout'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
 import {
@@ -120,6 +126,8 @@ import {
   buildRegisteredWidgetMcpToolCatalog,
   buildWidgetRegistry,
 } from './widgets/widgetRegistry'
+import { resolveWidgetTitle } from './widgets/widgetLocalization'
+import { isWidgetVisibleForFilter } from './widgets/widgetVisibility'
 import {
   mergeWidgetSettingsWithMcpConfiguration,
   normalizeWidgetMcpConfiguration,
@@ -137,6 +145,16 @@ const DEFAULT_NEW_MEMBER_COLOR = '#4aa8ff'
 const APP_RUNTIME_POLL_INTERVAL_MS = 30_000
 const CALENDAR_BOARD_RANGE_DAYS = 60
 const LOCAL_APP_SHELL_STORAGE_KEY_PREFIX = 'subway-app-shell'
+
+const widgetShellNavigationZoneOrder = new Map([
+  ['service-board', 0],
+  ['a1', 1],
+  ['b1', 2],
+  ['a2', 3],
+  ['b2', 4],
+  ['a3', 5],
+  ['b3', 6],
+])
 
 const formatLocalIsoDate = (value: Date) => {
   const year = value.getFullYear()
@@ -247,6 +265,11 @@ interface AppShellPersistedState {
 interface CalendarFocusSelection {
   eventId: string
   eventDate: string
+}
+
+interface MobileShellWidgetOption {
+  id: string
+  label: string
 }
 
 type AssistantTurnUiState = 'idle' | 'sending' | 'streaming' | 'completed' | 'failed'
@@ -416,11 +439,6 @@ const buildFallbackWeatherData = (
   }
 }
 
-const defaultFallbackWeatherData = buildFallbackWeatherData(
-  getWeatherWidgetTranslation(DEFAULT_LANGUAGE_CODE),
-  DEFAULT_LANGUAGE_CODE,
-)
-
 const defaultBringWidgetData: BringWidgetData = {
   status: 'loading',
   list: null,
@@ -549,6 +567,7 @@ const getFullscreenElement = () => {
 }
 
 function App() {
+  const viewportState = useViewportLayoutState()
   const [now, setNow] = useState(() => new Date())
   const [authStatus, setAuthStatus] = useState<AuthStatus>('bootstrapping')
   const [authenticatedUser, setAuthenticatedUser] = useState<AuthUser | null>(null)
@@ -569,6 +588,7 @@ function App() {
   const [loginPassword, setLoginPassword] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('board')
   const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null)
+  const [selectedMobileWidgetId, setSelectedMobileWidgetId] = useState('')
   const [expandedWidgetSettingsId, setExpandedWidgetSettingsId] = useState<string | null>(null)
   const [expandedSettingsHubPanelId, setExpandedSettingsHubPanelId] =
     useState<SettingsHubPanelId | null>(null)
@@ -579,8 +599,9 @@ function App() {
   const [todoWidgetItems, setTodoWidgetItems] = useState<TodoItem[]>([])
   const [bringWidgetData, setBringWidgetData] =
     useState<BringWidgetData>(defaultBringWidgetData)
-  const [weatherWidgetData, setWeatherWidgetData] =
-    useState<WeatherWidgetData>(defaultFallbackWeatherData)
+  const [weatherWidgetDataById, setWeatherWidgetDataById] = useState<
+    Record<string, WeatherWidgetData>
+  >({})
   const [assistantAvailability, setAssistantAvailability] =
     useState<AssistantAvailabilityRecord>(defaultAssistantAvailability)
   const [assistantThreads, setAssistantThreads] = useState<AssistantThreadSummary[]>([])
@@ -605,7 +626,9 @@ function App() {
   const [assistantResolvingApprovalRequestId, setAssistantResolvingApprovalRequestId] =
     useState<string | null>(null)
   const [weatherRefreshToken, setWeatherRefreshToken] = useState(0)
-  const [nextWeatherRefreshAt, setNextWeatherRefreshAt] = useState<number | null>(null)
+  const [nextWeatherRefreshAtByWidgetId, setNextWeatherRefreshAtByWidgetId] = useState<
+    Record<string, number | null>
+  >({})
   const [activeFilter, setActiveFilter] = useState<FilterId>(ALL_FILTER_ID)
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberColor, setNewMemberColor] = useState(DEFAULT_NEW_MEMBER_COLOR)
@@ -645,6 +668,7 @@ function App() {
   )
   const [widgetHealthMap, setWidgetHealthMap] = useState<Record<string, WidgetHealthState>>({})
   const [, setDebugTapTimestamps] = useState<number[]>([])
+  const [isMobileBoardHeaderCollapsed, setIsMobileBoardHeaderCollapsed] = useState(false)
   const [appPreferencesLoaded, setAppPreferencesLoaded] = useState(false)
   const [familyMembersLoaded, setFamilyMembersLoaded] = useState(false)
   const [widgetMetadataLoaded, setWidgetMetadataLoaded] = useState(false)
@@ -667,6 +691,7 @@ function App() {
   )
   const backendRuntimeInstanceIdRef = useRef<string | null>(null)
   const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
+  const pendingBoardWidgetNavigationIdRef = useRef<string | null>(null)
   const assistantTurnRunIdRef = useRef(0)
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
   const arrivalBoardWidgetText = getArrivalBoardWidgetTranslation(selectedLanguageCode)
@@ -682,6 +707,10 @@ function App() {
   const normalizedCountryCodeDraft = countryCodeDraft.trim().toUpperCase()
   const isCountryCodeDraftValid = /^[A-Z]{2}$/.test(normalizedCountryCodeDraft)
   const settingsBuildIdLabel = currentFrontendBuildId.replace(/\.\d{3}Z$/, 'Z')
+  const appShellClassName = `app-shell app-shell--layout-${viewportState.layoutMode}`
+  const authShellClassName = `${appShellClassName} app-shell--auth`
+  const shellScreenClassName = `screen screen--shell screen--layout-${viewportState.layoutMode}`
+  const authScreenClassName = `screen auth-screen screen--layout-${viewportState.layoutMode}`
   const latestDeploymentLabel = formatRuntimeTimestamp(
     resolveLatestDeploymentAt(currentFrontendBuildId, backendRuntimeStartedAt),
     selectedLanguageCode,
@@ -702,6 +731,8 @@ function App() {
   const todoItemsError = resolveAppMessage(todoItemsErrorKey, appText)
   const weatherError = resolveAppMessage(weatherErrorKey, appText)
   const assistantError = resolveAppMessage(assistantErrorKey, appText)
+  const isMobileLayout = viewportState.layoutMode === 'mobile'
+  const isMobileBoardHeaderCollapseEnabled = isMobileLayout && viewMode === 'board'
   const isAssistantTurnBusy =
     assistantTurnState === 'sending' ||
     assistantTurnState === 'streaming' ||
@@ -713,6 +744,10 @@ function App() {
     ...widgetSettingsMap,
     'audio-visual': audioVisualPreferenceSettings,
   }
+  const weatherWidgets = useMemo(
+    () => registeredWidgets.filter((widget) => widget.entity.widgetTypeId === 'weather'),
+    [registeredWidgets],
+  )
 
   const resetProtectedState = () => {
     setViewMode('board')
@@ -731,7 +766,7 @@ function App() {
     setCalendarEvents([])
     setTodoWidgetItems([])
     setBringWidgetData(defaultBringWidgetData)
-    setWeatherWidgetData(defaultFallbackWeatherData)
+    setWeatherWidgetDataById({})
     setAssistantAvailability(defaultAssistantAvailability)
     setAssistantThreads([])
     setSelectedAssistantThreadId(null)
@@ -747,7 +782,7 @@ function App() {
     setAssistantStreamingMessage(null)
     setAssistantStreamingEvents([])
     setWeatherRefreshToken(0)
-    setNextWeatherRefreshAt(null)
+    setNextWeatherRefreshAtByWidgetId({})
     setActiveFilter(ALL_FILTER_ID)
     setNewMemberName('')
     setNewMemberColor(DEFAULT_NEW_MEMBER_COLOR)
@@ -979,6 +1014,32 @@ function App() {
   const handleViewModeChange = (nextViewMode: ViewMode) => {
     beginInteractionMeasurement(`view:${nextViewMode}`)
     setViewMode(nextViewMode)
+  }
+
+  const scrollWidgetIntoBoardView = (widgetId: string) => {
+    const widgetElement =
+      document.querySelector<HTMLElement>(
+        `[data-widget-id="${widgetId}"][data-widget-mode="grid"]`,
+      ) ?? document.querySelector<HTMLElement>(`[data-widget-id="${widgetId}"]`)
+
+    if (!widgetElement) {
+      return false
+    }
+
+    widgetElement.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    return true
+  }
+
+  const navigateToWidgetOnBoard = (widgetId: string) => {
+    if (viewMode === 'board') {
+      window.requestAnimationFrame(() => {
+        scrollWidgetIntoBoardView(widgetId)
+      })
+      return
+    }
+
+    pendingBoardWidgetNavigationIdRef.current = widgetId
+    setViewMode('board')
   }
 
   const handleCreateAssistantThread = async () => {
@@ -1444,6 +1505,44 @@ function App() {
     setCalendarFocusSelection(selection)
   }
 
+  const handleMobileWidgetSelection = (widgetId: string) => {
+    setSelectedMobileWidgetId(widgetId)
+
+    if (!widgetId) {
+      return
+    }
+
+    beginInteractionMeasurement(`mobile:select:${widgetId}`)
+
+    if (expandedWidgetId) {
+      handleExpandedWidgetChange(null)
+    }
+
+    navigateToWidgetOnBoard(widgetId)
+  }
+
+  useEffect(() => {
+    if (viewMode !== 'board') {
+      return
+    }
+
+    const targetWidgetId = pendingBoardWidgetNavigationIdRef.current
+
+    if (!targetWidgetId) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      if (scrollWidgetIntoBoardView(targetWidgetId)) {
+        pendingBoardWidgetNavigationIdRef.current = null
+      }
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [viewMode, activeFilter, expandedWidgetId, registeredWidgets])
+
   useEffect(() => {
     let cancelled = false
 
@@ -1894,79 +1993,118 @@ function App() {
 
     let cancelled = false
 
-    const weatherWidget = registeredWidgets.find((widget) => widget.entity.id === 'weather')
-    const weatherSettings = normalizeWeatherSettings(widgetSettingsMap.weather)
+    if (weatherWidgets.length === 0) {
+      setWeatherWidgetDataById({})
+      setNextWeatherRefreshAtByWidgetId({})
 
-    if (!weatherWidget) {
       return () => {
         cancelled = true
       }
     }
 
-    Promise.resolve(
-      weatherWidget.module.loadData({
-        focusedMemberId: null,
-        languageCode: selectedLanguageCode,
-        settings: weatherSettings,
-      }),
-    )
-      .then((result) => {
-        if (!cancelled && result) {
-          setWeatherWidgetData(result as WeatherWidgetData)
-          setNextWeatherRefreshAt(
-            Date.now() + weatherSettings.refreshIntervalMinutes * 60 * 1000,
+    Promise.all(
+      weatherWidgets.map(async (widget) => {
+        const weatherSettings = normalizeWeatherSettings(widgetSettingsMap[widget.entity.id])
+
+        try {
+          const result = await Promise.resolve(
+            widget.module.loadData({
+              focusedMemberId: null,
+              languageCode: selectedLanguageCode,
+              settings: weatherSettings,
+            }),
           )
-          setWeatherErrorKey(null)
-          const weatherResult = result as WeatherWidgetData
-          setWidgetHealthMap((currentValues) => ({
-            ...currentValues,
-            weather: {
-              widgetId: 'weather',
-              refreshStatus: weatherResult.stale ? 'cached' : 'live',
-              lastRefreshAt: weatherResult.updatedAt,
-              itemCount: weatherResult.locations.length,
-            },
-          }))
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
+
+          return {
+            widgetId: widget.entity.id,
+            refreshAt: Date.now() + weatherSettings.refreshIntervalMinutes * 60 * 1000,
+            health: {
+              widgetId: widget.entity.id,
+              refreshStatus: (result as WeatherWidgetData).stale ? 'cached' : 'live',
+              lastRefreshAt: (result as WeatherWidgetData).updatedAt,
+              itemCount: (result as WeatherWidgetData).locations.length,
+            } satisfies WidgetHealthState,
+            data: result as WeatherWidgetData,
+            failed: false,
+          }
+        } catch (error) {
           if (isAuthRequiredError(error)) {
-            handleAuthRequired()
-            return
+            throw error
           }
 
-          setWeatherWidgetData(fallbackWeatherData)
-          setNextWeatherRefreshAt(Date.now() + 60 * 1000)
-          setWeatherErrorKey('weatherLoadFailed')
-          setWidgetHealthMap((currentValues) => ({
-            ...currentValues,
-            weather: {
-              widgetId: 'weather',
+          return {
+            widgetId: widget.entity.id,
+            refreshAt: Date.now() + 60 * 1000,
+            health: {
+              widgetId: widget.entity.id,
               refreshStatus: 'error',
               failureState: 'weatherLoadFailed',
-            },
-          }))
+            } satisfies WidgetHealthState,
+            data: fallbackWeatherData,
+            failed: true,
+          }
+        }
+      }),
+    )
+      .then((results) => {
+        if (cancelled) {
+          return
+        }
+
+        setWeatherWidgetDataById(
+          Object.fromEntries(results.map((result) => [result.widgetId, result.data])),
+        )
+        setNextWeatherRefreshAtByWidgetId(
+          Object.fromEntries(results.map((result) => [result.widgetId, result.refreshAt])),
+        )
+        setWeatherErrorKey(results.some((result) => result.failed) ? 'weatherLoadFailed' : null)
+        setWidgetHealthMap((currentValues) => {
+          const nonWeatherEntries = Object.fromEntries(
+            Object.entries(currentValues).filter(
+              ([widgetId]) => !weatherWidgets.some((widget) => widget.entity.id === widgetId),
+            ),
+          )
+
+          return {
+            ...nonWeatherEntries,
+            ...Object.fromEntries(results.map((result) => [result.widgetId, result.health])),
+          }
+        })
+      })
+      .catch((error) => {
+        if (!cancelled && isAuthRequiredError(error)) {
+          handleAuthRequired()
         }
       })
 
     return () => {
       cancelled = true
     }
-  }, [authStatus, registeredWidgets, selectedLanguageCode, widgetSettingsMap, weatherRefreshToken])
+  }, [
+    authStatus,
+    fallbackWeatherData,
+    handleAuthRequired,
+    selectedLanguageCode,
+    weatherRefreshToken,
+    weatherWidgets,
+    widgetSettingsMap,
+  ])
 
   useEffect(() => {
-    if (nextWeatherRefreshAt === null) {
+    const dueWidgetIds = Object.entries(nextWeatherRefreshAtByWidgetId)
+      .filter(([, refreshAt]) => typeof refreshAt === 'number' && now.getTime() >= refreshAt)
+      .map(([widgetId]) => widgetId)
+
+    if (dueWidgetIds.length === 0) {
       return
     }
 
-    if (now.getTime() < nextWeatherRefreshAt) {
-      return
-    }
-
-    setNextWeatherRefreshAt(null)
+    setNextWeatherRefreshAtByWidgetId((currentValues) => ({
+      ...currentValues,
+      ...Object.fromEntries(dueWidgetIds.map((widgetId) => [widgetId, null])),
+    }))
     setWeatherRefreshToken((currentValue) => currentValue + 1)
-  }, [now, nextWeatherRefreshAt])
+  }, [now, nextWeatherRefreshAtByWidgetId])
 
   useEffect(() => {
     if (authStatus !== 'authenticated') {
@@ -2216,6 +2354,47 @@ function App() {
       style: badgeStyle(member.color),
     })),
   ]
+  const mobileWidgetOptions = useMemo<MobileShellWidgetOption[]>(() => {
+    const getWidgetSortOrder = (widget: RegisteredWidget) => {
+      if (widget.entity.placementZones.length === 0) {
+        return Number.MAX_SAFE_INTEGER
+      }
+
+      return Math.min(
+        ...widget.entity.placementZones.map((placement) => {
+          const zoneOrder =
+            widgetShellNavigationZoneOrder.get(placement.zoneId) ??
+            widgetShellNavigationZoneOrder.size
+
+          return zoneOrder * 100 + placement.order
+        }),
+      )
+    }
+
+    return registeredWidgets
+      .filter(
+        (widget) =>
+          isWidgetVisibleForFilter(widget.entity, activeFilter) &&
+          widget.entity.placementZones.length > 0,
+      )
+      .sort((leftWidget, rightWidget) => {
+        const leftOrder = getWidgetSortOrder(leftWidget)
+        const rightOrder = getWidgetSortOrder(rightWidget)
+
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder
+        }
+
+        return resolveWidgetTitle(leftWidget, selectedLanguageCode).localeCompare(
+          resolveWidgetTitle(rightWidget, selectedLanguageCode),
+          selectedLanguageCode,
+        )
+      })
+      .map((widget) => ({
+        id: widget.entity.id,
+        label: `${widget.entity.subwayLetter} ${resolveWidgetTitle(widget, selectedLanguageCode)}`,
+      }))
+  }, [activeFilter, registeredWidgets, selectedLanguageCode])
   const activeProfile = familyMembers.find((member) => member.id === activeFilter)
   const focusedMemberId = activeFilter === ALL_FILTER_ID ? null : activeFilter
   const visibleAgenda = useMemo(
@@ -2254,19 +2433,6 @@ function App() {
     () => filterTodoItemsForView(todoWidgetItems, focusedMemberId, widgetSettingsMap.todo),
     [todoWidgetItems, focusedMemberId, widgetSettingsMap.todo],
   )
-  const boardTime = new Intl.DateTimeFormat(selectedLanguageCode, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(now)
-  const boardDate = new Intl.DateTimeFormat(selectedLanguageCode, {
-    weekday: 'short',
-    month: 'short',
-    day: '2-digit',
-  })
-    .format(now)
-    .replace(',', '')
-    .toUpperCase()
   const arrivalBoardChromeSettings = normalizeArrivalBoardSettings(
     widgetSettingsMap['arrival-board'],
   )
@@ -2278,6 +2444,34 @@ function App() {
     arrivalBoardChromeSettings.boardSubheading.trim().length > 0
       ? arrivalBoardChromeSettings.boardSubheading
       : defaultArrivalBoardSettings.boardSubheading
+  const areHeaderFiltersInteractive = viewMode === 'board' || isMobileLayout
+
+  useEffect(() => {
+    if (!isMobileBoardHeaderCollapseEnabled && isMobileBoardHeaderCollapsed) {
+      setIsMobileBoardHeaderCollapsed(false)
+    }
+  }, [isMobileBoardHeaderCollapseEnabled, isMobileBoardHeaderCollapsed])
+
+  useEffect(() => {
+    if (mobileWidgetOptions.length === 0) {
+      if (selectedMobileWidgetId) {
+        setSelectedMobileWidgetId('')
+      }
+      return
+    }
+
+    const visibleWidgetIds = new Set(mobileWidgetOptions.map((option) => option.id))
+    const preferredWidgetId =
+      expandedWidgetId && visibleWidgetIds.has(expandedWidgetId)
+        ? expandedWidgetId
+        : selectedMobileWidgetId && visibleWidgetIds.has(selectedMobileWidgetId)
+          ? selectedMobileWidgetId
+          : mobileWidgetOptions[0]?.id ?? ''
+
+    if (preferredWidgetId !== selectedMobileWidgetId) {
+      setSelectedMobileWidgetId(preferredWidgetId)
+    }
+  }, [expandedWidgetId, mobileWidgetOptions, selectedMobileWidgetId])
 
   const updateMember = (
     memberId: MemberId,
@@ -2979,7 +3173,9 @@ function App() {
   }
 
   const handleToggleTodoDone = (todoItemId: string, done: boolean) => {
-    const todoWidget = registeredWidgets.find((widget) => widget.entity.id === 'todo')
+    const todoWidget = registeredWidgets.find(
+      (widget) => widget.entity.widgetTypeId === 'todo',
+    )
 
     if (!todoWidget?.module.mutateData) {
       return
@@ -3029,6 +3225,10 @@ function App() {
   }
 
   const handleHiddenDebugTrigger = () => {
+    if (isMobileBoardHeaderCollapseEnabled) {
+      setIsMobileBoardHeaderCollapsed((currentValue) => !currentValue)
+    }
+
     const currentTimestamp = Date.now()
 
     setDebugTapTimestamps((currentValues) => {
@@ -3070,7 +3270,7 @@ function App() {
           )
         : mergedDraftSettings
 
-      if (widgetId === 'audio-visual') {
+      if (widget?.entity.widgetTypeId === 'audio-visual') {
         const persistedPreferences = await updateAppPreferences({
           audioVisualCameraEnabled: Boolean(normalizedSettings.cameraEnabled),
           audioVisualMicrophoneEnabled: Boolean(normalizedSettings.microphoneEnabled),
@@ -3109,7 +3309,7 @@ function App() {
         return
       }
 
-      if (widgetId === 'bring') {
+      if (widget?.entity.widgetTypeId === 'bring') {
         setWidgetSettingsMap((currentValues) => ({
           ...currentValues,
           [widgetId]: normalizedSettings,
@@ -3134,7 +3334,7 @@ function App() {
         return
       }
 
-      if (widgetId === 'assistant') {
+      if (widget?.entity.widgetTypeId === 'assistant') {
         setWidgetSettingsMap((currentValues) => ({
           ...currentValues,
           [widgetId]: normalizedSettings,
@@ -3220,6 +3420,65 @@ function App() {
     }
   }
 
+  const handleCreateWidgetInstance = async (sourceLocation: string) => {
+    try {
+      const createdWidget = await createWidgetEntity({ sourceLocation })
+      const refreshedWidgetEntities = await fetchWidgetEntities()
+
+      setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
+      setExpandedWidgetSettingsId(createdWidget.id)
+      setWidgetMetadataAdminErrorKey(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      throw error
+    }
+  }
+
+  const handleDuplicateWidgetInstance = async (widgetId: string) => {
+    try {
+      const createdWidget = await createWidgetEntity({ duplicateFromWidgetId: widgetId })
+      const refreshedWidgetEntities = await fetchWidgetEntities()
+
+      setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
+      setExpandedWidgetSettingsId(createdWidget.id)
+      setWidgetMetadataAdminErrorKey(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      throw error
+    }
+  }
+
+  const handleDeleteWidgetInstance = async (widgetId: string) => {
+    try {
+      await deleteWidgetEntity(widgetId)
+      const refreshedWidgetEntities = await fetchWidgetEntities()
+
+      setRegisteredWidgets(buildWidgetRegistry(refreshedWidgetEntities))
+      setExpandedWidgetSettingsId((currentValue) =>
+        currentValue === widgetId ? null : currentValue,
+      )
+      setExpandedWidgetId((currentValue) =>
+        currentValue === widgetId ? null : currentValue,
+      )
+      setWidgetMetadataAdminErrorKey(null)
+    } catch (error) {
+      if (isAuthRequiredError(error)) {
+        handleAuthRequired()
+        return
+      }
+
+      throw error
+    }
+  }
+
   const isProtectedShellReady =
     authStatus === 'authenticated' &&
     appPreferencesLoaded &&
@@ -3229,8 +3488,12 @@ function App() {
 
   if (authStatus === 'bootstrapping') {
     return (
-      <main className="app-shell app-shell--auth">
-        <section className="screen auth-screen">
+      <main className={authShellClassName} data-layout-mode={viewportState.layoutMode}>
+        <section
+          className={authScreenClassName}
+          data-layout-mode={viewportState.layoutMode}
+          data-viewport-orientation={viewportState.orientation}
+        >
           <div className="hero-layout hero-layout--loading">
             <article className="hero-card hero-card--brand hero-card--loading">
               <p className="terminal-location">{appText.auth.sessionBootstrapKicker}</p>
@@ -3249,8 +3512,12 @@ function App() {
 
   if (authStatus === 'unauthenticated') {
     return (
-      <main className="app-shell app-shell--auth">
-        <section className="screen auth-screen">
+      <main className={authShellClassName} data-layout-mode={viewportState.layoutMode}>
+        <section
+          className={authScreenClassName}
+          data-layout-mode={viewportState.layoutMode}
+          data-viewport-orientation={viewportState.orientation}
+        >
           <div className="hero-layout hero-layout--single">
             <article className="hero-card hero-card--gateway">
               <div className="hero-subway-sign">
@@ -3329,8 +3596,12 @@ function App() {
 
   if (!isProtectedShellReady) {
     return (
-      <main className="app-shell app-shell--auth">
-        <section className="screen auth-screen">
+      <main className={authShellClassName} data-layout-mode={viewportState.layoutMode}>
+        <section
+          className={authScreenClassName}
+          data-layout-mode={viewportState.layoutMode}
+          data-viewport-orientation={viewportState.orientation}
+        >
           <div className="hero-layout hero-layout--loading">
             <article className="hero-card hero-card--brand hero-card--loading">
               <p className="terminal-location">{appText.auth.authenticatedSessionKicker}</p>
@@ -3352,11 +3623,36 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <section className="screen screen--shell">
-        <header className="terminal-marquee">
+    <main className={appShellClassName} data-layout-mode={viewportState.layoutMode}>
+      <section
+        className={shellScreenClassName}
+        data-layout-mode={viewportState.layoutMode}
+        data-viewport-orientation={viewportState.orientation}
+        data-viewport-width={viewportState.width}
+        data-viewport-height={viewportState.height}
+      >
+        <header
+          className={`terminal-marquee${isMobileLayout ? ' terminal-marquee--mobile' : ''}${isMobileBoardHeaderCollapseEnabled && isMobileBoardHeaderCollapsed ? ' terminal-marquee--collapsed' : ''}`}
+        >
           <div className="terminal-cell terminal-cell--title">
-            <div className="terminal-copy" onClick={handleHiddenDebugTrigger}>
+            <div
+              className={`terminal-copy${isMobileBoardHeaderCollapseEnabled ? ' terminal-copy--mobile-toggle' : ''}`}
+              onClick={handleHiddenDebugTrigger}
+              onKeyDown={(event) => {
+                if (
+                  isMobileBoardHeaderCollapseEnabled &&
+                  (event.key === 'Enter' || event.key === ' ')
+                ) {
+                  event.preventDefault()
+                  handleHiddenDebugTrigger()
+                }
+              }}
+              role={isMobileBoardHeaderCollapseEnabled ? 'button' : undefined}
+              tabIndex={isMobileBoardHeaderCollapseEnabled ? 0 : undefined}
+              aria-expanded={
+                isMobileBoardHeaderCollapseEnabled ? !isMobileBoardHeaderCollapsed : undefined
+              }
+            >
               <p className="terminal-location">{boardSubheadingDisplay}</p>
               <h1 className="terminal-title">
                 {viewMode === 'board' ? boardTitleDisplay : appText.shell.familySettingsTitle}
@@ -3364,55 +3660,64 @@ function App() {
             </div>
           </div>
 
-          <div className="terminal-cell terminal-cell--clock">
-            <div className="clock-stack">
-              <p className="board-datetime">
-                {boardDate} {boardTime}
-              </p>
-            </div>
-          </div>
-
-          <div className="terminal-cell terminal-cell--filters">
-            <div className="filter-bar">
-              <div
-                className="filter-row filter-row--board"
-                role="group"
-                aria-label={appText.boardHost.filtersAriaLabel}
-              >
-                {viewMode === 'board' ? filterOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
-                    aria-pressed={option.id === activeFilter}
-                    onClick={() => handleFilterChange(option.id)}
-                  >
-                    <span className="route-bullet" style={option.style}>
-                      {option.badgeText}
-                    </span>
-                    <span className="filter-copy">
-                      <span className="filter-label">{option.label}</span>
-                    </span>
-                  </button>
-                )) : filterOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
-                    aria-pressed={option.id === activeFilter}
-                    onClick={() => {}}
-                    disabled
-                  >
-                    <span className="route-bullet" style={option.style}>
-                      {option.badgeText}
-                    </span>
-                    <span className="filter-copy">
-                      <span className="filter-label">{option.label}</span>
-                    </span>
-                  </button>
-                ))}
+          <div
+            className={`terminal-cell terminal-cell--filters${isMobileLayout ? ' terminal-cell--filters-mobile' : ''}${isMobileBoardHeaderCollapseEnabled && isMobileBoardHeaderCollapsed ? ' terminal-cell--filters-collapsed' : ''}`}
+          >
+            {isMobileLayout ? (
+              <div className="mobile-member-nav">
+                <label className="mobile-member-nav__label" htmlFor="mobile-member-nav-select">
+                  {appText.shell.memberNavigationLabel}
+                </label>
+                <select
+                  id="mobile-member-nav-select"
+                  className="settings-input settings-select mobile-member-nav__select"
+                  value={activeFilter}
+                  onChange={(event) => {
+                    if (areHeaderFiltersInteractive) {
+                      handleFilterChange(event.target.value as FilterId)
+                    }
+                  }}
+                  disabled={!areHeaderFiltersInteractive}
+                  aria-label={appText.boardHost.filtersAriaLabel}
+                >
+                  {filterOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
+            ) : (
+              <div className="filter-bar">
+                <div
+                  className="filter-row filter-row--board"
+                  role="group"
+                  aria-label={appText.boardHost.filtersAriaLabel}
+                >
+                  {filterOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`filter-pill${option.id === activeFilter ? ' is-active' : ''}`}
+                      aria-pressed={option.id === activeFilter}
+                      onClick={() => {
+                        if (areHeaderFiltersInteractive) {
+                          handleFilterChange(option.id)
+                        }
+                      }}
+                      disabled={!areHeaderFiltersInteractive}
+                    >
+                      <span className="route-bullet" style={option.style}>
+                        {option.badgeText}
+                      </span>
+                      <span className="filter-copy">
+                        <span className="filter-label">{option.label}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className={viewMode === 'board' ? 'filter-actions' : 'terminal-actions'}>
               <button
                 type="button"
@@ -3447,10 +3752,35 @@ function App() {
         >
           {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
 
+          {isMobileLayout && viewMode === 'board' ? (
+            <div className="mobile-widget-nav mobile-widget-nav--persistent">
+              <label className="mobile-widget-nav__label" htmlFor="mobile-widget-nav-select">
+                {appText.shell.widgetNavigationLabel}
+              </label>
+              <select
+                id="mobile-widget-nav-select"
+                className="settings-input settings-select mobile-widget-nav__select"
+                value={selectedMobileWidgetId}
+                onChange={(event) => handleMobileWidgetSelection(event.target.value)}
+              >
+                {mobileWidgetOptions.length === 0 ? (
+                  <option value="">{appText.shell.widgetSelectPlaceholder}</option>
+                ) : (
+                  mobileWidgetOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          ) : null}
+
           {viewMode === 'board' ? (
             <WidgetBoardHost
               appText={appText}
               languageCode={selectedLanguageCode}
+              viewportState={viewportState}
               registeredWidgets={registeredWidgets}
               activeFilter={activeFilter}
               activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
@@ -3470,7 +3800,8 @@ function App() {
               homeCountryCode={selectedCountryCode}
               calendarSettings={combinedWidgetSettingsMap.calendar ?? {}}
               widgetSettingsMap={combinedWidgetSettingsMap}
-              weatherData={weatherWidgetData}
+              weatherDataByWidgetId={weatherWidgetDataById}
+              fallbackWeatherData={fallbackWeatherData}
               focusedCalendarEventId={calendarFocusSelection?.eventId ?? null}
               focusedCalendarEventDate={calendarFocusSelection?.eventDate ?? null}
               onBringRefresh={handleBringRefresh}
@@ -3666,9 +3997,13 @@ function App() {
                 languageCode={selectedLanguageCode}
                 registeredWidgets={registeredWidgets}
                 familyMembers={familyMembers}
-                availableSourceLocations={registeredWidgets.map(
-                  (widget) => widget.module.folderName,
+                availableSourceLocations={Array.from(
+                  new Set([
+                    ...registeredWidgets.map((widget) => widget.module.folderName),
+                    'weather',
+                  ]),
                 )}
+                multiInstanceSourceLocations={['weather']}
                 expandedWidgetId={expandedWidgetSettingsId}
                 onExpandedWidgetChange={(widgetId) => {
                   setExpandedSettingsHubPanelId(null)
@@ -3678,6 +4013,24 @@ function App() {
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
                     throw new Error('widget metadata save failed')
+                  })
+                }
+                onCreateWidgetInstance={(sourceLocation: string) =>
+                  handleCreateWidgetInstance(sourceLocation).catch(() => {
+                    setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
+                    throw new Error('widget metadata create failed')
+                  })
+                }
+                onDuplicateWidgetInstance={(widgetId: string) =>
+                  handleDuplicateWidgetInstance(widgetId).catch(() => {
+                    setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
+                    throw new Error('widget metadata duplicate failed')
+                  })
+                }
+                onDeleteWidgetInstance={(widgetId: string) =>
+                  handleDeleteWidgetInstance(widgetId).catch(() => {
+                    setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
+                    throw new Error('widget metadata delete failed')
                   })
                 }
               />
@@ -3708,6 +4061,7 @@ function App() {
           <WidgetDebugOverlay
             appText={appText}
             languageCode={selectedLanguageCode}
+            viewportState={viewportState}
             registeredWidgets={registeredWidgets}
             activeFilter={activeFilter}
             widgetHealthMap={widgetHealthMap}

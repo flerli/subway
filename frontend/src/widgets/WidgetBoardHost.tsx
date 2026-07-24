@@ -18,6 +18,7 @@ import {
   formatLocalizedText,
   type SupportedLanguageCode,
 } from '../i18n/localization'
+import type { ViewportLayoutState } from '../viewportLayout'
 import { buildBadgeStyle } from './widgetAppearance'
 import { AudioVisualWidget } from './audio-visual/AudioVisualWidget'
 import type { AudioVisualWidgetTranslation } from './audio-visual/translations'
@@ -90,6 +91,7 @@ const sortBringItemsByLatestFirst = <T extends { recentAt: string }>(items: T[])
 interface WidgetBoardHostProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
+  viewportState: ViewportLayoutState
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   activeProfileLabel?: string
@@ -110,7 +112,8 @@ interface WidgetBoardHostProps {
   homeCountryCode: string
   calendarSettings: WidgetSettingsValues
   widgetSettingsMap: Record<string, WidgetSettingsValues>
-  weatherData: WeatherWidgetData
+  weatherDataByWidgetId: Record<string, WeatherWidgetData>
+  fallbackWeatherData: WeatherWidgetData
   focusedCalendarEventId: string | null
   focusedCalendarEventDate: string | null
   onBringRefresh: () => Promise<unknown>
@@ -194,6 +197,11 @@ interface WidgetGridBlock {
 
 type WidgetRenderMode = 'grid' | 'expanded'
 
+const mobileGridZoneOrder: GridZoneId[] = ['a1', 'a2', 'a3', 'b1', 'b2', 'b3']
+const mobileGridZoneOrderIndex = new Map(
+  mobileGridZoneOrder.map((zoneId, index) => [zoneId, index]),
+)
+
 const isGridZoneId = (zoneId: WidgetPlacementZoneId): zoneId is GridZoneId =>
   zoneId !== 'service-board'
 
@@ -205,6 +213,10 @@ const getGridCellPosition = (zoneId: GridZoneId): GridCellPosition => ({
   col: zoneId[0] === 'a' ? 1 : 2,
   row: Number(zoneId[1]),
 })
+
+const compareMobileZoneOrder = (leftZoneId: GridZoneId, rightZoneId: GridZoneId) =>
+  (mobileGridZoneOrderIndex.get(leftZoneId) ?? Number.MAX_SAFE_INTEGER) -
+  (mobileGridZoneOrderIndex.get(rightZoneId) ?? Number.MAX_SAFE_INTEGER)
 
 const areCellsNeighboring = (leftCell: GridZoneId, rightCell: GridZoneId) => {
   const leftPosition = getGridCellPosition(leftCell)
@@ -339,6 +351,16 @@ const buildMergedGridBlocks = (
 const buildWidgetBadgeStyle = (widget: RegisteredWidget) =>
   buildBadgeStyle(widget.entity.subwayColor)
 
+const truncateCompactArrivalTitle = (title: string, maxLength: number) => {
+  const normalizedTitle = title.trim()
+
+  if (normalizedTitle.length <= maxLength) {
+    return normalizedTitle
+  }
+
+  return `${normalizedTitle.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
+}
+
 const renderEmptyState = (title: string, copy: string, className?: string) => (
   <div className={`empty-state${className ? ` ${className}` : ''}`}>
     <p className="empty-title">{title}</p>
@@ -349,6 +371,7 @@ const renderEmptyState = (title: string, copy: string, className?: string) => (
 export function WidgetBoardHost({
   appText,
   languageCode,
+  viewportState,
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
@@ -368,7 +391,8 @@ export function WidgetBoardHost({
   homeCountryCode,
   calendarSettings,
   widgetSettingsMap,
-  weatherData,
+  weatherDataByWidgetId,
+  fallbackWeatherData,
   focusedCalendarEventId,
   focusedCalendarEventDate,
   onBringRefresh,
@@ -590,6 +614,8 @@ export function WidgetBoardHost({
       className={`widget${mode === 'expanded' ? ' widget--expanded' : ''}${
         expandedWidgetId === widget.entity.id ? ' widget--active' : ''
       }`}
+      data-widget-id={widget.entity.id}
+      data-widget-mode={mode}
       key={`${widget.entity.id}-${mode}`}
     >
       <div className="widget-head">
@@ -613,12 +639,14 @@ export function WidgetBoardHost({
     mode: WidgetRenderMode = 'grid',
   ) => {
     const badgeStyle = buildWidgetBadgeStyle(widget)
+    const weatherData = weatherDataByWidgetId[widget.entity.id] ?? fallbackWeatherData
 
-    switch (widget.entity.id) {
+    switch (widget.entity.widgetTypeId) {
       case 'arrival-board': {
         const arrivalBoardWidgetText = widget.module.getTranslation(
           languageCode,
         ) as ArrivalBoardWidgetTranslation
+        const isMobileCompactMode = viewportState.layoutMode === 'mobile' && mode === 'grid'
         const arrivalColumnRowCount = Math.ceil(visibleArrivals.length / 2)
         const arrivalColumns = [
           visibleArrivals.slice(0, arrivalColumnRowCount),
@@ -630,6 +658,8 @@ export function WidgetBoardHost({
             className={`widget widget--board${mode === 'expanded' ? ' widget--expanded' : ''}${
               expandedWidgetId === widget.entity.id ? ' widget--active' : ''
             }`}
+            data-widget-id={widget.entity.id}
+            data-widget-mode={mode}
             key={`${widget.entity.id}-${mode}`}
           >
             <div className="board-head">
@@ -682,7 +712,11 @@ export function WidgetBoardHost({
                           <div className="arrival-route">
                             {renderAudienceBadge(item.members, 'route-bullet--large')}
                             <div className="arrival-destination">
-                              <h3>{item.destination}</h3>
+                              <h3>
+                                {isMobileCompactMode
+                                  ? truncateCompactArrivalTitle(item.destination, 24)
+                                  : item.destination}
+                              </h3>
                             </div>
                           </div>
                           <div
@@ -1055,7 +1089,7 @@ export function WidgetBoardHost({
               mode={mode}
               languageCode={languageCode}
               widgetText={audioVisualWidgetText}
-              initialSettings={widgetSettingsMap['audio-visual'] ?? {}}
+              initialSettings={widgetSettingsMap[widget.entity.id] ?? {}}
               onSaveSettings={onSaveWidgetSettings}
             />
           ),
@@ -1126,12 +1160,13 @@ export function WidgetBoardHost({
   const renderExpandedWidget = (widget: RegisteredWidget) => {
     if (widget.module.renderDetailView) {
       const badgeStyle = buildWidgetBadgeStyle(widget)
+      const weatherData = weatherDataByWidgetId[widget.entity.id] ?? fallbackWeatherData
       const detailData =
-        widget.entity.id === 'weather'
+        widget.entity.widgetTypeId === 'weather'
           ? {
               weatherData,
             }
-          : widget.entity.id === 'calendar'
+          : widget.entity.widgetTypeId === 'calendar'
             ? {
                 focusedMemberId: activeFilter === 'all' ? null : activeFilter,
                 familyMembers,
@@ -1141,7 +1176,7 @@ export function WidgetBoardHost({
                 focusedEventId: focusedCalendarEventId,
                 focusedEventDate: focusedCalendarEventDate,
               }
-            : widget.entity.id === 'bring'
+            : widget.entity.widgetTypeId === 'bring'
               ? {
                   bringData,
                   onRefresh: onBringRefresh,
@@ -1151,7 +1186,7 @@ export function WidgetBoardHost({
                   onCompleteItem: onBringCompleteItem,
                   onOpenSettings: () => onViewModeChange('settings'),
                 }
-            : widget.entity.id === 'youtube'
+            : widget.entity.widgetTypeId === 'youtube'
               ? {
                   query: youtubeQuery,
                   results: youtubeResults,
@@ -1175,7 +1210,7 @@ export function WidgetBoardHost({
                   onSelectNext: handleSelectNextYoutubeResult,
                   onToggleFullscreen: toggleYoutubeFullscreen,
                 }
-              : widget.entity.id === 'assistant'
+              : widget.entity.widgetTypeId === 'assistant'
                 ? {
                     appText,
                     availability: assistantState.availability,
@@ -1233,18 +1268,18 @@ export function WidgetBoardHost({
           widget,
           badgeStyle,
           meta:
-            widget.entity.id === 'weather'
+            widget.entity.widgetTypeId === 'weather'
               ? `${weatherData.source} · ${weatherData.location} · ${
                   weatherData.stale
                     ? weatherWidgetText?.copy.statusCached ?? 'cached'
                     : weatherWidgetText?.copy.statusLive ?? 'live'
                 }`
-              : widget.entity.id === 'calendar'
+              : widget.entity.widgetTypeId === 'calendar'
                 ? formatLocalizedText(
                     calendarWidgetText?.detail.rangeEventCountMeta ?? '{count} events in range',
                     { count: visibleAgenda.length },
                   )
-                : widget.entity.id === 'bring'
+                : widget.entity.widgetTypeId === 'bring'
                   ? bringData.list
                     ? `${formatLocalizedText(
                         bringWidgetText?.copy.openItemsMeta ?? '{count} open shopping items',
@@ -1253,9 +1288,9 @@ export function WidgetBoardHost({
                     : bringData.status === 'not-configured'
                       ? bringWidgetText?.copy.notConfiguredTitle ?? null
                       : null
-                : widget.entity.id === 'assistant'
+                : widget.entity.widgetTypeId === 'assistant'
                   ? assistantState.selectedThread?.title || assistantWidgetText?.title || null
-                : widget.entity.id === 'youtube'
+                : widget.entity.widgetTypeId === 'youtube'
                   ? null
                   : null,
           mode: 'expanded',
@@ -1287,6 +1322,22 @@ export function WidgetBoardHost({
     populatedGridBlocks.flatMap((gridBlock) => gridBlock.zoneIds),
   )
 
+  const mobileGridBlocksByAnchorZoneId = populatedGridBlocks.reduce(
+    (blocksByZoneId, gridBlock) => {
+      const [anchorZoneId] = [...gridBlock.zoneIds].sort(compareMobileZoneOrder)
+
+      if (!anchorZoneId) {
+        return blocksByZoneId
+      }
+
+      const currentBlocks = blocksByZoneId.get(anchorZoneId) ?? []
+      currentBlocks.push(gridBlock)
+      blocksByZoneId.set(anchorZoneId, currentBlocks)
+      return blocksByZoneId
+    },
+    new Map<GridZoneId, WidgetGridBlock[]>(),
+  )
+
   const emptyGridZones = widgetGridPlacementZones.filter((zone) => {
     if (!isGridZoneId(zone.id)) {
       return false
@@ -1295,8 +1346,114 @@ export function WidgetBoardHost({
     return !occupiedGridZoneIds.has(zone.id)
   }) as Array<typeof widgetGridPlacementZones[number] & { id: GridZoneId }>
 
+  const renderGridZoneLabel = (zoneIds: GridZoneId[]) =>
+    formatLocalizedText(appText.boardHost.cellZoneLabel, {
+      cellId: zoneIds.map((zoneId) => zoneId.toUpperCase()).join(' + '),
+    })
+
+  const renderDesktopGrid = () => (
+    <section className="widget-grid" aria-label={appText.boardHost.widgetGridAriaLabel}>
+      {populatedGridBlocks.map((gridBlock) => (
+        <section
+          className="widget-zone widget-zone--cell"
+          key={`${gridBlock.widget.entity.id}-${gridBlock.zoneIds.join('-')}`}
+          style={{
+            gridColumn: `${gridBlock.colStart} / ${gridBlock.colEnd + 1}`,
+            gridRow: `${gridBlock.rowStart} / ${gridBlock.rowEnd + 1}`,
+          }}
+          aria-label={renderGridZoneLabel(gridBlock.zoneIds)}
+        >
+          {renderWidget(gridBlock.widget)}
+        </section>
+      ))}
+
+      {emptyGridZones.map((zone) => {
+        const cellPosition = getGridCellPosition(zone.id)
+
+        return (
+          <section
+            className="widget-zone widget-zone--cell widget-zone--cell-empty"
+            key={`empty-${zone.id}`}
+            style={{
+              gridColumn: `${cellPosition.col} / ${cellPosition.col + 1}`,
+              gridRow: `${cellPosition.row} / ${cellPosition.row + 1}`,
+            }}
+            aria-label={renderGridZoneLabel([zone.id])}
+          />
+        )
+      })}
+    </section>
+  )
+
+  const renderMobileGrid = () => (
+    <section
+      className="widget-grid widget-grid--mobile"
+      aria-label={appText.boardHost.widgetGridAriaLabel}
+    >
+      {mobileGridZoneOrder.map((zoneId) => {
+        const anchoredBlocks = mobileGridBlocksByAnchorZoneId.get(zoneId) ?? []
+
+        if (anchoredBlocks.length > 0) {
+          return anchoredBlocks.map((gridBlock) => (
+            <section
+              className="widget-zone widget-zone--cell widget-zone--cell-mobile"
+              key={`${gridBlock.widget.entity.id}-${gridBlock.zoneIds.join('-')}-mobile`}
+              aria-label={renderGridZoneLabel(gridBlock.zoneIds)}
+            >
+              {renderWidget(gridBlock.widget)}
+            </section>
+          ))
+        }
+
+        if (occupiedGridZoneIds.has(zoneId)) {
+          return null
+        }
+
+        return (
+          <section
+            className="widget-zone widget-zone--cell widget-zone--cell-empty widget-zone--cell-mobile"
+            key={`empty-mobile-${zoneId}`}
+            aria-label={renderGridZoneLabel([zoneId])}
+          />
+        )
+      })}
+    </section>
+  )
+
+  const renderMobileDetailView = (widget: RegisteredWidget) => (
+    <section
+      className="widget-zone widget-zone--mobile-detail-stage"
+      aria-label={appText.boardHost.expandedWidgetViewAriaLabel}
+    >
+      <div className="widget-mobile-detail-nav">
+        <button
+          type="button"
+          className="terminal-button terminal-button--mobile-back"
+          onClick={() => onExpandedWidgetChange(null)}
+        >
+          {appText.boardHost.backToBoardAction}
+        </button>
+        <p className="widget-mobile-detail-title">{resolveWidgetTitle(widget, languageCode)}</p>
+      </div>
+
+      <div className="widget-mobile-detail-body">{renderExpandedWidget(widget)}</div>
+    </section>
+  )
+
+  const isMobileDetailOpen = viewportState.layoutMode === 'mobile' && Boolean(expandedWidget)
+
   return (
-    <section className="dashboard-grid">
+    <section
+      className={`dashboard-grid dashboard-grid--layout-${viewportState.layoutMode}${
+        isMobileDetailOpen ? ' dashboard-grid--mobile-detail' : ''
+      }`}
+      data-layout-mode={viewportState.layoutMode}
+      data-viewport-orientation={viewportState.orientation}
+      data-viewport-width={viewportState.width}
+      data-viewport-height={viewportState.height}
+    >
+      {isMobileDetailOpen && expandedWidget ? renderMobileDetailView(expandedWidget) : (
+        <>
       <section
         className="widget-zone widget-zone--service-board"
         aria-label={appText.boardHost.serviceBoardZoneLabel}
@@ -1310,56 +1467,24 @@ export function WidgetBoardHost({
             )}
       </section>
 
-      <section className="widget-grid" aria-label={appText.boardHost.widgetGridAriaLabel}>
-        {populatedGridBlocks.map((gridBlock) => (
-          <section
-            className="widget-zone widget-zone--cell"
-            key={`${gridBlock.widget.entity.id}-${gridBlock.zoneIds.join('-')}`}
-            style={{
-              gridColumn: `${gridBlock.colStart} / ${gridBlock.colEnd + 1}`,
-              gridRow: `${gridBlock.rowStart} / ${gridBlock.rowEnd + 1}`,
-            }}
-            aria-label={formatLocalizedText(appText.boardHost.cellZoneLabel, {
-              cellId: gridBlock.zoneIds
-                .map((zoneId) => zoneId.toUpperCase())
-                .join(' + '),
-            })}
-          >
-            {renderWidget(gridBlock.widget)}
-          </section>
-        ))}
+      {viewportState.layoutMode === 'mobile' ? renderMobileGrid() : renderDesktopGrid()}
 
-        {emptyGridZones.map((zone) => {
-          const cellPosition = getGridCellPosition(zone.id)
-
-          return (
-            <section
-              className="widget-zone widget-zone--cell widget-zone--cell-empty"
-              key={`empty-${zone.id}`}
-              style={{
-                gridColumn: `${cellPosition.col} / ${cellPosition.col + 1}`,
-                gridRow: `${cellPosition.row} / ${cellPosition.row + 1}`,
-              }}
-              aria-label={formatLocalizedText(appText.boardHost.cellZoneLabel, {
-                cellId: zone.id.toUpperCase(),
-              })}
-            />
-          )
-        })}
-      </section>
-
-      <section
-        className="widget-zone widget-zone--expanded-stage"
-        aria-label={appText.boardHost.expandedWidgetViewAriaLabel}
-      >
-        {expandedWidget
-          ? renderExpandedWidget(expandedWidget)
-          : renderEmptyState(
-              appText.boardHost.noExpandedWidgetTitle,
-              appText.boardHost.noExpandedWidgetCopy,
-              'empty-state--expanded',
-            )}
-      </section>
+      {viewportState.layoutMode === 'desktop' ? (
+        <section
+          className="widget-zone widget-zone--expanded-stage"
+          aria-label={appText.boardHost.expandedWidgetViewAriaLabel}
+        >
+          {expandedWidget
+            ? renderExpandedWidget(expandedWidget)
+            : renderEmptyState(
+                appText.boardHost.noExpandedWidgetTitle,
+                appText.boardHost.noExpandedWidgetCopy,
+                'empty-state--expanded',
+              )}
+        </section>
+      ) : null}
+        </>
+      )}
     </section>
   )
 }

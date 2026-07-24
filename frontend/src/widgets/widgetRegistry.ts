@@ -90,7 +90,7 @@ const applyDynamicWidgetToolDescription = (
   familyMembers: FamilyMember[],
   authenticatedUser: AuthUser | null,
 ): RegisteredWidgetMcpTool => {
-  if (widget.entity.id !== 'calendar') {
+  if (widget.entity.widgetTypeId !== 'calendar') {
     return tool
   }
 
@@ -126,7 +126,7 @@ export const buildWidgetRegistry = (
       {
         entity,
         module: widgetModule,
-        presentation: widgetPresentation[entity.id] ?? {
+        presentation: widgetPresentation[entity.widgetTypeId] ?? {
           widgetNumber: 99,
         },
       },

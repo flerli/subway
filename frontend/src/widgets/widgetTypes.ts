@@ -32,6 +32,7 @@ export interface WidgetPlacementAssignment {
 
 export interface WidgetEntityRecord {
   id: WidgetId
+  widgetTypeId: WidgetId
   title: string
   subwayLetter: string
   subwayColor: string
@@ -135,6 +136,7 @@ export interface WidgetMicroAppContract {
   folderName: string
   dataSource: WidgetDataSource
   capabilities: WidgetCapability[]
+  supportsMultipleInstances?: boolean
   hasSettingsPanel: boolean
   mcpTools?: WidgetMcpToolDefinition[]
   settingsDefinition?: WidgetSettingsDefinition

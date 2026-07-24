@@ -3,6 +3,7 @@ import {
   formatLocalizedText,
   type SupportedLanguageCode,
 } from '../i18n/localization'
+import type { ViewportLayoutState } from '../viewportLayout'
 import { buildBadgeStyle } from './widgetAppearance'
 import { isWidgetVisibleForFilter } from './widgetVisibility'
 import type { FilterId } from './widgetHostModels'
@@ -12,6 +13,7 @@ import { resolveWidgetTitle } from './widgetLocalization'
 interface WidgetDebugOverlayProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
+  viewportState: ViewportLayoutState
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   widgetHealthMap: Record<string, WidgetHealthState>
@@ -91,6 +93,9 @@ const formatMetricDuration = (
   appText: AppTextBundle,
 ) => (value === null ? appText.debug.notAvailableValue : `${value.toFixed(1)} ms`)
 
+const formatViewportSize = (viewportState: ViewportLayoutState) =>
+  `${viewportState.width} x ${viewportState.height}`
+
 const formatMetricTimestamp = (
   value: string | null,
   languageCode: SupportedLanguageCode,
@@ -111,6 +116,7 @@ const formatMetricTimestamp = (
 export function WidgetDebugOverlay({
   appText,
   languageCode,
+  viewportState,
   registeredWidgets,
   activeFilter,
   widgetHealthMap,
@@ -178,6 +184,41 @@ export function WidgetDebugOverlay({
                     languageCode,
                     appText,
                   )}
+                </dd>
+              </div>
+            </dl>
+          </article>
+
+          <article className="debug-card">
+            <div className="debug-card-head">
+              <span className="route-bullet" style={buildBadgeStyle('#38bdf8')}>
+                V
+              </span>
+              <div>
+                <h3>{appText.debug.viewportTitle}</h3>
+                <p>viewport-layout</p>
+              </div>
+            </div>
+
+            <dl className="debug-list">
+              <div>
+                <dt>{appText.debug.layoutModeLabel}</dt>
+                <dd>
+                  {viewportState.layoutMode === 'mobile'
+                    ? appText.debug.layoutModeMobileValue
+                    : appText.debug.layoutModeDesktopValue}
+                </dd>
+              </div>
+              <div>
+                <dt>{appText.debug.viewportSizeLabel}</dt>
+                <dd>{formatViewportSize(viewportState)}</dd>
+              </div>
+              <div>
+                <dt>{appText.debug.viewportOrientationLabel}</dt>
+                <dd>
+                  {viewportState.orientation === 'landscape'
+                    ? appText.debug.landscapeValue
+                    : appText.debug.portraitValue}
                 </dd>
               </div>
             </dl>

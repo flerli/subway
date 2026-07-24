@@ -38,6 +38,7 @@ const normalizeWidgetEntity = (
   entity: Partial<WidgetEntityRecord> & Pick<WidgetEntityRecord, 'id' | 'title'>,
 ): WidgetEntityRecord => ({
   id: entity.id,
+  widgetTypeId: entity.widgetTypeId ?? entity.id,
   title: entity.title.trim() || 'Untitled Widget',
   subwayLetter: deriveWidgetLetter(entity.title, entity.subwayLetter),
   subwayColor: /^#[0-9a-fA-F]{6}$/.test(entity.subwayColor ?? '')
@@ -56,6 +57,7 @@ const normalizeWidgetEntity = (
 export const widgetEntitySeed: WidgetEntityRecord[] = [
   normalizeWidgetEntity({
     id: 'arrival-board',
+    widgetTypeId: 'arrival-board',
     title: 'Arrival Board',
     subwayColor: '#4aa8ff',
     sourceLocation: 'arrival-board',
@@ -64,6 +66,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
   }),
   normalizeWidgetEntity({
     id: 'weather',
+    widgetTypeId: 'weather',
     title: 'Weather',
     subwayColor: '#fccc0a',
     sourceLocation: 'weather',
@@ -72,6 +75,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
   }),
   normalizeWidgetEntity({
     id: 'calendar',
+    widgetTypeId: 'calendar',
     title: 'Calendar',
     subwayColor: '#ff6319',
     sourceLocation: 'calendar',
@@ -80,6 +84,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
   }),
   normalizeWidgetEntity({
     id: 'todo',
+    widgetTypeId: 'todo',
     title: 'Todo',
     subwayColor: '#4edbe8',
     sourceLocation: 'todo',
@@ -88,6 +93,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
   }),
   normalizeWidgetEntity({
     id: 'bring',
+    widgetTypeId: 'bring',
     title: 'Bring',
     subwayColor: '#7ac943',
     sourceLocation: 'bring',
@@ -96,6 +102,7 @@ export const widgetEntitySeed: WidgetEntityRecord[] = [
   }),
   normalizeWidgetEntity({
     id: 'roborock',
+    widgetTypeId: 'roborock',
     title: 'Roborock',
     subwayColor: '#ff6b35',
     sourceLocation: 'roborock',

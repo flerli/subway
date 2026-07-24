@@ -205,6 +205,7 @@ export const weatherWidget: WidgetMicroAppContract = {
   folderName: 'weather',
   dataSource: 'external-api',
   capabilities: ['read', 'write'],
+  supportsMultipleInstances: true,
   hasSettingsPanel: true,
   mcpTools: [
     {

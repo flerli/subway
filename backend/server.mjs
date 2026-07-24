@@ -1144,6 +1144,7 @@ const createWidgetsTableSql = `
   CREATE TABLE IF NOT EXISTS widgets (
     owner_user_id TEXT NOT NULL REFERENCES users(id),
     id TEXT NOT NULL,
+    widget_type_id TEXT,
     title TEXT NOT NULL,
     subway_letter TEXT NOT NULL,
     subway_color TEXT NOT NULL,
@@ -1408,6 +1409,32 @@ migrateOwnedTable({
   expectedPrimaryKeyColumns: ['owner_user_id', 'id'],
   defaultOwnerUserId: defaultAppUserId,
 })
+
+if (!readTableColumns('widgets').some((column) => column.name === 'widget_type_id')) {
+  db.exec("ALTER TABLE widgets ADD COLUMN widget_type_id TEXT")
+}
+
+const updateWidgetTypeIdStatement = db.prepare(`
+  UPDATE widgets
+  SET widget_type_id = ?
+  WHERE owner_user_id = ? AND id = ?
+`)
+
+for (const widgetRow of db
+  .prepare(`
+    SELECT owner_user_id, id, source_location, widget_type_id
+    FROM widgets
+  `)
+  .all()) {
+  const widgetTypeId =
+    typeof widgetRow.source_location === 'string' && widgetRow.source_location.trim().length > 0
+      ? widgetRow.source_location.trim()
+      : widgetRow.id
+
+  if (widgetRow.widget_type_id !== widgetTypeId) {
+    updateWidgetTypeIdStatement.run(widgetTypeId, widgetRow.owner_user_id, widgetRow.id)
+  }
+}
 
 migrateOwnedTable({
   tableName: 'calendar_events',
@@ -1877,6 +1904,7 @@ const seedMembers = [
 const seedWidgets = [
   {
     id: 'arrival-board',
+    widgetTypeId: 'arrival-board',
     title: 'Arrival Board',
     subwayLetter: 'A',
     subwayColor: '#4aa8ff',
@@ -1886,6 +1914,7 @@ const seedWidgets = [
   },
   {
     id: 'weather',
+    widgetTypeId: 'weather',
     title: 'Weather',
     subwayLetter: 'W',
     subwayColor: '#fccc0a',
@@ -1895,6 +1924,7 @@ const seedWidgets = [
   },
   {
     id: 'calendar',
+    widgetTypeId: 'calendar',
     title: 'Calendar',
     subwayLetter: 'C',
     subwayColor: '#ff6319',
@@ -1904,6 +1934,7 @@ const seedWidgets = [
   },
   {
     id: 'todo',
+    widgetTypeId: 'todo',
     title: 'Todo',
     subwayLetter: 'T',
     subwayColor: '#4edbe8',
@@ -1916,6 +1947,7 @@ const seedWidgets = [
   },
   {
     id: 'ui-benchmark',
+    widgetTypeId: 'ui-benchmark',
     title: 'UI Benchmark',
     subwayLetter: 'B',
     subwayColor: '#34d399',
@@ -1925,6 +1957,7 @@ const seedWidgets = [
   },
   {
     id: 'youtube',
+    widgetTypeId: 'youtube',
     title: 'YouTube',
     subwayLetter: 'Y',
     subwayColor: '#ff0000',
@@ -1934,6 +1967,7 @@ const seedWidgets = [
   },
   {
     id: 'audio-visual',
+    widgetTypeId: 'audio-visual',
     title: 'Audio Visual',
     subwayLetter: 'V',
     subwayColor: '#8b5cf6',
@@ -1943,6 +1977,7 @@ const seedWidgets = [
   },
   {
     id: 'bring',
+    widgetTypeId: 'bring',
     title: 'Bring',
     subwayLetter: 'G',
     subwayColor: '#7ac943',
@@ -1952,6 +1987,7 @@ const seedWidgets = [
   },
   {
     id: 'roborock',
+    widgetTypeId: 'roborock',
     title: 'Roborock',
     subwayLetter: 'R',
     subwayColor: '#ff6b35',
@@ -1961,6 +1997,7 @@ const seedWidgets = [
   },
   {
     id: 'assistant',
+    widgetTypeId: 'assistant',
     title: 'Assistant',
     subwayLetter: 'A',
     subwayColor: '#7ef0c8',
@@ -1973,8 +2010,16 @@ const seedWidgets = [
 const allowedWidgetSourceLocations = new Set(
   seedWidgets.map((widget) => widget.sourceLocation),
 )
+const multiInstanceWidgetTypeIds = new Set(['weather'])
+const widgetGridPlacementZoneIds = ['a1', 'b1', 'a2', 'b2', 'a3', 'b3']
 
-const allowedWidgetIds = new Set(seedWidgets.map((widget) => widget.id))
+const doesWidgetTypeSupportMultipleInstances = (widgetTypeId) =>
+  multiInstanceWidgetTypeIds.has(widgetTypeId)
+
+const buildWidgetInstanceId = (widgetTypeId) => `${widgetTypeId}-${randomUUID()}`
+
+const buildDuplicatedWidgetTitle = (title) =>
+  sanitizeWidgetTitle(`${title} Copy`) || 'Widget Copy'
 
 const LEGACY_MOCK_CALENDAR_EVENT_IDS = new Set([
   'calendar-household-sync',
@@ -2093,6 +2138,7 @@ const insertWidget = (ownerUserId, widget, createdAt, updatedAt) =>
       INSERT INTO widgets (
         owner_user_id,
         id,
+        widget_type_id,
         title,
         subway_letter,
         subway_color,
@@ -2108,6 +2154,7 @@ const insertWidget = (ownerUserId, widget, createdAt, updatedAt) =>
     .run(
       ownerUserId,
       widget.id,
+      widget.widgetTypeId ?? widget.sourceLocation ?? widget.id,
       widget.title,
       widget.subwayLetter,
       widget.subwayColor,
@@ -5508,6 +5555,16 @@ const deleteUnsupportedWidgets = () => {
     }
   }
 
+  const existingWidgetIds = new Set(
+    db
+      .prepare(`
+        SELECT id
+        FROM widgets
+      `)
+      .all()
+      .map((widget) => widget.id),
+  )
+
   const widgetSettings = db
     .prepare(`
       SELECT owner_user_id, widget_id
@@ -5516,30 +5573,34 @@ const deleteUnsupportedWidgets = () => {
     .all()
 
   for (const widgetSetting of widgetSettings) {
-    if (!allowedWidgetIds.has(widgetSetting.widget_id)) {
+    if (!existingWidgetIds.has(widgetSetting.widget_id)) {
       deleteWidgetSettingsById(widgetSetting.owner_user_id, widgetSetting.widget_id)
     }
   }
 }
 
 const ensureSeedWidgetsPresent = (ownerUserId) => {
-  const existingWidgetIds = new Set(
+  const existingWidgetTypeIds = new Set(
     db
       .prepare(
         `
-          SELECT id
+          SELECT id, widget_type_id, source_location
           FROM widgets
           WHERE owner_user_id = ?
         `,
       )
       .all(ownerUserId)
-      .map((row) => row.id),
+      .map((row) =>
+        typeof row.widget_type_id === 'string' && row.widget_type_id.length > 0
+          ? row.widget_type_id
+          : row.source_location || row.id,
+      ),
   )
 
   const now = new Date().toISOString()
 
   for (const widget of seedWidgets) {
-    if (!existingWidgetIds.has(widget.id)) {
+    if (!existingWidgetTypeIds.has(widget.widgetTypeId)) {
       insertWidget(ownerUserId, widget, now, now)
     }
   }
@@ -5820,6 +5881,10 @@ const selectNormalizedCalendarEventById = (ownerUserId, calendarEventId) => {
 
 const normalizeWidgetRow = (row) => ({
   id: row.id,
+  widgetTypeId:
+    typeof row.widget_type_id === 'string' && row.widget_type_id.length > 0
+      ? row.widget_type_id
+      : row.source_location,
   title: row.title,
   subwayLetter: row.subway_letter,
   subwayColor: row.subway_color,
@@ -5841,6 +5906,7 @@ const selectAllWidgets = (ownerUserId) =>
     .prepare(`
       SELECT
         id,
+        widget_type_id,
         title,
         subway_letter,
         subway_color,
@@ -7327,7 +7393,8 @@ const updateWidgetRecord = (ownerUserId, widget, updatedAt) =>
   db
     .prepare(`
       UPDATE widgets
-      SET title = ?,
+      SET widget_type_id = ?,
+          title = ?,
           subway_letter = ?,
           subway_color = ?,
           source_location = ?,
@@ -7338,6 +7405,7 @@ const updateWidgetRecord = (ownerUserId, widget, updatedAt) =>
       WHERE owner_user_id = ? AND id = ?
     `)
     .run(
+      widget.widgetTypeId ?? widget.sourceLocation ?? widget.id,
       widget.title,
       widget.subwayLetter,
       widget.subwayColor,
@@ -7355,6 +7423,7 @@ const selectWidgetById = (ownerUserId, widgetId) =>
     .prepare(`
       SELECT
         id,
+        widget_type_id,
         title,
         subway_letter,
         subway_color,
@@ -7366,6 +7435,86 @@ const selectWidgetById = (ownerUserId, widgetId) =>
       WHERE owner_user_id = ? AND id = ?
     `)
     .get(ownerUserId, widgetId)
+
+const buildWidgetInstanceFromTemplate = (
+  ownerUserId,
+  widgetTemplate,
+  title,
+  copySettingsFromWidgetId = null,
+) => {
+  const existingWidgets = selectAllWidgets(ownerUserId)
+  const occupiedGridZoneIds = new Set(
+    existingWidgets.flatMap((widget) =>
+      widget.placementZones
+        .filter((placement) => placement.zoneId !== 'service-board')
+        .map((placement) => placement.zoneId),
+    ),
+  )
+  const maxServiceBoardOrder = existingWidgets
+    .flatMap((widget) =>
+      widget.placementZones
+        .filter((placement) => placement.zoneId === 'service-board')
+        .map((placement) => placement.order),
+    )
+    .reduce((maxOrder, order) => Math.max(maxOrder, order), 0)
+
+  const placementZones = widgetTemplate.placementZones.map((placement) => {
+    if (placement.zoneId === 'service-board') {
+      return {
+        zoneId: 'service-board',
+        order: maxServiceBoardOrder + 1,
+      }
+    }
+
+    if (!occupiedGridZoneIds.has(placement.zoneId)) {
+      occupiedGridZoneIds.add(placement.zoneId)
+      return placement
+    }
+
+    const nextFreeZoneId = widgetGridPlacementZoneIds.find(
+      (zoneId) => !occupiedGridZoneIds.has(zoneId),
+    )
+
+    if (!nextFreeZoneId) {
+      return placement
+    }
+
+    occupiedGridZoneIds.add(nextFreeZoneId)
+
+    return {
+      zoneId: nextFreeZoneId,
+      order: placement.order,
+    }
+  })
+  const widget = {
+    id: buildWidgetInstanceId(widgetTemplate.widgetTypeId),
+    widgetTypeId: widgetTemplate.widgetTypeId,
+    title,
+    subwayLetter: widgetTemplate.subwayLetter,
+    subwayColor: widgetTemplate.subwayColor,
+    sourceLocation: widgetTemplate.sourceLocation,
+    userScope: widgetTemplate.userScope,
+    placementZones,
+  }
+  const timestamp = new Date().toISOString()
+
+  insertWidget(ownerUserId, widget, timestamp, timestamp)
+
+  if (copySettingsFromWidgetId) {
+    const sourceSettings = selectWidgetSettingsByWidgetId(ownerUserId, copySettingsFromWidgetId)
+
+    if (sourceSettings) {
+      upsertWidgetSettings(
+        ownerUserId,
+        widget.id,
+        JSON.stringify(sourceSettings.settings),
+        timestamp,
+      )
+    }
+  }
+
+  return widget
+}
 
 const sanitizeWidgetTitle = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
@@ -8826,6 +8975,85 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (request.method === 'POST' && requestUrl.pathname === '/api/widgets') {
+    try {
+      const body = await readRequestBody(request)
+      const duplicateFromWidgetId =
+        typeof body?.duplicateFromWidgetId === 'string' ? body.duplicateFromWidgetId : ''
+      const sourceLocation = normalizeWidgetSourceLocation(body?.sourceLocation ?? '')
+
+      if (duplicateFromWidgetId) {
+        const currentWidget = selectWidgetById(ownerUserId, duplicateFromWidgetId)
+
+        if (!currentWidget) {
+          sendJson(response, 404, { error: 'Widget not found.' })
+          return
+        }
+
+        const widgetTypeId =
+          typeof currentWidget.widget_type_id === 'string' && currentWidget.widget_type_id.length > 0
+            ? currentWidget.widget_type_id
+            : currentWidget.source_location
+
+        if (!doesWidgetTypeSupportMultipleInstances(widgetTypeId)) {
+          sendJson(response, 400, { error: 'This widget type does not support multiple instances.' })
+          return
+        }
+
+        const createdWidget = buildWidgetInstanceFromTemplate(
+          ownerUserId,
+          {
+            widgetTypeId,
+            subwayLetter: currentWidget.subway_letter,
+            subwayColor: currentWidget.subway_color,
+            sourceLocation: currentWidget.source_location,
+            userScope: normalizeWidgetScope({
+              mode: currentWidget.user_scope_mode,
+              memberIds: parseJsonArray(currentWidget.user_scope_member_ids),
+            }),
+            placementZones: normalizeWidgetPlacementZones(
+              parseJsonArray(currentWidget.placement_zones),
+            ),
+          },
+          buildDuplicatedWidgetTitle(currentWidget.title),
+          currentWidget.id,
+        )
+
+        sendJson(response, 201, { widget: createdWidget })
+        return
+      }
+
+      if (!sourceLocation || !allowedWidgetSourceLocations.has(sourceLocation)) {
+        sendJson(response, 400, { error: 'sourceLocation is invalid.' })
+        return
+      }
+
+      const widgetTemplate = seedWidgets.find((widget) => widget.sourceLocation === sourceLocation)
+
+      if (!widgetTemplate) {
+        sendJson(response, 400, { error: 'sourceLocation is invalid.' })
+        return
+      }
+
+      if (!doesWidgetTypeSupportMultipleInstances(widgetTemplate.widgetTypeId)) {
+        sendJson(response, 400, { error: 'This widget type does not support multiple instances.' })
+        return
+      }
+
+      const createdWidget = buildWidgetInstanceFromTemplate(
+        ownerUserId,
+        widgetTemplate,
+        widgetTemplate.title,
+      )
+
+      sendJson(response, 201, { widget: createdWidget })
+      return
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+  }
+
   if (request.method === 'GET' && requestUrl.pathname === '/api/widget-settings') {
     sendJson(response, 200, { widgetSettings: selectAllWidgetSettings(ownerUserId) })
     return
@@ -10023,6 +10251,10 @@ const server = createServer(async (request, response) => {
 
       const updatedWidget = {
         id: widgetId,
+        widgetTypeId:
+          typeof currentWidget.widget_type_id === 'string' && currentWidget.widget_type_id.length > 0
+            ? currentWidget.widget_type_id
+            : sourceLocation,
         title,
         subwayLetter: sanitizeSubwayLetter(body.subwayLetter, title),
         subwayColor: normalizeColor(body.subwayColor ?? currentWidget.subway_color),
@@ -10039,6 +10271,40 @@ const server = createServer(async (request, response) => {
       sendJson(response, 400, { error: 'Invalid JSON body.' })
       return
     }
+  }
+
+  if (
+    request.method === 'DELETE' &&
+    requestUrl.pathname.startsWith('/api/widgets/')
+  ) {
+    const widgetId = requestUrl.pathname.replace('/api/widgets/', '')
+
+    if (!widgetId) {
+      sendJson(response, 400, { error: 'Missing widget id.' })
+      return
+    }
+
+    const currentWidget = selectWidgetById(ownerUserId, widgetId)
+
+    if (!currentWidget) {
+      sendJson(response, 404, { error: 'Widget not found.' })
+      return
+    }
+
+    const widgetTypeId =
+      typeof currentWidget.widget_type_id === 'string' && currentWidget.widget_type_id.length > 0
+        ? currentWidget.widget_type_id
+        : currentWidget.source_location
+
+    if (!doesWidgetTypeSupportMultipleInstances(widgetTypeId)) {
+      sendJson(response, 400, { error: 'This widget type does not support deletion.' })
+      return
+    }
+
+    deleteWidgetSettingsById(ownerUserId, widgetId)
+    deleteWidgetById(ownerUserId, widgetId)
+    sendJson(response, 204, {})
+    return
   }
 
   if (request.method === 'DELETE' && requestUrl.pathname === '/api/bring/list/items') {
