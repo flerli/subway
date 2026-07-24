@@ -92,6 +92,7 @@ interface WidgetBoardHostProps {
   appText: AppTextBundle
   languageCode: SupportedLanguageCode
   viewportState: ViewportLayoutState
+  selectedMobileWidgetId: string
   registeredWidgets: RegisteredWidget[]
   activeFilter: FilterId
   activeProfileLabel?: string
@@ -197,11 +198,6 @@ interface WidgetGridBlock {
 
 type WidgetRenderMode = 'grid' | 'expanded'
 
-const mobileGridZoneOrder: GridZoneId[] = ['a1', 'a2', 'a3', 'b1', 'b2', 'b3']
-const mobileGridZoneOrderIndex = new Map(
-  mobileGridZoneOrder.map((zoneId, index) => [zoneId, index]),
-)
-
 const isGridZoneId = (zoneId: WidgetPlacementZoneId): zoneId is GridZoneId =>
   zoneId !== 'service-board'
 
@@ -213,10 +209,6 @@ const getGridCellPosition = (zoneId: GridZoneId): GridCellPosition => ({
   col: zoneId[0] === 'a' ? 1 : 2,
   row: Number(zoneId[1]),
 })
-
-const compareMobileZoneOrder = (leftZoneId: GridZoneId, rightZoneId: GridZoneId) =>
-  (mobileGridZoneOrderIndex.get(leftZoneId) ?? Number.MAX_SAFE_INTEGER) -
-  (mobileGridZoneOrderIndex.get(rightZoneId) ?? Number.MAX_SAFE_INTEGER)
 
 const areCellsNeighboring = (leftCell: GridZoneId, rightCell: GridZoneId) => {
   const leftPosition = getGridCellPosition(leftCell)
@@ -372,6 +364,7 @@ export function WidgetBoardHost({
   appText,
   languageCode,
   viewportState,
+  selectedMobileWidgetId,
   registeredWidgets,
   activeFilter,
   activeProfileLabel,
@@ -1305,6 +1298,11 @@ export function WidgetBoardHost({
   const expandedWidget = expandedWidgetId
     ? visibleWidgets.find((widget) => widget.entity.id === expandedWidgetId)
     : undefined
+  const mobileSelectedWidget =
+    viewportState.layoutMode === 'mobile'
+      ? visibleWidgets.find((widget) => widget.entity.id === selectedMobileWidgetId) ??
+        visibleWidgets[0]
+      : undefined
 
   const serviceBoardEntries = (zoneEntries.get('service-board') ?? []).sort(
     (leftEntry, rightEntry) => leftEntry.placement.order - rightEntry.placement.order,
@@ -1320,22 +1318,6 @@ export function WidgetBoardHost({
 
   const occupiedGridZoneIds = new Set<GridZoneId>(
     populatedGridBlocks.flatMap((gridBlock) => gridBlock.zoneIds),
-  )
-
-  const mobileGridBlocksByAnchorZoneId = populatedGridBlocks.reduce(
-    (blocksByZoneId, gridBlock) => {
-      const [anchorZoneId] = [...gridBlock.zoneIds].sort(compareMobileZoneOrder)
-
-      if (!anchorZoneId) {
-        return blocksByZoneId
-      }
-
-      const currentBlocks = blocksByZoneId.get(anchorZoneId) ?? []
-      currentBlocks.push(gridBlock)
-      blocksByZoneId.set(anchorZoneId, currentBlocks)
-      return blocksByZoneId
-    },
-    new Map<GridZoneId, WidgetGridBlock[]>(),
   )
 
   const emptyGridZones = widgetGridPlacementZones.filter((zone) => {
@@ -1385,38 +1367,12 @@ export function WidgetBoardHost({
     </section>
   )
 
-  const renderMobileGrid = () => (
+  const renderMobileSelectedWidget = (widget: RegisteredWidget) => (
     <section
-      className="widget-grid widget-grid--mobile"
-      aria-label={appText.boardHost.widgetGridAriaLabel}
+      className="widget-zone widget-zone--mobile-selected-stage"
+      aria-label={resolveWidgetTitle(widget, languageCode)}
     >
-      {mobileGridZoneOrder.map((zoneId) => {
-        const anchoredBlocks = mobileGridBlocksByAnchorZoneId.get(zoneId) ?? []
-
-        if (anchoredBlocks.length > 0) {
-          return anchoredBlocks.map((gridBlock) => (
-            <section
-              className="widget-zone widget-zone--cell widget-zone--cell-mobile"
-              key={`${gridBlock.widget.entity.id}-${gridBlock.zoneIds.join('-')}-mobile`}
-              aria-label={renderGridZoneLabel(gridBlock.zoneIds)}
-            >
-              {renderWidget(gridBlock.widget)}
-            </section>
-          ))
-        }
-
-        if (occupiedGridZoneIds.has(zoneId)) {
-          return null
-        }
-
-        return (
-          <section
-            className="widget-zone widget-zone--cell widget-zone--cell-empty widget-zone--cell-mobile"
-            key={`empty-mobile-${zoneId}`}
-            aria-label={renderGridZoneLabel([zoneId])}
-          />
-        )
-      })}
+      {renderWidget(widget)}
     </section>
   )
 
@@ -1454,6 +1410,18 @@ export function WidgetBoardHost({
     >
       {isMobileDetailOpen && expandedWidget ? renderMobileDetailView(expandedWidget) : (
         <>
+      {viewportState.layoutMode === 'mobile' ? (
+        mobileSelectedWidget ? (
+          renderMobileSelectedWidget(mobileSelectedWidget)
+        ) : (
+          renderEmptyState(
+            appText.boardHost.serviceBoardEmptyTitle,
+            appText.boardHost.serviceBoardEmptyCopy,
+            'empty-state--board',
+          )
+        )
+      ) : (
+        <>
       <section
         className="widget-zone widget-zone--service-board"
         aria-label={appText.boardHost.serviceBoardZoneLabel}
@@ -1467,7 +1435,9 @@ export function WidgetBoardHost({
             )}
       </section>
 
-      {viewportState.layoutMode === 'mobile' ? renderMobileGrid() : renderDesktopGrid()}
+      {renderDesktopGrid()}
+        </>
+      )}
 
       {viewportState.layoutMode === 'desktop' ? (
         <section

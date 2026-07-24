@@ -104,6 +104,7 @@ import {
   type WeatherWidgetTranslation,
 } from './widgets/weather'
 import {
+  WidgetMetadataCreatePanel,
   WidgetMetadataAdminHost,
   type WidgetMetadataDraft,
 } from './widgets/WidgetMetadataAdminHost'
@@ -1518,6 +1519,16 @@ function App() {
       handleExpandedWidgetChange(null)
     }
 
+    if (isMobileLayout) {
+      window.requestAnimationFrame(() => {
+        const content = document.querySelector('.screen-content')
+        if (content instanceof HTMLElement) {
+          content.scrollTop = 0
+        }
+      })
+      return
+    }
+
     navigateToWidgetOnBoard(widgetId)
   }
 
@@ -2392,7 +2403,7 @@ function App() {
       })
       .map((widget) => ({
         id: widget.entity.id,
-        label: `${widget.entity.subwayLetter} ${resolveWidgetTitle(widget, selectedLanguageCode)}`,
+        label: resolveWidgetTitle(widget, selectedLanguageCode),
       }))
   }, [activeFilter, registeredWidgets, selectedLanguageCode])
   const activeProfile = familyMembers.find((member) => member.id === activeFilter)
@@ -3752,7 +3763,7 @@ function App() {
         >
           {authError ? <p className="settings-note settings-note--warning terminal-auth-note">{authError}</p> : null}
 
-          {isMobileLayout && viewMode === 'board' ? (
+          {isMobileLayout && viewMode === 'board' && !expandedWidgetId ? (
             <div className="mobile-widget-nav mobile-widget-nav--persistent">
               <label className="mobile-widget-nav__label" htmlFor="mobile-widget-nav-select">
                 {appText.shell.widgetNavigationLabel}
@@ -3781,6 +3792,7 @@ function App() {
               appText={appText}
               languageCode={selectedLanguageCode}
               viewportState={viewportState}
+              selectedMobileWidgetId={selectedMobileWidgetId}
               registeredWidgets={registeredWidgets}
               activeFilter={activeFilter}
               activeProfileLabel={activeProfile ? getMemberLabel(activeProfile) : undefined}
@@ -3898,6 +3910,27 @@ function App() {
                 <p className="settings-note settings-note--warning">{weatherError}</p>
               ) : null}
 
+              <div className="settings-panel-toolbar">
+                <WidgetMetadataCreatePanel
+                  appText={appText}
+                  languageCode={selectedLanguageCode}
+                  registeredWidgets={registeredWidgets}
+                  availableSourceLocations={Array.from(
+                    new Set([
+                      ...registeredWidgets.map((widget) => widget.module.folderName),
+                      'weather',
+                    ]),
+                  )}
+                  multiInstanceSourceLocations={['weather']}
+                  onCreateWidgetInstance={(sourceLocation: string) =>
+                    handleCreateWidgetInstance(sourceLocation).catch(() => {
+                      setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
+                      throw new Error('widget metadata create failed')
+                    })
+                  }
+                />
+              </div>
+
               <div className="settings-hub-grid">
                 <article
                   className={`settings-card settings-hub-card${
@@ -4003,7 +4036,6 @@ function App() {
                     'weather',
                   ]),
                 )}
-                multiInstanceSourceLocations={['weather']}
                 expandedWidgetId={expandedWidgetSettingsId}
                 onExpandedWidgetChange={(widgetId) => {
                   setExpandedSettingsHubPanelId(null)
@@ -4013,12 +4045,6 @@ function App() {
                   handleSaveWidgetMetadata(widgetId, draft).catch(() => {
                     setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
                     throw new Error('widget metadata save failed')
-                  })
-                }
-                onCreateWidgetInstance={(sourceLocation: string) =>
-                  handleCreateWidgetInstance(sourceLocation).catch(() => {
-                    setWidgetMetadataAdminErrorKey('widgetMetadataSaveFailed')
-                    throw new Error('widget metadata create failed')
                   })
                 }
                 onDuplicateWidgetInstance={(widgetId: string) =>

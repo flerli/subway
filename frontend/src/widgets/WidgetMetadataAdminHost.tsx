@@ -34,13 +34,20 @@ interface WidgetMetadataAdminHostProps {
   registeredWidgets: RegisteredWidget[]
   familyMembers: FamilyMember[]
   availableSourceLocations: string[]
-  multiInstanceSourceLocations: string[]
   expandedWidgetId: string | null
   onExpandedWidgetChange: (widgetId: string | null) => void
   onSaveWidgetMetadata: (widgetId: string, draft: WidgetMetadataDraft) => Promise<void>
-  onCreateWidgetInstance: (sourceLocation: string) => Promise<void>
   onDuplicateWidgetInstance: (widgetId: string) => Promise<void>
   onDeleteWidgetInstance: (widgetId: string) => Promise<void>
+}
+
+interface WidgetMetadataCreatePanelProps {
+  appText: AppTextBundle
+  languageCode: SupportedLanguageCode
+  registeredWidgets: RegisteredWidget[]
+  availableSourceLocations: string[]
+  multiInstanceSourceLocations: string[]
+  onCreateWidgetInstance: (sourceLocation: string) => Promise<void>
 }
 
 const zoneOptions: WidgetPlacementZoneId[] = widgetPlacementZoneIds
@@ -85,6 +92,111 @@ const buildDraftFromWidget = (widget: RegisteredWidget): WidgetMetadataDraft => 
     }
   }),
 })
+
+const buildCreateableWidgetOptions = ({
+  availableSourceLocations,
+  languageCode,
+  multiInstanceSourceLocations,
+  registeredWidgets,
+}: {
+  availableSourceLocations: string[]
+  languageCode: SupportedLanguageCode
+  multiInstanceSourceLocations: string[]
+  registeredWidgets: RegisteredWidget[]
+}) =>
+  availableSourceLocations.flatMap((sourceLocation) => {
+    if (!multiInstanceSourceLocations.includes(sourceLocation)) {
+      return []
+    }
+
+    const widget = registeredWidgets.find(
+      (candidate) => candidate.entity.sourceLocation === sourceLocation,
+    )
+
+    return [
+      {
+        sourceLocation,
+        label: widget ? resolveWidgetTitle(widget, languageCode) : sourceLocation,
+      },
+    ]
+  })
+
+export function WidgetMetadataCreatePanel({
+  appText,
+  languageCode,
+  registeredWidgets,
+  availableSourceLocations,
+  multiInstanceSourceLocations,
+  onCreateWidgetInstance,
+}: WidgetMetadataCreatePanelProps) {
+  const createableWidgetOptions = useMemo(
+    () =>
+      buildCreateableWidgetOptions({
+        availableSourceLocations,
+        languageCode,
+        multiInstanceSourceLocations,
+        registeredWidgets,
+      }),
+    [
+      availableSourceLocations,
+      languageCode,
+      multiInstanceSourceLocations,
+      registeredWidgets,
+    ],
+  )
+  const [createSourceLocation, setCreateSourceLocation] = useState('')
+
+  useEffect(() => {
+    setCreateSourceLocation((currentValue) => {
+      if (
+        currentValue &&
+        createableWidgetOptions.some((option) => option.sourceLocation === currentValue)
+      ) {
+        return currentValue
+      }
+
+      return createableWidgetOptions[0]?.sourceLocation ?? ''
+    })
+  }, [createableWidgetOptions])
+
+  if (createableWidgetOptions.length === 0) {
+    return null
+  }
+
+  return (
+    <article className="settings-card widget-instance-create-panel">
+      <div className="widget-config-fields widget-config-fields--meta widget-instance-create-panel__fields">
+        <label className="settings-label">
+          <span>{appText.widgetAdmin.createSourceLabel}</span>
+          <select
+            className="settings-input settings-select"
+            value={createSourceLocation}
+            onChange={(event) => setCreateSourceLocation(event.target.value)}
+          >
+            {createableWidgetOptions.map((option) => (
+              <option key={option.sourceLocation} value={option.sourceLocation}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          className="settings-submit"
+          disabled={!createSourceLocation}
+          onClick={() => {
+            if (createSourceLocation) {
+              void onCreateWidgetInstance(createSourceLocation)
+            }
+          }}
+        >
+          {appText.widgetAdmin.createInstanceAction}
+        </button>
+      </div>
+    </article>
+  )
+}
 
 function WidgetMetadataCard({
   widget,
@@ -475,87 +587,14 @@ export function WidgetMetadataAdminHost({
   registeredWidgets,
   familyMembers,
   availableSourceLocations,
-  multiInstanceSourceLocations,
   expandedWidgetId,
   onExpandedWidgetChange,
   onSaveWidgetMetadata,
-  onCreateWidgetInstance,
   onDuplicateWidgetInstance,
   onDeleteWidgetInstance,
 }: WidgetMetadataAdminHostProps) {
-  const createableWidgetOptions = useMemo(
-    () =>
-      availableSourceLocations.flatMap((sourceLocation) => {
-        if (!multiInstanceSourceLocations.includes(sourceLocation)) {
-          return []
-        }
-
-        const widget = registeredWidgets.find(
-          (candidate) => candidate.entity.sourceLocation === sourceLocation,
-        )
-
-        return [
-          {
-            sourceLocation,
-            label: widget ? resolveWidgetTitle(widget, languageCode) : sourceLocation,
-          },
-        ]
-      }),
-    [availableSourceLocations, languageCode, multiInstanceSourceLocations, registeredWidgets],
-  )
-  const [createSourceLocation, setCreateSourceLocation] = useState('')
-
-  useEffect(() => {
-    setCreateSourceLocation((currentValue) => {
-      if (
-        currentValue &&
-        createableWidgetOptions.some((option) => option.sourceLocation === currentValue)
-      ) {
-        return currentValue
-      }
-
-      return createableWidgetOptions[0]?.sourceLocation ?? ''
-    })
-  }, [createableWidgetOptions])
-
   return (
     <section className="widget-metadata-host">
-      {createableWidgetOptions.length > 0 ? (
-        <article className="settings-card widget-config-row">
-          <div className="widget-config-body">
-            <div className="widget-config-fields widget-config-fields--meta">
-              <label className="settings-label">
-                <span>{appText.widgetAdmin.createSourceLabel}</span>
-                <select
-                  className="settings-input settings-select"
-                  value={createSourceLocation}
-                  onChange={(event) => setCreateSourceLocation(event.target.value)}
-                >
-                  {createableWidgetOptions.map((option) => (
-                    <option key={option.sourceLocation} value={option.sourceLocation}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                className="settings-submit"
-                disabled={!createSourceLocation}
-                onClick={() => {
-                  if (createSourceLocation) {
-                    void onCreateWidgetInstance(createSourceLocation)
-                  }
-                }}
-              >
-                {appText.widgetAdmin.createInstanceAction}
-              </button>
-            </div>
-          </div>
-        </article>
-      ) : null}
-
       {registeredWidgets.map((widget) => (
         <WidgetMetadataCard
           key={widget.entity.id}
