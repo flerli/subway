@@ -641,10 +641,17 @@ export function WidgetBoardHost({
         ) as ArrivalBoardWidgetTranslation
         const isMobileCompactMode = viewportState.layoutMode === 'mobile' && mode === 'grid'
         const arrivalColumnRowCount = Math.ceil(visibleArrivals.length / 2)
-        const arrivalColumns = [
-          visibleArrivals.slice(0, arrivalColumnRowCount),
-          visibleArrivals.slice(arrivalColumnRowCount),
-        ].filter((column) => column.length > 0)
+        const arrivalGridItems = visibleArrivals.map((item, itemIndex) => {
+          const columnIndex = itemIndex < arrivalColumnRowCount ? 0 : 1
+          const rowIndex =
+            columnIndex === 0 ? itemIndex : itemIndex - arrivalColumnRowCount
+
+          return {
+            item,
+            columnIndex,
+            rowIndex,
+          }
+        })
 
         return (
           <article
@@ -678,60 +685,60 @@ export function WidgetBoardHost({
 
             <div className="arrival-board">
               {visibleArrivals.length > 0
-                ? arrivalColumns.map((column, columnIndex) => (
-                    <div className="arrival-board-column" key={`arrival-column-${columnIndex}`}>
-                      {column.map((item) => (
-                        <article
-                          className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.completed ? ' is-completed' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
-                          key={item.eventId}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => {
-                            onOpenCalendarEvent({
-                              eventId: item.eventId,
-                              eventDate: item.eventDate,
-                            })
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              onOpenCalendarEvent({
-                                eventId: item.eventId,
-                                eventDate: item.eventDate,
-                              })
-                            }
-                          }}
-                        >
-                          <div className="arrival-route">
-                            {renderAudienceBadge(item.members, 'route-bullet--large')}
-                            <div className="arrival-destination">
-                              <h3>
-                                {isMobileCompactMode
-                                  ? truncateCompactArrivalTitle(item.destination, 24)
-                                  : item.destination}
-                              </h3>
-                            </div>
-                          </div>
-                          <div
-                            className={`arrival-minute-stack${item.completed ? ' arrival-minute-stack--completed' : ''}`}
-                          >
-                            {item.completed ? (
-                              <span className="arrival-status-checkmark" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" focusable="false">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <path d="M7.5 12.5 10.5 15.5 16.75 8.75" />
-                                </svg>
-                              </span>
-                            ) : (
-                              <>
-                                <p className="arrival-count">{item.value}</p>
-                                {item.unit ? <p className="arrival-unit">{item.unit}</p> : null}
-                              </>
-                            )}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                ? arrivalGridItems.map(({ item, columnIndex, rowIndex }) => (
+                    <article
+                      className={`arrival-strip${item.isSameDay ? ' arrival-strip--same-day' : ''}${item.completed ? ' is-completed' : ''}${item.cancelled ? ' is-cancelled' : ''}`}
+                      key={item.eventId}
+                      role="button"
+                      tabIndex={0}
+                      style={{
+                        gridColumn: `${columnIndex + 1}`,
+                        gridRow: `${rowIndex + 1}`,
+                      }}
+                      onClick={() => {
+                        onOpenCalendarEvent({
+                          eventId: item.eventId,
+                          eventDate: item.eventDate,
+                        })
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onOpenCalendarEvent({
+                            eventId: item.eventId,
+                            eventDate: item.eventDate,
+                          })
+                        }
+                      }}
+                    >
+                      <div className="arrival-route">
+                        {renderAudienceBadge(item.members, 'route-bullet--large')}
+                        <div className="arrival-destination">
+                          <h3>
+                            {isMobileCompactMode
+                              ? truncateCompactArrivalTitle(item.destination, 24)
+                              : item.destination}
+                          </h3>
+                        </div>
+                      </div>
+                      <div
+                        className={`arrival-minute-stack${item.completed ? ' arrival-minute-stack--completed' : ''}`}
+                      >
+                        {item.completed ? (
+                          <span className="arrival-status-checkmark" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M7.5 12.5 10.5 15.5 16.75 8.75" />
+                            </svg>
+                          </span>
+                        ) : (
+                          <>
+                            <p className="arrival-count">{item.value}</p>
+                            {item.unit ? <p className="arrival-unit">{item.unit}</p> : null}
+                          </>
+                        )}
+                      </div>
+                    </article>
                   ))
                 : renderEmptyState(
                     arrivalBoardWidgetText.copy.noArrivalsTitle,
