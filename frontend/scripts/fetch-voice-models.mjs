@@ -9,11 +9,14 @@
  * frontend and the runtime is pointed at this origin (see `stt.ts`).
  *
  * Model selection (accuracy vs size, tech doc §1.2/§5):
- *   - `Xenova/whisper-small` (q8, ~250 MB)  — DEFAULT: materially better on
- *     accents/noise/proper nouns; the budgeted step-up from tiny.
- *   - `Xenova/whisper-tiny` (q8, ~67 MB)    — dev fallback:
- *     `VOICE_STT_MODEL=Xenova/whisper-tiny npm run fetch:voice-models`
- * `stt.ts` MUST match: `VOICE_STT_MODEL_ID`.
+ *   - `Xenova/whisper-small` (q8, ~237 MB)  — DEFAULT primary: materially
+ *     better on accents/noise/proper nouns; the budgeted step-up from tiny.
+ *   - `Xenova/whisper-tiny` (q8, ~69 MB)    — DEFAULT fallback, staged
+ *     alongside: small can fail to initialize on memory-constrained kiosks
+ *     or slow links, and the app transparently retries tiny (`stt.ts`
+ *     `VOICE_STT_FALLBACK_MODEL_ID`). Override with `VOICE_STT_MODEL` /
+ *     `VOICE_STT_FALLBACK_MODEL`.
+ * `stt.ts` MUST match: `VOICE_STT_MODEL_ID` / `VOICE_STT_FALLBACK_MODEL_ID`.
  *
  * What it does:
  *   1. downloads the q8 file set from the model host (default
@@ -41,7 +44,9 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const frontendDirectory = resolve(scriptDirectory, '..');
 const modelRoot = join(frontendDirectory, 'public', 'voice-models');
 const modelHost = (process.env.VOICE_MODEL_HOST ?? 'https://huggingface.co').replace(/\/+$/, '');
-const modelId = process.env.VOICE_STT_MODEL ?? 'Xenova/whisper-small';
+const primaryModelId = process.env.VOICE_STT_MODEL ?? 'Xenova/whisper-small';
+const fallbackModelId = process.env.VOICE_STT_FALLBACK_MODEL ?? 'Xenova/whisper-tiny';
+const modelIds = [...new Set([primaryModelId, fallbackModelId])];
 const revision = 'main';
 
 /** q8 (`_quantized`) file set Whisper needs plus the tokenizer metadata. */
@@ -127,16 +132,18 @@ const verifyModelFile = async (target, fileName) => {
 };
 
 const main = async () => {
-  console.log(`[voice-models] staging ${modelId} (q8) into ${modelRoot}`);
+  console.log(`[voice-models] staging ${modelIds.join(' + ')} (q8) into ${modelRoot}`);
 
   let downloadedBytes = 0;
   const missing = [];
 
   if (checkOnly) {
-    for (const fileName of MODEL_FILES) {
-      const size = await fileSize(join(modelRoot, modelId, fileName));
-      if (size === null) {
-        missing.push(fileName);
+    for (const modelId of modelIds) {
+      for (const fileName of MODEL_FILES) {
+        const size = await fileSize(join(modelRoot, modelId, fileName));
+        if (size === null) {
+          missing.push(`${modelId}/${fileName}`);
+        }
       }
     }
 
@@ -157,21 +164,23 @@ const main = async () => {
     return;
   }
 
-  for (const fileName of MODEL_FILES) {
-    const target = join(modelRoot, modelId, fileName);
-    const existing = await fileSize(target);
+  for (const modelId of modelIds) {
+    for (const fileName of MODEL_FILES) {
+      const target = join(modelRoot, modelId, fileName);
+      const existing = await fileSize(target);
 
-    if (existing !== null && !force) {
+      if (existing !== null && !force) {
+        await verifyModelFile(target, fileName);
+        console.log(`[voice-models] keep ${modelId}/${fileName} (${formatBytes(existing)})`);
+        continue;
+      }
+
+      const url = `${modelHost}/${modelId}/resolve/${revision}/${fileName}`;
+      const size = await download(url, target);
       await verifyModelFile(target, fileName);
-      console.log(`[voice-models] keep ${fileName} (${formatBytes(existing)})`);
-      continue;
+      downloadedBytes += size;
+      console.log(`[voice-models] ${modelId}/${fileName} (${formatBytes(size)})`);
     }
-
-    const url = `${modelHost}/${modelId}/resolve/${revision}/${fileName}`;
-    const size = await download(url, target);
-    await verifyModelFile(target, fileName);
-    downloadedBytes += size;
-    console.log(`[voice-models] ${fileName} (${formatBytes(size)})`);
   }
 
   for (const fileName of ORT_FILES) {
@@ -193,8 +202,11 @@ const main = async () => {
     console.log(`[voice-models] ort/${fileName} (${formatBytes(expected)})`);
   }
 
-  const staged = await readdir(join(modelRoot, modelId));
-  console.log(`[voice-models] done: ${staged.length} model entries, +${formatBytes(downloadedBytes)} fetched/copied`);
+  for (const modelId of modelIds) {
+    const staged = await readdir(join(modelRoot, modelId));
+    console.log(`[voice-models] done: ${modelId} (${staged.length} entries)`);
+  }
+  console.log(`[voice-models] +${formatBytes(downloadedBytes)} fetched/copied`);
   console.log('[voice-models] build now: npm run build (files land in dist/voice-models/)');
 };
 

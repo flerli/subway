@@ -31,6 +31,14 @@ import type { SttLanguage } from './vocabulary.ts'
  */
 export const VOICE_STT_MODEL_ID = 'Xenova/whisper-small';
 
+/**
+ * Fallback model, staged alongside the primary. Small is 237 MB (q8) and can
+ * fail to initialize on memory-constrained kiosk devices (or a slow link),
+ * which surfaces as "model missing". Tiny (69 MB) is the proven-working
+ * pre-upgrade model, so a failed small load transparently retries tiny.
+ */
+export const VOICE_STT_FALLBACK_MODEL_ID = 'Xenova/whisper-tiny';
+
 /** App-relative directory that serves the staged model files. */
 export const VOICE_STT_MODEL_BASE_PATH = 'voice-models/';
 
@@ -181,36 +189,69 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     transformers.env as unknown as VoiceSttRuntimeEnv,
   );
 
-  let rawPipeline: unknown;
-
-  try {
-    rawPipeline = await transformers.pipeline(
+  const loadPipeline = (candidateModelPath: string) =>
+    transformers.pipeline(
       'automatic-speech-recognition',
-      modelPath,
+      candidateModelPath,
       // device: 'wasm' is REQUIRED: the v4.3.0 web build defaults to the
       // WebGPU (jsep) entry (`onnxruntime-web/webgpu`); on machines without
       // WebGPU the pipeline construction throws and surfaces as
       // "model missing". The wasm device uses the staged asyncify ORT pair
       // and runs everywhere, offline, CPU-only (verified in headless Chrome).
       { dtype: 'q8', device: 'wasm' },
-    );
-  } catch (error) {
-    // Diagnostic only (no PII): pinpoints bundle/staging drift so the
-    // user-facing "model missing" copy is backed by a real cause.
-    if (typeof console !== 'undefined') {
-      console.warn(
-        `[voice] model missing: ${modelPath} not reachable at ${resolveVoiceSttBaseUrl()}${VOICE_STT_MODEL_BASE_PATH} (run npm run fetch:voice-models and rebuild)`,
-        error instanceof Error ? error.message : undefined,
-      );
-    }
+    )
 
-    throw new Error(
-      `Speech model is missing from the app bundle (reinstall / repair runtime): ${joinUrl(resolveVoiceSttBaseUrl(), `${VOICE_STT_MODEL_BASE_PATH}${modelPath}/`)}`,
-      { cause: error },
-    );
-  }
+  const rawPipeline = await loadPipelineWithFallback(
+    loadPipeline,
+    modelPath,
+    VOICE_STT_FALLBACK_MODEL_ID,
+  )
 
   return adaptRawPipeline(rawPipeline, modelPath)
+}
+
+/**
+ * Try the primary model, then the staged fallback. The primary (small,
+ * 237 MB) can fail to initialize on memory-constrained kiosks or slow links;
+ * the fallback (tiny, 69 MB) is the proven pre-upgrade model, so users keep
+ * working voice input instead of a hard failure. When BOTH fail, the thrown
+ * error names both models and carries the URL for on-device diagnosis.
+ */
+export const loadPipelineWithFallback = async (
+  attempt: (modelPath: string) => Promise<unknown>,
+  primaryModelPath: string,
+  fallbackModelPath: string,
+): Promise<unknown> => {
+  try {
+    return await attempt(primaryModelPath)
+  } catch (primaryError) {
+    if (typeof console !== 'undefined') {
+      console.warn(
+        `[voice] primary model failed (${primaryModelPath}); retrying fallback ${fallbackModelPath}`,
+        primaryError instanceof Error ? primaryError.message : undefined,
+      )
+    }
+
+    try {
+      return await attempt(fallbackModelPath)
+    } catch (fallbackError) {
+      const url = joinUrl(
+        resolveVoiceSttBaseUrl(),
+        `${VOICE_STT_MODEL_BASE_PATH}${primaryModelPath}/`,
+      )
+      const primaryReason =
+        primaryError instanceof Error ? primaryError.message : String(primaryError)
+      const fallbackReason =
+        fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+
+      throw new Error(
+        `Speech model is missing from the app bundle (reinstall / repair runtime): ${url} ` +
+          `| primary (${primaryModelPath}): ${primaryReason} ` +
+          `| fallback (${fallbackModelPath}): ${fallbackReason}`,
+        { cause: fallbackError },
+      )
+    }
+  }
 }
 
 /**
@@ -334,13 +375,18 @@ export const transcribeUtterance = async (
 
   try {
     pipeline = await getPipeline(language, factory);
-  } catch {
+  } catch (error) {
+    // Surface the concrete reason (model URL + underlying cause) so the
+    // on-device note and console point at the real failure instead of a
+    // generic "reinstall" message.
     return {
       ok: false,
       error: {
         code: 'model-missing',
         message:
-          'Speech model is missing from the app bundle (reinstall / repair runtime).',
+          error instanceof Error && error.message.length > 0
+            ? error.message
+            : 'Speech model is missing from the app bundle (reinstall / repair runtime).',
       },
     };
   }

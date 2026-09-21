@@ -2,6 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   adaptRawPipeline,
+  loadPipelineWithFallback,
   VOICE_STT_CHUNK_LENGTH_S,
   VOICE_STT_SINGLE_PASS_MAX_SAMPLES,
   VOICE_STT_MODEL_ID,
@@ -242,5 +243,61 @@ describe('adaptRawPipeline (interop robustness)', () => {
         error.message.includes('whisper-small') &&
         error.message.includes('reinstall / repair runtime'),
     );
+  });
+});
+
+describe('loadPipelineWithFallback (small -> tiny resilience)', () => {
+  it('uses the primary when it loads (positive)', async () => {
+    const attempts: string[] = [];
+    const result = await loadPipelineWithFallback(async (model) => {
+      attempts.push(model);
+      return `pipeline:${model}`;
+    }, 'Xenova/whisper-small', 'Xenova/whisper-tiny');
+    assert.equal(result, 'pipeline:Xenova/whisper-small');
+    assert.deepEqual(attempts, ['Xenova/whisper-small']);
+  });
+
+  it('falls back to tiny when the primary fails (positive: kiosk memory)', async () => {
+    const attempts: string[] = [];
+    const result = await loadPipelineWithFallback(async (model) => {
+      attempts.push(model);
+      if (model.includes('small')) {
+        throw new Error('oom');
+      }
+      return `pipeline:${model}`;
+    }, 'Xenova/whisper-small', 'Xenova/whisper-tiny');
+    assert.equal(result, 'pipeline:Xenova/whisper-tiny');
+    assert.deepEqual(attempts, ['Xenova/whisper-small', 'Xenova/whisper-tiny']);
+  });
+
+  it('names both models and the URL when both fail (negative)', async () => {
+    await assert.rejects(
+      loadPipelineWithFallback(async (model) => {
+        throw new Error(`fail:${model}`);
+      }, 'Xenova/whisper-small', 'Xenova/whisper-tiny'),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes('whisper-small') &&
+        error.message.includes('whisper-tiny') &&
+        error.message.includes('voice-models'),
+    );
+  });
+});
+
+describe('transcribeUtterance error surfacing', () => {
+  it('propagates the factory message to the caller (positive: on-device diagnosis)', async () => {
+    resetSttPipelineCacheForTests();
+    const result = await transcribeUtterance(
+      new Float32Array([0.1]),
+      'de',
+      async () => {
+        throw new Error('Speech model is missing ...: /voice-models/Xenova/whisper-small/');
+      },
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'model-missing');
+      assert.ok(result.error.message.includes('/voice-models/Xenova/whisper-small/'));
+    }
   });
 });
