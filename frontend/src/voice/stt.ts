@@ -182,7 +182,12 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     rawPipeline = await transformers.pipeline(
       'automatic-speech-recognition',
       modelPath,
-      { dtype: 'q8' },
+      // device: 'wasm' is REQUIRED: the v4.3.0 web build defaults to the
+      // WebGPU (jsep) entry (`onnxruntime-web/webgpu`); on machines without
+      // WebGPU the pipeline construction throws and surfaces as
+      // "model missing". The wasm device uses the staged asyncify ORT pair
+      // and runs everywhere, offline, CPU-only (verified in headless Chrome).
+      { dtype: 'q8', device: 'wasm' },
     );
   } catch (error) {
     // Diagnostic only (no PII): pinpoints bundle/staging drift so the

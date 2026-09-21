@@ -28,8 +28,8 @@ describe('postCorrectTranscript', () => {
       'Swaibian antwortet',
     );
     assert.equal(
-      postCorrectTranscript('swebian und swevian und svaibian'),
-      'Swaibian und Swaibian und Swaibian',
+      postCorrectTranscript('swebian und swevian und svaibian und svabian'),
+      'Swaibian und Swaibian und Swaibian und Swaibian',
     );
   });
 

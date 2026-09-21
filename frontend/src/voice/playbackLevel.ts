@@ -31,6 +31,10 @@ export const createPlaybackLevelSource = (
     const analyser = context.createAnalyser()
     analyser.fftSize = 256
     source.connect(analyser)
+    // CRITICAL: attaching a MediaElementSource ROUTES the element's output
+    // through this graph — without a destination the audio is silently muted
+    // ("streaming but no sound"). Always terminate the chain at the speakers.
+    analyser.connect(context.destination)
 
     if (context.state === 'suspended') {
       void context.resume().catch(() => undefined)
