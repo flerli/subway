@@ -166,6 +166,7 @@ export function AssistantSettingsPanel({
             ttsEnabled: prefs.ttsEnabled,
             voice: prefs.voice,
             volume: prefs.volume,
+            speed: prefs.speed,
           })
           setVoiceRequestState('idle')
         }
@@ -335,12 +336,14 @@ export function AssistantSettingsPanel({
         ttsEnabled: voicePrefs.ttsEnabled,
         voice: voicePrefs.voice,
         volume: voicePrefs.volume,
+        speed: voicePrefs.speed,
       })
       setVoicePrefs(saved)
       setVoicePrefsState({
         ttsEnabled: saved.ttsEnabled,
         voice: saved.voice,
         volume: saved.volume,
+        speed: saved.speed,
       })
       setVoiceRequestState('saved')
       setVoiceStatusMessage(widgetText.copy.voiceSavedState)
@@ -366,7 +369,7 @@ export function AssistantSettingsPanel({
     setPlayingVoiceSample(voice)
 
     try {
-      const sample = await fetchVoiceSample(voice, languageCode)
+      const sample = await fetchVoiceSample(voice, languageCode, voicePrefs.speed)
       const audio = new Audio(sample.audioDataUrl)
       sampleAudioRef.current = audio
       audio.volume = 0.8
@@ -717,6 +720,28 @@ export function AssistantSettingsPanel({
               }
               aria-label={widgetText.copy.voiceVolumeLabel}
             />
+          </label>
+
+          <label className="settings-toggle">
+            <span>{widgetText.copy.voiceSpeedLabel}</span>
+            <input
+              className="settings-range"
+              type="range"
+              min={0.75}
+              max={1.5}
+              step={0.05}
+              value={voicePrefs.speed}
+              onChange={(event) =>
+                setVoicePrefs((current) => ({
+                  ...current,
+                  speed: Number(event.target.value),
+                }))
+              }
+              aria-label={widgetText.copy.voiceSpeedLabel}
+            />
+            <strong className="settings-runtime-value">
+              {`${voicePrefs.speed.toFixed(2)}x`}
+            </strong>
           </label>
         </div>
 

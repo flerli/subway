@@ -13,8 +13,9 @@ volume) with sample playback, persisted behind cookie-session auth.
 ## Shall Statements (draft)
 
 1. Prefs SHALL store per user in `voice_preferences` (PK `owner_user_id`):
-   `ttsEnabled` (boolean), `voice` (M1–M5/F1–F5 enum), `volume` (0–100 int);
-   defaults `{true, 'F1', 80}` for new users (SWE3-B-03 implemented).
+   `ttsEnabled` (boolean), `voice` (M1–M5/F1–F5 enum), `volume` (0–100 int),
+   `speed` (0.75–1.5, default 1.2);
+   defaults `{true, 'F1', 80, 1.2}` for new users (SWE3-B-03 implemented).
 2. `GET/PUT /api/voice/preferences` + `GET /api/voice/samples/:voice?lang=`
    SHALL require authentication (global `/api/*` gate → 401); PUT SHALL
    reject unknown voices and out-of-range volume (400). Cross-user denial +

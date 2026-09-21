@@ -24,6 +24,9 @@ DEFAULT_STEPS = 8
 MIN_STEPS = 5
 MAX_STEPS = 12
 MAX_TEXT_CHARS = 1000
+DEFAULT_SPEED = 1.2
+MIN_SPEED = 0.75
+MAX_SPEED = 1.5
 
 PRESET_VOICES = ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
 
@@ -129,6 +132,8 @@ def run_synth(args):
 
     lang = normalize_lang(args.lang)
     steps = max(MIN_STEPS, min(MAX_STEPS, int(args.steps or DEFAULT_STEPS)))
+    speed = float(args.speed or DEFAULT_SPEED)
+    speed = max(MIN_SPEED, min(MAX_SPEED, speed))
 
     if (args.format or "wav").lower() != "wav":
         return fail("Unsupported format '%s' (wav only)." % (args.format or ""))
@@ -162,7 +167,7 @@ def run_synth(args):
             auto_download=not args.offline,
         )
         style = tts.get_voice_style(voice_name=voice)
-        result = tts.synthesize(text, voice_style=style, total_steps=steps, lang=lang)
+        result = tts.synthesize(text, voice_style=style, total_steps=steps, lang=lang, speed=speed)
         samples = result[0]
     except Exception as exc:  # noqa: BLE001 - reported as JSON, never raised
         log_diagnostic("synthesis failed: %s\n%s" % (exc, traceback.format_exc()))
@@ -190,6 +195,7 @@ def run_synth(args):
             "duration_seconds": round(frames / rate, 3) if rate else 0,
             "voice": voice,
             "language": lang,
+            "speed": speed,
             "mime_type": "audio/wav",
             "sample_rate": rate,
             "channels": channels,
@@ -210,6 +216,7 @@ def main(argv=None):
     parser.add_argument("--model-dir", default=default_model_dir())
     parser.add_argument("--offline", action="store_true")
     parser.add_argument("--steps", type=int, default=DEFAULT_STEPS)
+    parser.add_argument("--speed", type=float, default=DEFAULT_SPEED)
     args = parser.parse_args(argv)
 
     if args.probe:

@@ -26,14 +26,14 @@ fail-closed.
    SHALL require cookie-session auth (global `/api/*` gate) with per-user
    cache separation.
 4. `POST /api/voice/synthesize` SHALL validate text (1–1000 chars), voice
-   (preset enum), and language (known or `na` fallback); SHALL serve keyed
-   cache hits (`SHA256(sdkVersion|text|voice|lang)`) and synthesize misses;
+   (preset enum), and language (known or `na` fallback); SHALL serve keyed cache hits (`SHA256(sdkVersion|text|voice|lang|speed)`) and synthesize misses;
    SHALL fail closed (401 unauthenticated, 400 invalid, 503 engine down,
    504 timeout, 500 unexpected) without logging text, audio, or secrets.
 5. Disk cache SHALL live per user under `backend/data/voice-cache/`,
    evicted by age (7 days) and total size (500 MB), oldest first; raw text
    SHALL never appear in file names.
-6. The frontend client (`synthesizeVoice`) SHALL return playable
+6. Synthesis SHALL honor a speaking-speed multiplier (0.75–1.5, default 1.2 = 15% faster than the SDK's 1.05 baseline); speed is part of the cache key so each speed is its own cached rendering.
+7. The frontend client (`synthesizeVoice`) SHALL return playable
    `data:audio/mpeg` + `durationMs`, parsing only verified WAV (PCM/float,
    any rate/channel → mono) and encoding 64 kbps mono MP3 in 1152-sample
    frames — never labeling non-audio as MP3.

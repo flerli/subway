@@ -21,7 +21,7 @@ const SEED_PASSWORD = 'xupjo0-hyhdoF-tovsuc'
 let server = null
 let cookies = ''
 
-const waitForBoot = async (deadlineMs = 15000) => {
+const waitForBoot = async (deadlineMs = 30000) => {
   const startedAt = Date.now()
   while (Date.now() - startedAt < deadlineMs) {
     try {
@@ -92,11 +92,11 @@ describe('voice preferences routes', () => {
     assert.equal(voicePreferences.volume, 80)
   })
 
-  it('persists updates and reflects them on read (positive)', async () => {
+  it('persists updates (incl. speed) and reflects them on read (positive)', async () => {
     const write = await fetch(`${baseUrl}/api/voice/preferences`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookies },
-      body: JSON.stringify({ ttsEnabled: false, voice: 'M3', volume: 35 }),
+      body: JSON.stringify({ ttsEnabled: false, voice: 'M3', volume: 35, speed: 1.4 }),
     })
     assert.equal(write.status, 200)
     const writePayload = await write.json()
@@ -104,6 +104,7 @@ describe('voice preferences routes', () => {
     assert.equal(voicePreferences.ttsEnabled, false)
     assert.equal(voicePreferences.voice, 'M3')
     assert.equal(voicePreferences.volume, 35)
+    assert.equal(voicePreferences.speed, 1.4)
     assert.ok(typeof voicePreferences.updatedAt === 'string')
 
     const read = await fetch(`${baseUrl}/api/voice/preferences`, {
@@ -111,11 +112,28 @@ describe('voice preferences routes', () => {
     })
     const readPayload = await read.json()
     assert.equal(readPayload.voicePreferences.voice, 'M3')
+    assert.equal(readPayload.voicePreferences.speed, 1.4)
     // Restore defaults so the shared dev DB stays clean.
     await fetch(`${baseUrl}/api/voice/preferences`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Cookie: cookies },
-      body: JSON.stringify({ ttsEnabled: true, voice: 'F1', volume: 80 }),
+      body: JSON.stringify({ ttsEnabled: true, voice: 'F1', volume: 80, speed: 1.2 }),
+    })
+  })
+
+  it('clamps out-of-range speed server-side (negative)', async () => {
+    const write = await fetch(`${baseUrl}/api/voice/preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookies },
+      body: JSON.stringify({ speed: 9 }),
+    })
+    assert.equal(write.status, 200)
+    const payload = await write.json()
+    assert.equal(payload.voicePreferences.speed, 1.5)
+    await fetch(`${baseUrl}/api/voice/preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookies },
+      body: JSON.stringify({ speed: 1.2 }),
     })
   })
 

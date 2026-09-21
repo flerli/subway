@@ -13,12 +13,15 @@ export interface VoicePrefsState {
   ttsEnabled: boolean
   voice: string
   volume: number
+  /** Speaking speed multiplier (1.0 neutral; default 1.2 = 15% faster). */
+  speed: number
 }
 
 export const DEFAULT_VOICE_PREFS: VoicePrefsState = {
   ttsEnabled: true,
   voice: 'F1',
   volume: 80,
+  speed: 1.2,
 }
 
 let currentState: VoicePrefsState = { ...DEFAULT_VOICE_PREFS }
@@ -29,11 +32,16 @@ export const getVoicePrefsState = (): VoicePrefsState => currentState
 export const setVoicePrefsState = (next: VoicePrefsState): void => {
   const voice = next.voice.trim().toUpperCase()
   const volume = Math.min(100, Math.max(0, Math.round(next.volume)))
+  const speed =
+    typeof next.speed === 'number' && Number.isFinite(next.speed)
+      ? Math.min(1.5, Math.max(0.75, next.speed))
+      : DEFAULT_VOICE_PREFS.speed
 
   currentState = {
     ttsEnabled: next.ttsEnabled === true,
     voice: voice.length > 0 ? voice : DEFAULT_VOICE_PREFS.voice,
     volume: Number.isFinite(volume) ? volume : DEFAULT_VOICE_PREFS.volume,
+    speed,
   }
 
   for (const listener of listeners) {

@@ -20,6 +20,7 @@ export interface VoicePlaybackPrefs {
   ttsEnabled: boolean
   voice: string
   volume: number
+  speed: number
 }
 
 export interface PlayableAudio {
@@ -49,7 +50,12 @@ export interface OutputLevelSource {
 export type OutputLevelsFactory = (player: PlayableAudio) => OutputLevelSource | null
 
 export interface VoicePlaybackDeps {
-  readonly synthesize?: (chunk: { text: string; voice: string; lang: string }) => Promise<VoiceSynthesisResult>
+  readonly synthesize?: (chunk: {
+    text: string
+    voice: string
+    lang: string
+    speed: number
+  }) => Promise<VoiceSynthesisResult>
   readonly createPlayer?: AudioPlayerFactory
   readonly createOutputLevels?: OutputLevelsFactory
   readonly getPrefs?: () => VoicePlaybackPrefs
@@ -70,6 +76,7 @@ const defaultPrefs = (): VoicePlaybackPrefs => ({
   ttsEnabled: true,
   voice: 'F1',
   volume: 80,
+  speed: 1.2,
 })
 
 export class VoicePlaybackController {
@@ -193,7 +200,10 @@ export class VoicePlaybackController {
     this.outputLevels = null
   }
 
-  private speakChunk(chunk: { text: string; voice: string; lang: string }, onEnd: () => void): void {
+  private speakChunk(
+    chunk: { text: string; voice: string; lang: string; speed: number },
+    onEnd: () => void,
+  ): void {
     const player = this.createPlayer()
     this.player = player
     player.volume = this.prefs().volume / 100
@@ -256,7 +266,7 @@ export class VoicePlaybackController {
       }
 
       await new Promise<void>((resolveEnd) => {
-        this.speakChunk({ text: chunk, voice: prefs.voice, lang }, resolveEnd)
+        this.speakChunk({ text: chunk, voice: prefs.voice, lang, speed: prefs.speed }, resolveEnd)
       })
     }
 

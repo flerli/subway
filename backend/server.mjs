@@ -19,12 +19,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 import {
+  VOICE_DEFAULT_SPEED,
   buildVoiceCacheKey,
   ensureVoiceCacheDir,
   evictVoiceCache,
   lookupVoiceCache,
   normalizeTtsLang,
   normalizeVoiceName,
+  normalizeVoiceSpeed,
   sanitizeVoiceUserId,
   storeVoiceCache,
   validateSynthesisText,
@@ -1417,6 +1419,7 @@ const createVoicePreferencesTableSql = `
     tts_enabled INTEGER NOT NULL DEFAULT 1,
     voice TEXT NOT NULL DEFAULT 'F1',
     volume INTEGER NOT NULL DEFAULT 80,
+    speed REAL NOT NULL DEFAULT 1.2,
     updated_at TEXT NOT NULL
   )
 `
@@ -1529,6 +1532,30 @@ db.exec(createAssistantMessagesTableSql)
 db.exec(createAssistantMessageEventsTableSql)
 db.exec(createAssistantToolApprovalRequestsTableSql)
 db.exec(createVoicePreferencesTableSql)
+
+// Migration: older voice_preferences tables predate the speed column.
+// Tolerates concurrent boot (multiple server processes may race the ALTER
+// on the same dev DB file during tests) — never crash the app on migration.
+try {
+  const voicePrefsColumns = db
+    .prepare('PRAGMA table_info(voice_preferences)')
+    .all()
+    .map((column) => column.name)
+
+  if (!voicePrefsColumns.includes('speed')) {
+    try {
+      db.exec('ALTER TABLE voice_preferences ADD COLUMN speed REAL NOT NULL DEFAULT 1.2')
+    } catch (error) {
+      console.warn('[voice] speed migration raced another boot; column will be rechecked.', {
+        reason: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+} catch (error) {
+  console.warn('[voice] speed migration check failed; continuing.', {
+    reason: error instanceof Error ? error.message : String(error),
+  })
+}
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
   ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
@@ -5402,6 +5429,7 @@ const DEFAULT_VOICE_PREFS = Object.freeze({
   ttsEnabled: true,
   voice: 'F1',
   volume: 80,
+  speed: VOICE_DEFAULT_SPEED,
 })
 
 const normalizeVoicePrefsRow = (row) => ({
@@ -5411,6 +5439,7 @@ const normalizeVoicePrefsRow = (row) => ({
     typeof row?.volume === 'number' && row.volume >= 0 && row.volume <= 100
       ? row.volume
       : DEFAULT_VOICE_PREFS.volume,
+  speed: normalizeVoiceSpeed(row?.speed),
   updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
 })
 
@@ -5418,25 +5447,26 @@ const selectVoicePreferences = (ownerUserId) =>
   normalizeVoicePrefsRow(
     db
       .prepare(`
-        SELECT tts_enabled, voice, volume, updated_at
+        SELECT tts_enabled, voice, volume, speed, updated_at
         FROM voice_preferences
         WHERE owner_user_id = ?
       `)
       .get(ownerUserId),
   )
 
-const upsertVoicePreferences = (ownerUserId, { ttsEnabled, voice, volume }) => {
+const upsertVoicePreferences = (ownerUserId, { ttsEnabled, voice, volume, speed }) => {
   const now = new Date().toISOString()
   db.prepare(`
-    INSERT INTO voice_preferences (owner_user_id, tts_enabled, voice, volume, updated_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO voice_preferences (owner_user_id, tts_enabled, voice, volume, speed, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(owner_user_id)
     DO UPDATE SET
       tts_enabled = excluded.tts_enabled,
       voice = excluded.voice,
       volume = excluded.volume,
+      speed = excluded.speed,
       updated_at = excluded.updated_at
-  `).run(ownerUserId, ttsEnabled ? 1 : 0, voice, volume, now)
+  `).run(ownerUserId, ttsEnabled ? 1 : 0, voice, volume, speed, now)
 
   return selectVoicePreferences(ownerUserId)
 }
@@ -8939,7 +8969,7 @@ const sendAuthenticationRequired = (response, authContext) => {
 }
 
 /** Shared synth pipeline: cache-first WAV bytes per user (SW-REQ-013-02). */
-const synthesizeVoiceWavBytes = async ({ text, voice, lang, ownerUserId }) => {
+const synthesizeVoiceWavBytes = async ({ text, voice, lang, speed = VOICE_DEFAULT_SPEED, ownerUserId }) => {
   const safeUserId = sanitizeVoiceUserId(ownerUserId)
 
   if (!safeUserId) {
@@ -8947,7 +8977,8 @@ const synthesizeVoiceWavBytes = async ({ text, voice, lang, ownerUserId }) => {
   }
 
   try {
-    const key = buildVoiceCacheKey({ text, voice, lang })
+    const normalizedSpeed = normalizeVoiceSpeed(speed)
+    const key = buildVoiceCacheKey({ text, voice, lang, speed: normalizedSpeed })
     ensureVoiceCacheDir(voiceCacheDirectory, safeUserId)
     const filePath = voiceCacheFilePath({ cacheDir: voiceCacheDirectory, userId: safeUserId, key })
     let audioBytes = lookupVoiceCache(filePath)
@@ -8963,6 +8994,7 @@ const synthesizeVoiceWavBytes = async ({ text, voice, lang, ownerUserId }) => {
         text,
         voice,
         lang,
+        speed: normalizedSpeed,
         outputFile: tmpPath,
         timeoutMs: TTS_SYNTH_TIMEOUT_MS,
       })
@@ -10061,7 +10093,8 @@ const server = createServer(async (request, response) => {
     }
 
     const lang = normalizeTtsLang(body?.lang)
-    const outcome = await synthesizeVoiceWavBytes({ text, voice, lang, ownerUserId })
+    const speed = normalizeVoiceSpeed(body?.speed)
+    const outcome = await synthesizeVoiceWavBytes({ text, voice, lang, speed, ownerUserId })
 
     if (!outcome.ok) {
       if (outcome.code === 'timeout') {
@@ -10087,6 +10120,7 @@ const server = createServer(async (request, response) => {
         mimeType: 'audio/wav',
         voice,
         language: lang,
+        speed,
         cacheHit: outcome.cacheHit,
       },
     })
@@ -10129,8 +10163,12 @@ const server = createServer(async (request, response) => {
       return
     }
 
+    const speed = normalizeVoiceSpeed(
+      typeof body?.speed === 'number' ? body.speed : current.speed,
+    )
+
     sendJson(response, 200, {
-      voicePreferences: upsertVoicePreferences(ownerUserId, { ttsEnabled, voice, volume }),
+      voicePreferences: upsertVoicePreferences(ownerUserId, { ttsEnabled, voice, volume, speed }),
     })
     return
   }
@@ -10144,8 +10182,13 @@ const server = createServer(async (request, response) => {
     }
 
     const lang = normalizeTtsLang(requestUrl.searchParams.get('lang'))
+    const speed = normalizeVoiceSpeed(
+      requestUrl.searchParams.has('speed')
+        ? Number(requestUrl.searchParams.get('speed'))
+        : undefined,
+    )
     const sampleText = VOICE_SAMPLE_TEXTS[lang] ?? VOICE_SAMPLE_TEXTS.en
-    const outcome = await synthesizeVoiceWavBytes({ text: sampleText, voice, lang, ownerUserId })
+    const outcome = await synthesizeVoiceWavBytes({ text: sampleText, voice, lang, speed, ownerUserId })
 
     if (!outcome.ok) {
       const engineUnavailable = /missing|unavailable|not installed|repair/i.test(outcome.message ?? '')
@@ -10171,6 +10214,7 @@ const server = createServer(async (request, response) => {
         mimeType: 'audio/wav',
         voice,
         language: lang,
+        speed,
         cacheHit: outcome.cacheHit,
       },
     })

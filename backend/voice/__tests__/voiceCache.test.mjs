@@ -10,6 +10,7 @@ import {
   lookupVoiceCache,
   normalizeTtsLang,
   normalizeVoiceName,
+  normalizeVoiceSpeed,
   sanitizeVoiceUserId,
   storeVoiceCache,
   validateSynthesisText,
@@ -42,6 +43,19 @@ describe('voiceCache keys', () => {
     assert.notEqual(base, buildVoiceCacheKey({ text: 'Hallo', voice: 'F1', lang: 'de' }))
     assert.notEqual(base, buildVoiceCacheKey({ text: 'Hallo', voice: 'M1', lang: 'en' }))
     assert.notEqual(base, buildVoiceCacheKey({ text: 'Hallo!', voice: 'M1', lang: 'de' }))
+  })
+
+  it('separates speaking speed (positive: no cross-speed serving)', () => {
+    const slow = buildVoiceCacheKey({ text: 'Hallo', voice: 'F1', lang: 'de', speed: 1.0 })
+    const fast = buildVoiceCacheKey({ text: 'Hallo', voice: 'F1', lang: 'de', speed: 1.5 })
+    assert.notEqual(slow, fast)
+  })
+
+  it('clamps speed into the supported range (negative: bad input)', () => {
+    assert.equal(normalizeVoiceSpeed(2.0), 1.5)
+    assert.equal(normalizeVoiceSpeed(0.2), 0.75)
+    assert.equal(normalizeVoiceSpeed(Number.NaN), 1.2)
+    assert.equal(normalizeVoiceSpeed('fast'), 1.2)
   })
 
   it('versions the SDK pin (positive: upgrades invalidate)', () => {

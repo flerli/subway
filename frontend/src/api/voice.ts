@@ -14,14 +14,27 @@ export interface VoicePreferencesRecord {
   ttsEnabled: boolean
   voice: string
   volume: number
+  /** Speaking speed multiplier (1.0 neutral; default 1.2 = 15% faster than baseline). */
+  speed: number
   updatedAt: string | null
 }
+
+export const VOICE_SPEED_MIN = 0.75
+export const VOICE_SPEED_MAX = 1.5
+export const VOICE_DEFAULT_SPEED = 1.2
 
 export const DEFAULT_VOICE_PREFS: VoicePreferencesRecord = {
   ttsEnabled: true,
   voice: 'F1',
   volume: 80,
+  speed: VOICE_DEFAULT_SPEED,
   updatedAt: null,
+}
+
+export const normalizeVoiceSpeed = (value: unknown): number => {
+  const speed = typeof value === 'number' && Number.isFinite(value) ? value : VOICE_DEFAULT_SPEED
+
+  return Math.min(VOICE_SPEED_MAX, Math.max(VOICE_SPEED_MIN, speed))
 }
 
 export type VoicePreferencesInput = Omit<VoicePreferencesRecord, 'updatedAt'>
@@ -36,6 +49,7 @@ interface VoiceSamplePayload {
     mimeType?: unknown
     voice?: unknown
     language?: unknown
+    speed?: unknown
     cacheHit?: unknown
   }
   error?: unknown
@@ -52,6 +66,7 @@ const normalizeVoicePreferences = (
     ttsEnabled?: unknown
     voice?: unknown
     volume?: unknown
+    speed?: unknown
     updatedAt?: unknown
   }
 
@@ -71,6 +86,7 @@ const normalizeVoicePreferences = (
     ttsEnabled: candidate.ttsEnabled === true,
     voice: voice ?? DEFAULT_VOICE_PREFS.voice,
     volume: volume ?? DEFAULT_VOICE_PREFS.volume,
+    speed: normalizeVoiceSpeed(candidate.speed),
     updatedAt:
       typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
   }
@@ -121,6 +137,7 @@ export interface VoiceSampleResult {
   durationMs: number
   voice: string
   language: string
+  speed: number
   cacheHit: boolean
 }
 
@@ -128,8 +145,12 @@ export interface VoiceSampleResult {
 export const fetchVoiceSample = async (
   voice: string,
   lang: string,
+  speed: number = VOICE_DEFAULT_SPEED,
 ): Promise<VoiceSampleResult> => {
-  const search = new URLSearchParams({ lang })
+  const search = new URLSearchParams({
+    lang,
+    speed: String(normalizeVoiceSpeed(speed)),
+  })
   const response = await fetchApi(
     `/voice/samples/${encodeURIComponent(voice)}?${search.toString()}`,
   )
@@ -161,6 +182,7 @@ export const fetchVoiceSample = async (
     voice: typeof payload.voice.voice === 'string' ? payload.voice.voice : voice,
     language:
       typeof payload.voice.language === 'string' ? payload.voice.language : lang,
+    speed: normalizeVoiceSpeed(payload.voice.speed),
     cacheHit: payload.voice.cacheHit === true,
   }
 }

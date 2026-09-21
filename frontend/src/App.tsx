@@ -1291,6 +1291,7 @@ function App() {
       ttsEnabled: voicePrefsLive.ttsEnabled,
       voice: voicePrefsLive.voice,
       volume: voicePrefsLive.volume,
+      speed: voicePrefsLive.speed,
     }),
     language: () => selectedLanguageCode,
     // Fail closed with user-facing copy (SW-REQ-013-04): a dead TTS engine
@@ -1741,6 +1742,7 @@ function App() {
                   ttsEnabled: voicePreferences.ttsEnabled,
                   voice: voicePreferences.voice,
                   volume: voicePreferences.volume,
+                  speed: voicePreferences.speed,
                 })
               }
             })

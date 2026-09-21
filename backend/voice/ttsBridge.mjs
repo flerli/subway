@@ -203,6 +203,7 @@ export const synthesizeSpeech = async ({
   text,
   voice,
   lang,
+  speed = 1.2,
   outputFile,
   steps = 8,
   timeoutMs = TTS_BRIDGE_TIMEOUT_MS,
@@ -215,6 +216,7 @@ export const synthesizeSpeech = async ({
     '--output-file', outputFile,
     '--format', 'wav',
     '--steps', String(steps),
+    '--speed', String(speed),
   ]
   if (modelDir) {
     args.push('--model-dir', modelDir)

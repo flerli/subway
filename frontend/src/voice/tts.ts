@@ -41,6 +41,7 @@ export interface VoiceSynthesisResult {
   readonly durationMs: number
   readonly voice: string
   readonly language: string
+  readonly speed: number
   readonly cacheHit: boolean
 }
 
@@ -78,6 +79,7 @@ interface VoiceSynthesizePayload {
     mimeType?: unknown
     voice?: unknown
     language?: unknown
+    speed?: unknown
     cacheHit?: unknown
   }
   error?: unknown
@@ -338,10 +340,12 @@ export const synthesizeVoice = async ({
   text,
   voice,
   lang,
+  speed = 1.2,
 }: {
   text: string
   voice: string
   lang: string
+  speed?: number
 }): Promise<VoiceSynthesisResult> => {
   const trimmed = text.trim()
 
@@ -353,7 +357,12 @@ export const synthesizeVoice = async ({
   const response = await fetchApi('/voice/synthesize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: trimmed, voice, lang }),
+    body: JSON.stringify({
+      text: trimmed,
+      voice,
+      lang,
+      speed: Number.isFinite(speed) ? Math.min(1.5, Math.max(0.75, speed)) : 1.2,
+    }),
   })
 
   if (response.status === 401) {
@@ -397,6 +406,10 @@ export const synthesizeVoice = async ({
     durationMs,
     voice: result.voice,
     language: result.language,
+    speed:
+      typeof result.speed === 'number' && Number.isFinite(result.speed)
+        ? Math.min(1.5, Math.max(0.75, result.speed))
+        : 1.2,
     cacheHit: result.cacheHit === true,
   }
 }

@@ -48,6 +48,7 @@ const makeHarness = (
         durationMs: 1000,
         voice: chunk.voice,
         language: chunk.lang,
+        speed: chunk.speed,
         cacheHit: false,
       };
     },
@@ -73,7 +74,7 @@ const makeHarness = (
         },
       };
     },
-    getPrefs: () => ({ ttsEnabled: true, voice: 'F1', volume: 80 }),
+    getPrefs: () => ({ ttsEnabled: true, voice: 'F1', volume: 80, speed: 1.2 }),
     language: () => 'de',
     onError: (code) => {
       errors.push(code);
@@ -153,7 +154,7 @@ describe('VoicePlaybackController', () => {
   });
 
   it('stays silent when TTS is disabled (negative)', async () => {
-    const harness = makeHarness({ getPrefs: () => ({ ttsEnabled: false, voice: 'M1', volume: 50 }) });
+    const harness = makeHarness({ getPrefs: () => ({ ttsEnabled: false, voice: 'M1', volume: 50, speed: 1.2 }) });
     await harness.controller.enqueueMessage('msg-1', 'One. Two.');
     await flush();
     assert.equal(harness.submitted.length, 0);
@@ -184,7 +185,7 @@ describe('VoicePlaybackController', () => {
   });
 
   it('applies the voice prefs to synthesis (positive)', async () => {
-    const harness = makeHarness({ getPrefs: () => ({ ttsEnabled: true, voice: 'M3', volume: 60 }) });
+    const harness = makeHarness({ getPrefs: () => ({ ttsEnabled: true, voice: 'M3', volume: 60, speed: 1.2 }) });
     await harness.controller.enqueueMessage('msg-1', 'One. Two. Three.');
     await flush();
     assert.ok(harness.submitted.every((chunk) => chunk.voice === 'M3'));

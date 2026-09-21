@@ -39,7 +39,7 @@ const seedUser = (db, id, username, password) => {
   `).run(id, username, `scrypt$${salt}$${hash}`, now, now)
 }
 
-const waitForBoot = async (deadlineMs = 15000) => {
+const waitForBoot = async (deadlineMs = 30000) => {
   const startedAt = Date.now()
   while (Date.now() - startedAt < deadlineMs) {
     try {

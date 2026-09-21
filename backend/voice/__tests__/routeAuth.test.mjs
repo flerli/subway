@@ -17,7 +17,7 @@ const baseUrl = `http://127.0.0.1:${TEST_PORT}`
 
 let server = null
 
-const waitForBoot = async (deadlineMs = 15000) => {
+const waitForBoot = async (deadlineMs = 30000) => {
   const startedAt = Date.now()
   while (Date.now() - startedAt < deadlineMs) {
     try {

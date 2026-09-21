@@ -21,6 +21,22 @@ export const VOICE_PRESET_VOICES = Object.freeze([
   'M1', 'M2', 'M3', 'M4', 'M5', 'F1', 'F2', 'F3', 'F4', 'F5',
 ])
 
+/** Speaking-speed range (Supertonic `speed` parameter, 1.0 = neutral). */
+export const VOICE_SPEED_MIN = 0.75
+export const VOICE_SPEED_MAX = 1.5
+
+/**
+ * Default speaking speed: 15% faster than the SDK's 1.05 baseline
+ * (1.05 × 1.15 ≈ 1.21) — user-chosen default for assistant answers.
+ */
+export const VOICE_DEFAULT_SPEED = 1.2
+
+/** Clamp any speed into the supported range; non-finite falls back to default. */
+export const normalizeVoiceSpeed = (value) => {
+  const speed = typeof value === 'number' && Number.isFinite(value) ? value : VOICE_DEFAULT_SPEED
+  return Math.min(VOICE_SPEED_MAX, Math.max(VOICE_SPEED_MIN, speed))
+}
+
 export const VOICE_TTS_LANGS = Object.freeze([
   'en', 'ko', 'ja', 'ar', 'bg', 'cs', 'da', 'de', 'el', 'es', 'et',
   'fi', 'fr', 'hi', 'hr', 'hu', 'id', 'it', 'lt', 'lv', 'nl', 'pl',
@@ -60,9 +76,9 @@ export const sanitizeVoiceUserId = (userId) => {
   return safe.length > 0 ? safe : null
 }
 
-export const buildVoiceCacheKey = ({ text, voice, lang, sdkVersion = VOICE_SDK_VERSION }) =>
+export const buildVoiceCacheKey = ({ text, voice, lang, speed = VOICE_DEFAULT_SPEED, sdkVersion = VOICE_SDK_VERSION }) =>
   createHash('sha256')
-    .update(`${sdkVersion}|${text}|${voice}|${lang}`, 'utf8')
+    .update(`${sdkVersion}|${text}|${voice}|${lang}|${normalizeVoiceSpeed(speed)}`, 'utf8')
     .digest('hex')
 
 export const voiceCacheFilePath = ({ cacheDir, userId, key }) =>
