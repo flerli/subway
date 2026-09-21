@@ -191,6 +191,33 @@ The intended public route is `https://client.scaico.com/subway/`, which requires
 
 The backend readiness checks use `/api/auth/session`, which remains publicly readable even after the authenticated data endpoints are locked down.
 
+## Subway MCP (widget tools for SCAICO agents)
+
+Subway exposes every widget function as an MCP server so SCAICO team agents can
+call them directly (no client round-trip), scoped to the logged-in user.
+
+- **Endpoint**: `POST /mcp` (Streamable HTTP, JSON responses) on the backend,
+  publicly reachable via the reverse proxy — set `SUBWAY_MCP_PUBLIC_URL`
+  (e.g. `https://client.scaico.com/subway/mcp`).
+- **Auth**: `Authorization: Bearer <MCP session key>`. Keys are minted per
+  user (`POST /api/assistant/mcp-session` for diagnostics) and stored hashed
+  in `user_mcp_sessions`; the compound form `<key>:<userId>` is accepted and
+  scope-checked, matching the documented injection pattern
+  (`misc/mcp_tool_injection_init_team_howto.md`).
+- **Tools**: generated from the widget definitions —
+  `npm --prefix frontend run generate:mcp-catalog` writes
+  `backend/mcp/widgetTools.generated.json` (31 tools across 7 widgets).
+  Regenerate and commit it whenever widget tools change.
+- **Injection**: on assistant thread creation the backend attaches the MCP
+  server + tool list to every agent of the configured SCAICO team and creates
+  the meeting with `mcp_session_tokens` (best-effort, never blocks chat).
+  Force/refresh with `POST /api/assistant/mcp-injection`.
+- **Env**: `SCAICO_API_URL` (default `https://www.scaico.com`), `SCAICO_API_KEY`,
+  `SCAICO_TEAM_ID`, `SCAICO_PROJECT_ID` (optional), `SUBWAY_MCP_PUBLIC_URL`.
+- **Approval-gated tools** (e.g. deleting calendar events) fail closed over
+  MCP — they require the Subway UI.
+- **Tests**: `npm --prefix backend run test:mcp`.
+
 ## Persistence safety
 
 - Local Docker runs use the named volume `subway_subway-data`, so normal rebuilds and restarts do not wipe the database.

@@ -11,6 +11,7 @@ RUN npm install --omit=dev
 COPY server.mjs ./server.mjs
 COPY voice/ ./voice/
 COPY tts_helper/ ./tts_helper/
+COPY mcp/ ./mcp/
 COPY scripts/ ./scripts/
 
 # TTS engine (SW-REQ-013-02): python3 + venv with supertonic, then stage the

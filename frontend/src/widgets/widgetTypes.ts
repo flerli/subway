@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import type { AppTextBundle } from '../i18n/appText'
-import type { SupportedLanguageCode } from '../i18n/localization'
+import type { AppTextBundle } from '../i18n/appText.ts'
+import type { SupportedLanguageCode } from '../i18n/localization.ts'
 
 export type WidgetId = string
 export type WidgetCapability = 'read' | 'write'

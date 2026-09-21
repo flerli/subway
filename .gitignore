@@ -7,3 +7,5 @@ backend/data/*
 # `npm --prefix frontend run fetch:voice-models` (frontend/Dockerfile does this
 # at image build time). Never commit the binaries.
 /frontend/public/voice-models/
+/mcp-catalog-dist/
+/backend/node_modules/

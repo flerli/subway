@@ -18,6 +18,13 @@ import {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { handleSubwayMcpRequest } from './mcp/subwayMcpServer.mjs'
+import {
+  attachSubwayToolsToTeam,
+  initScaicoTeamWithSubwayMcp,
+  isScaicoInjectionConfigured,
+  readScaicoConfig,
+} from './mcp/scaicoClient.mjs'
 import {
   VOICE_DEFAULT_SPEED,
   buildVoiceCacheKey,
@@ -81,6 +88,84 @@ const TTS_SYNTH_TIMEOUT_MS = Number.parseInt(
   10,
 )
 const voiceCacheDirectory = join(dataDirectory, 'voice-cache')
+
+/**
+ * Widget MCP tool catalog for the Subway MCP server, generated from the
+ * widget definitions (`npm run generate:mcp-catalog`) so the MCP surface
+ * mirrors every widget function without hand-copying (31 tools).
+ */
+const subwayMcpWidgetToolCatalog = (() => {
+  try {
+    const rawCatalog = readFileSync(
+      join(__dirname, 'mcp', 'widgetTools.generated.json'),
+      'utf8',
+    )
+    const parsed = JSON.parse(rawCatalog)
+
+    return Array.isArray(parsed?.tools) ? parsed.tools : []
+  } catch (error) {
+    console.warn('[mcp] widget tool catalog unavailable — run "npm run generate:mcp-catalog"', {
+      reason: error instanceof Error ? error.message : String(error),
+    })
+    return []
+  }
+})()
+
+/** Public base URL agents use to reach this MCP server (injected into SCAICO). */
+const SUBWAY_MCP_PUBLIC_URL = process.env.SUBWAY_MCP_PUBLIC_URL ?? ''
+
+/**
+ * Inject the Subway MCP (url + widget tool list + a fresh per-user session
+ * key) into the configured SCAICO team: attach tools to every agent, then
+ * create the meeting with `mcp_session_tokens` (howto
+ * `misc/mcp_tool_injection_init_team_howto.md`). Best-effort by design — a
+ * failure never blocks the chat flow.
+ */
+const ensureSubwayMcpInjectionForUser = async ({ ownerUserId, title = undefined }) => {
+  const scaicoConfig = readScaicoConfig()
+
+  if (!isScaicoInjectionConfigured(scaicoConfig)) {
+    return {
+      configured: false,
+      reason:
+        'Set SCAICO_API_KEY, SCAICO_TEAM_ID and SUBWAY_MCP_PUBLIC_URL to enable MCP injection.',
+    }
+  }
+
+  const sessionKey = createUserMcpSessionRecord(ownerUserId)
+  const tools = buildSubwayMcpWidgetTools(ownerUserId).map((tool) => tool.name)
+  const attachment = await attachSubwayToolsToTeam(scaicoConfig, scaicoConfig.teamId, {
+    tools,
+  })
+  const meeting = await initScaicoTeamWithSubwayMcp(scaicoConfig, {
+    title,
+    sessionKey,
+    userId: ownerUserId,
+  })
+  const failedAttachments = attachment.results.filter((result) => !result.ok)
+
+  console.log('[mcp] scaico injection complete', {
+    userId: ownerUserId,
+    teamId: attachment.teamId,
+    toolCount: tools.length,
+    agentCount: attachment.agentCount,
+    failedAttachments: failedAttachments.length,
+  })
+
+  return {
+    configured: true,
+    teamId: attachment.teamId,
+    toolCount: tools.length,
+    agentCount: attachment.agentCount,
+    failedAttachments,
+    meetingId:
+      typeof meeting?.meeting_id === 'string'
+        ? meeting.meeting_id
+        : typeof meeting?.id === 'string'
+          ? meeting.id
+          : null,
+  }
+}
 
 /** Fixed per-language sample text for the voice-preview route (SW-REQ-013-03). */
 const VOICE_SAMPLE_TEXTS = Object.freeze({
@@ -1424,6 +1509,16 @@ const createVoicePreferencesTableSql = `
   )
 `
 
+const createUserMcpSessionsTableSql = `
+  CREATE TABLE IF NOT EXISTS user_mcp_sessions (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL REFERENCES users(id),
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`
+
 const defaultAppUserId = ensureInitialUserRecord()
 
 migrateOwnedTable({
@@ -1532,6 +1627,7 @@ db.exec(createAssistantMessagesTableSql)
 db.exec(createAssistantMessageEventsTableSql)
 db.exec(createAssistantToolApprovalRequestsTableSql)
 db.exec(createVoicePreferencesTableSql)
+db.exec(createUserMcpSessionsTableSql)
 
 // Migration: older voice_preferences tables predate the speed column.
 // Tolerates concurrent boot (multiple server processes may race the ALTER
@@ -5471,6 +5567,160 @@ const upsertVoicePreferences = (ownerUserId, { ttsEnabled, voice, volume, speed 
   return selectVoicePreferences(ownerUserId)
 }
 
+/**
+ * MCP session keys: minted per user (when the SCAICO team is initiated with
+ * the Subway MCP) and presented by agents on every MCP call. The hash is
+ * stored, never the token; a small per-user ring keeps only recent keys.
+ */
+const createUserMcpSessionRecord = (ownerUserId) => {
+  const mcpSessionToken = createSessionToken()
+  const now = new Date().toISOString()
+
+  db.prepare(`
+    INSERT INTO user_mcp_sessions (id, owner_user_id, token_hash, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    `user-mcp-session-${randomUUID()}`,
+    ownerUserId,
+    hashSessionToken(mcpSessionToken),
+    now,
+    now,
+  )
+
+  db.prepare(`
+    DELETE FROM user_mcp_sessions
+    WHERE owner_user_id = ?
+      AND id NOT IN (
+        SELECT id FROM user_mcp_sessions
+        WHERE owner_user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 5
+      )
+  `).run(ownerUserId, ownerUserId)
+
+  return mcpSessionToken
+}
+
+const selectUserMcpSessionByTokenHash = (tokenHash) =>
+  db
+    .prepare(`
+      SELECT
+        user_mcp_sessions.owner_user_id AS userId,
+        users.username AS username
+      FROM user_mcp_sessions
+      JOIN users ON users.id = user_mcp_sessions.owner_user_id
+      WHERE user_mcp_sessions.token_hash = ?
+    `)
+    .get(tokenHash) ?? null
+
+/** Resolve a presented MCP session key to its logged-in Subway user. */
+const resolveMcpSessionByToken = (token) => {
+  if (typeof token !== 'string' || token.length === 0) {
+    return null
+  }
+
+  // Compound form (documented howto pattern `session_token:scope`): the token
+  // part authenticates; the suffix must match the token owner when present.
+  const [sessionKey, scopeUserId] = token.split(':', 2)
+  const session = selectUserMcpSessionByTokenHash(hashSessionToken(sessionKey))
+
+  if (!session) {
+    return null
+  }
+
+  if (scopeUserId && scopeUserId !== session.userId) {
+    return null
+  }
+
+  return { userId: session.userId, username: session.username }
+}
+
+/**
+ * Widget tools available to one user over MCP: every catalog tool whose widget
+ * is registered and placed on that user's board, honoring the per-tool policy
+ * stored in the widget settings (`mcp.toolPolicies[toolName]`).
+ */
+const buildSubwayMcpWidgetTools = (ownerUserId) => {
+  const widgets = selectAllWidgets(ownerUserId)
+  const tools = []
+
+  for (const catalogEntry of subwayMcpWidgetToolCatalog) {
+    const widget = widgets.find(
+      (candidate) =>
+        candidate.widgetTypeId === catalogEntry.widgetTypeId &&
+        candidate.placementZones.length > 0,
+    )
+
+    if (!widget) {
+      continue
+    }
+
+    const settings = readAssistantWidgetSettings(ownerUserId, widget.id)
+    const policy = settings?.mcp?.toolPolicies?.[catalogEntry.name]
+
+    if (policy?.enabled === false) {
+      continue
+    }
+
+    tools.push({
+      name: catalogEntry.providerName,
+      description: catalogEntry.description,
+      inputSchema: catalogEntry.inputSchema,
+      toolName: catalogEntry.name,
+      providerToolName: catalogEntry.providerName,
+      widgetId: widget.id,
+      widgetTitle: widget.title,
+      sourceLocation: widget.sourceLocation,
+      approvalRequired:
+        typeof policy?.approvalRequired === 'boolean'
+          ? policy.approvalRequired
+          : catalogEntry.approvalRequired === true,
+      redactArguments: catalogEntry.redactArguments === true,
+      redactResults: catalogEntry.redactResults === true,
+    })
+  }
+
+  return tools
+}
+
+/**
+ * Execute one MCP tool call in the calling user's context. Approval-gated
+ * tools fail closed over MCP (they need the Subway UI); everything else runs
+ * through the same executor the in-app assistant uses.
+ */
+const callSubwayMcpToolForUser = async (ownerUserId, { toolName, arguments: toolArguments }) => {
+  const widgetTools = buildSubwayMcpWidgetTools(ownerUserId)
+  const matchedTool = widgetTools.find(
+    (tool) => tool.name === toolName || tool.toolName === toolName,
+  )
+
+  if (!matchedTool) {
+    return {
+      isError: true,
+      text: `Tool ${toolName} is not available for this user (widget not registered on the board).`,
+    }
+  }
+
+  if (matchedTool.approvalRequired) {
+    return {
+      isError: true,
+      text: `Tool ${toolName} requires user approval in the Subway UI and is not available over MCP.`,
+    }
+  }
+
+  const execution = await callAssistantMcpTool(
+    ownerUserId,
+    {
+      id: `mcp-${randomUUID()}`,
+      toolName: matchedTool.providerToolName,
+      arguments: toolArguments,
+    },
+    widgetTools,
+  )
+
+  return { text: JSON.stringify(execution.result) }
+}
+
 const selectAppPreferences = (ownerUserId) => {
   const row = db
     .prepare(`
@@ -9141,6 +9391,20 @@ const server = createServer(async (request, response) => {
     return
   }
 
+  if (requestUrl.pathname === '/mcp') {
+    // Subway MCP server (widget tools for SCAICO agents). Auth is the minted
+    // MCP session key (Bearer), NOT the cookie session.
+    await handleSubwayMcpRequest(request, response, {
+      resolveSession: resolveMcpSessionByToken,
+      listTools: buildSubwayMcpWidgetTools,
+      callTool: callSubwayMcpToolForUser,
+      log: (event, fields) => {
+        console.log(`[mcp] ${event}`, fields)
+      },
+    })
+    return
+  }
+
   if (requestUrl.pathname.startsWith('/api/') && !ownerUserId) {
     sendAuthenticationRequired(response, authContext)
     return
@@ -9273,6 +9537,36 @@ const server = createServer(async (request, response) => {
 
   if (request.method === 'GET' && requestUrl.pathname === '/api/roborock/settings') {
     sendJson(response, 200, { roborockSettings: selectRoborockSettings(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/assistant/mcp-injection') {
+    // Force/refresh the SCAICO team MCP injection for the logged-in user
+    // (ops + diagnostics; the same flow runs automatically on thread create).
+    try {
+      const summary = await ensureSubwayMcpInjectionForUser({ ownerUserId })
+      sendJson(response, 200, { mcpInjection: summary })
+    } catch (error) {
+      sendJson(response, 502, {
+        error: error instanceof Error ? error.message : 'MCP injection failed.',
+        errorCode: 'mcp_injection_failed',
+      })
+    }
+    return
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/assistant/mcp-session') {
+    // Mint a fresh MCP session key for the logged-in user; the SCAICO team
+    // injection uses the same helper when a meeting/team is initiated.
+    const token = createUserMcpSessionRecord(ownerUserId)
+
+    sendJson(response, 201, {
+      mcp: {
+        url: SUBWAY_MCP_PUBLIC_URL || `${requestUrl.protocol}//${request.headers.host ?? ''}/mcp`,
+        token,
+        tools: buildSubwayMcpWidgetTools(ownerUserId).map((tool) => tool.name),
+      },
+    })
     return
   }
 
@@ -9917,6 +10211,16 @@ const server = createServer(async (request, response) => {
       )
 
       const createdThread = selectAssistantThreadById(ownerUserId, threadId)
+
+      // Initiating a conversation with the SCAICO team: inject the Subway MCP
+      // (widget tools + a fresh per-user session key) so the team's agents can
+      // call widget tools themselves in this user's context. Best-effort.
+      void ensureSubwayMcpInjectionForUser({ ownerUserId, title }).catch((error) => {
+        console.warn('[mcp] scaico injection failed', {
+          userId: ownerUserId,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      })
 
       sendJson(response, 201, {
         thread: buildAssistantThreadPayload(createdThread),

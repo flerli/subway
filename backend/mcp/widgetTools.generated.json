@@ -1,0 +1,968 @@
+{
+  "generatedBy": "frontend/scripts/generate-mcp-catalog.mjs",
+  "sources": "/Users/flerli/01_Swaibian/Swaibian-Main_Office/05_Products/subway/frontend/src/widgets/*/mcpTools.ts",
+  "toolCount": 31,
+  "tools": [
+    {
+      "name": "widget.arrival_board.get_widget_state",
+      "providerName": "widget_arrival_board_get_widget_state",
+      "widgetTypeId": "arrival-board",
+      "description": "Get the arrival board header settings and the current list of upcoming arrivals.",
+      "humanAction": "Read the arrival board in its default or member-focused view.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "focusedMemberId": {
+            "type": "string",
+            "description": "Optional member id to focus the arrival board on one person."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.arrival_board.get_arrival_event_detail",
+      "providerName": "widget_arrival_board_get_arrival_event_detail",
+      "widgetTypeId": "arrival-board",
+      "description": "Get the calendar event detail behind one arrival board row.",
+      "humanAction": "Open an arrival row to inspect the linked calendar event detail.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "Arrival event id from the current arrival board state."
+          }
+        },
+        "required": [
+          "eventId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.arrival_board.update_widget_settings",
+      "providerName": "widget_arrival_board_update_widget_settings",
+      "widgetTypeId": "arrival-board",
+      "description": "Update the arrival board title and subheading shown in the board header settings.",
+      "humanAction": "Save the arrival board header settings in the widget settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "boardTitle": {
+            "type": "string",
+            "description": "New board title."
+          },
+          "boardSubheading": {
+            "type": "string",
+            "description": "New board subheading."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.get_widget_state",
+      "providerName": "widget_bring_get_widget_state",
+      "widgetTypeId": "bring",
+      "description": "Get the current Bring settings and the selected list state with cache fallback metadata.",
+      "humanAction": "Read the Bring widget state in settings or in the detail view.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.load_available_lists",
+      "providerName": "widget_bring_load_available_lists",
+      "widgetTypeId": "bring",
+      "description": "Load available Bring lists for the configured or provided account credentials.",
+      "humanAction": "Load Bring lists from the Bring settings panel before saving a selected list.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": true,
+      "redactArguments": true,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Bring account username."
+          },
+          "password": {
+            "type": "string",
+            "description": "Bring account password."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.update_widget_settings",
+      "providerName": "widget_bring_update_widget_settings",
+      "widgetTypeId": "bring",
+      "description": "Update the Bring account settings and selected list for this user.",
+      "humanAction": "Save the Bring settings panel including account credentials and selected list.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": true,
+      "redactArguments": true,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Bring account username."
+          },
+          "password": {
+            "type": "string",
+            "description": "Bring account password."
+          },
+          "selectedListUuid": {
+            "type": "string",
+            "description": "Selected Bring list uuid."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.refresh_selected_list",
+      "providerName": "widget_bring_refresh_selected_list",
+      "widgetTypeId": "bring",
+      "description": "Refresh the currently selected Bring list from the upstream service.",
+      "humanAction": "Refresh the Bring detail view.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.add_item",
+      "providerName": "widget_bring_add_item",
+      "widgetTypeId": "bring",
+      "description": "Add an item to the selected Bring list.",
+      "humanAction": "Add an item from the Bring detail view.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Bring item name."
+          },
+          "specification": {
+            "type": "string",
+            "description": "Optional Bring item specification."
+          }
+        },
+        "required": [
+          "itemName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.update_item",
+      "providerName": "widget_bring_update_item",
+      "widgetTypeId": "bring",
+      "description": "Update an existing Bring item title and specification on the selected list.",
+      "humanAction": "Update an existing Bring item title or specification.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Updated Bring item name."
+          },
+          "specification": {
+            "type": "string",
+            "description": "Updated Bring item specification."
+          },
+          "itemUuid": {
+            "type": "string",
+            "description": "Bring item uuid used to target the existing item."
+          }
+        },
+        "required": [
+          "itemName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.complete_item",
+      "providerName": "widget_bring_complete_item",
+      "widgetTypeId": "bring",
+      "description": "Complete an open item on the selected Bring list.",
+      "humanAction": "Mark an open Bring item as completed.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Bring item name."
+          },
+          "specification": {
+            "type": "string",
+            "description": "Optional Bring item specification."
+          },
+          "itemUuid": {
+            "type": "string",
+            "description": "Optional Bring item uuid."
+          }
+        },
+        "required": [
+          "itemName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.bring.reopen_recent_item",
+      "providerName": "widget_bring_reopen_recent_item",
+      "widgetTypeId": "bring",
+      "description": "Reopen a recent Bring item by re-adding it to the selected list.",
+      "humanAction": "Reopen a recent Bring item from the recent items section.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "itemName": {
+            "type": "string",
+            "description": "Bring item name."
+          },
+          "specification": {
+            "type": "string",
+            "description": "Optional Bring item specification."
+          }
+        },
+        "required": [
+          "itemName"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.calendar.get_range_events",
+      "providerName": "widget_calendar_get_range_events",
+      "widgetTypeId": "calendar",
+      "description": "Get calendar events for a requested date range using the same member and household filters as the widget.",
+      "humanAction": "Read the calendar widget in week, month, or year range form and inspect event details.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rangeStart": {
+            "type": "string",
+            "description": "Range start in YYYY-MM-DD."
+          },
+          "rangeEnd": {
+            "type": "string",
+            "description": "Range end in YYYY-MM-DD."
+          },
+          "focusedMemberId": {
+            "type": "string",
+            "description": "Optional member id for member-focused filtering."
+          },
+          "includeHouseholdEvents": {
+            "type": "boolean",
+            "description": "Whether household-wide events are included."
+          }
+        },
+        "required": [
+          "rangeStart",
+          "rangeEnd"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.calendar.create_event",
+      "providerName": "widget_calendar_create_event",
+      "widgetTypeId": "calendar",
+      "description": "Create a calendar event or recurring series using the same validated event model as the widget editor.",
+      "humanAction": "Create a new calendar event from the calendar detail editor.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Event date in YYYY-MM-DD."
+          },
+          "time": {
+            "type": "string",
+            "description": "Event time in HH:MM."
+          },
+          "title": {
+            "type": "string",
+            "description": "Event title."
+          },
+          "description": {
+            "type": "string",
+            "description": "Event description or note."
+          },
+          "locationCity": {
+            "type": "string",
+            "description": "Event city."
+          },
+          "locationCountry": {
+            "type": "string",
+            "description": "Two-letter ISO country code."
+          },
+          "scopeMode": {
+            "type": "string",
+            "description": "Either all or members."
+          },
+          "scopeMemberIdsJson": {
+            "type": "string",
+            "description": "JSON array string of member ids for member-scoped events."
+          },
+          "recurrenceFrequency": {
+            "type": "string",
+            "description": "none, daily, weekly, monthly, or yearly."
+          },
+          "recurrenceInterval": {
+            "type": "number",
+            "description": "Positive recurrence interval."
+          },
+          "recurrenceByWeekdaysJson": {
+            "type": "string",
+            "description": "JSON array string of weekday numbers 0-6 for weekly recurrence."
+          },
+          "recurrenceCount": {
+            "type": "number",
+            "description": "Optional recurrence count."
+          },
+          "recurrenceUntil": {
+            "type": "string",
+            "description": "Optional recurrence end date in YYYY-MM-DD."
+          },
+          "excludedDatesJson": {
+            "type": "string",
+            "description": "Optional JSON array string of excluded dates in YYYY-MM-DD."
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "Whether the event starts canceled."
+          }
+        },
+        "required": [
+          "date",
+          "time",
+          "title",
+          "locationCity",
+          "locationCountry",
+          "scopeMode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.calendar.update_event",
+      "providerName": "widget_calendar_update_event",
+      "widgetTypeId": "calendar",
+      "description": "Update a calendar event or recurring series using the same validated event model as the widget editor.",
+      "humanAction": "Edit a calendar event from the calendar detail editor.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "calendarEventId": {
+            "type": "string",
+            "description": "Series id of the calendar event to update."
+          },
+          "date": {
+            "type": "string",
+            "description": "Event date in YYYY-MM-DD."
+          },
+          "time": {
+            "type": "string",
+            "description": "Event time in HH:MM."
+          },
+          "title": {
+            "type": "string",
+            "description": "Event title."
+          },
+          "description": {
+            "type": "string",
+            "description": "Event description or note."
+          },
+          "locationCity": {
+            "type": "string",
+            "description": "Event city."
+          },
+          "locationCountry": {
+            "type": "string",
+            "description": "Two-letter ISO country code."
+          },
+          "scopeMode": {
+            "type": "string",
+            "description": "Either all or members."
+          },
+          "scopeMemberIdsJson": {
+            "type": "string",
+            "description": "JSON array string of member ids for member-scoped events."
+          },
+          "recurrenceFrequency": {
+            "type": "string",
+            "description": "none, daily, weekly, monthly, or yearly."
+          },
+          "recurrenceInterval": {
+            "type": "number",
+            "description": "Positive recurrence interval."
+          },
+          "recurrenceByWeekdaysJson": {
+            "type": "string",
+            "description": "JSON array string of weekday numbers 0-6 for weekly recurrence."
+          },
+          "recurrenceCount": {
+            "type": "number",
+            "description": "Optional recurrence count."
+          },
+          "recurrenceUntil": {
+            "type": "string",
+            "description": "Optional recurrence end date in YYYY-MM-DD."
+          },
+          "excludedDatesJson": {
+            "type": "string",
+            "description": "Optional JSON array string of excluded dates in YYYY-MM-DD."
+          },
+          "cancelled": {
+            "type": "boolean",
+            "description": "Whether the event is canceled."
+          }
+        },
+        "required": [
+          "calendarEventId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.calendar.delete_event",
+      "providerName": "widget_calendar_delete_event",
+      "widgetTypeId": "calendar",
+      "description": "Delete a calendar event or recurring series.",
+      "humanAction": "Delete a calendar event from the calendar detail editor.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": true,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "calendarEventId": {
+            "type": "string",
+            "description": "Series id of the calendar event to delete."
+          }
+        },
+        "required": [
+          "calendarEventId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.calendar.update_widget_settings",
+      "providerName": "widget_calendar_update_widget_settings",
+      "widgetTypeId": "calendar",
+      "description": "Update the calendar widget settings that control household event visibility.",
+      "humanAction": "Save the calendar widget settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeHouseholdEvents": {
+            "type": "boolean",
+            "description": "Whether household-wide events are included in the compact calendar."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.get_widget_state",
+      "providerName": "widget_roborock_get_widget_state",
+      "widgetTypeId": "roborock",
+      "description": "Get the current Roborock settings state for this user.",
+      "humanAction": "Read the Roborock settings panel state.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.request_login_code",
+      "providerName": "widget_roborock_request_login_code",
+      "widgetTypeId": "roborock",
+      "description": "Request a Roborock verification code for an email address.",
+      "humanAction": "Request the Roborock email verification code from the settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": true,
+      "redactArguments": true,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Roborock account email address."
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.create_session",
+      "providerName": "widget_roborock_create_session",
+      "widgetTypeId": "roborock",
+      "description": "Create and store a Roborock session using the account email and verification code.",
+      "humanAction": "Save a Roborock session from the settings panel after entering the verification code.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": true,
+      "redactArguments": true,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Roborock account email address."
+          },
+          "verificationCode": {
+            "type": "string",
+            "description": "Verification code received by email."
+          }
+        },
+        "required": [
+          "email",
+          "verificationCode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.load_devices",
+      "providerName": "widget_roborock_load_devices",
+      "widgetTypeId": "roborock",
+      "description": "Load available Roborock devices and routines for the stored session.",
+      "humanAction": "Load Roborock devices and routines from the settings panel.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selectedDeviceDuid": {
+            "type": "string",
+            "description": "Optional device id to resolve routine choices for."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.update_selection",
+      "providerName": "widget_roborock_update_selection",
+      "widgetTypeId": "roborock",
+      "description": "Update the selected Roborock device and optional default routine.",
+      "humanAction": "Save the selected Roborock device and routine from the settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selectedDeviceDuid": {
+            "type": "string",
+            "description": "Selected Roborock device id."
+          },
+          "selectedRoutineId": {
+            "type": "number",
+            "description": "Optional selected routine id."
+          }
+        },
+        "required": [
+          "selectedDeviceDuid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.roborock.validate_session",
+      "providerName": "widget_roborock_validate_session",
+      "widgetTypeId": "roborock",
+      "description": "Validate the stored Roborock session and refresh connection state.",
+      "humanAction": "Validate the stored Roborock session from the settings panel.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.todo.get_widget_state",
+      "providerName": "widget_todo_get_widget_state",
+      "widgetTypeId": "todo",
+      "description": "Get the filtered todo widget state using the current widget settings and optional member focus.",
+      "humanAction": "Read the visible todo widget list for the current or selected member scope.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "focusedMemberId": {
+            "type": "string",
+            "description": "Optional member id for member-focused filtering."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.todo.set_item_done_state",
+      "providerName": "widget_todo_set_item_done_state",
+      "widgetTypeId": "todo",
+      "description": "Mark a todo item as done or not done.",
+      "humanAction": "Toggle a todo item completion state from the widget.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "todoItemId": {
+            "type": "string",
+            "description": "Todo item id."
+          },
+          "done": {
+            "type": "boolean",
+            "description": "Whether the todo item is completed."
+          }
+        },
+        "required": [
+          "todoItemId",
+          "done"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.todo.update_widget_settings",
+      "providerName": "widget_todo_update_widget_settings",
+      "widgetTypeId": "todo",
+      "description": "Update the todo widget settings for maximum visible items and completed-item visibility.",
+      "humanAction": "Save the todo widget settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "maxItems": {
+            "type": "number",
+            "description": "Maximum number of visible todo items."
+          },
+          "showCompleted": {
+            "type": "boolean",
+            "description": "Whether completed todo items stay visible."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.weather.get_widget_state",
+      "providerName": "widget_weather_get_widget_state",
+      "widgetTypeId": "weather",
+      "description": "Get the configured weather widget settings and the current weather payload for each configured location.",
+      "humanAction": "Read the compact and expanded weather widget using the saved widget configuration.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.weather.get_current_weather",
+      "providerName": "widget_weather_get_current_weather",
+      "widgetTypeId": "weather",
+      "description": "Get the current weather snapshot and forecast for a requested location.",
+      "humanAction": "Read the weather widget for a configured or requested location.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "description": "Latitude of the location to query."
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Longitude of the location to query."
+          },
+          "locationLabel": {
+            "type": "string",
+            "description": "Human-readable label for the requested location."
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.weather.update_widget_settings",
+      "providerName": "widget_weather_update_widget_settings",
+      "widgetTypeId": "weather",
+      "description": "Update the configured weather locations, focus slot, and refresh interval for the weather widget.",
+      "humanAction": "Save the weather widget settings for configured locations and focus behavior.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "focusLocationSlot": {
+            "type": "number",
+            "description": "Focus location slot from 1 to 5."
+          },
+          "refreshIntervalMinutes": {
+            "type": "number",
+            "description": "Refresh interval in minutes from 1 to 120."
+          },
+          "locations": {
+            "type": "string",
+            "description": "Optional JSON string describing configured locations with id, label, latitude, and longitude."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.youtube.get_widget_state",
+      "providerName": "widget_youtube_get_widget_state",
+      "widgetTypeId": "youtube",
+      "description": "Get the saved YouTube widget settings that control playback behavior.",
+      "humanAction": "Read the saved YouTube widget settings from the settings panel.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.youtube.search_videos",
+      "providerName": "widget_youtube_search_videos",
+      "widgetTypeId": "youtube",
+      "description": "Search YouTube videos and optionally choose one result by index or video id.",
+      "humanAction": "Search YouTube content and select a result to open in the player.",
+      "parityScope": [
+        "read"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query for YouTube videos."
+          },
+          "selectedIndex": {
+            "type": "number",
+            "description": "Optional zero-based result index to select."
+          },
+          "selectedVideoId": {
+            "type": "string",
+            "description": "Optional YouTube video id to select from the returned results."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "widget.youtube.update_widget_settings",
+      "providerName": "widget_youtube_update_widget_settings",
+      "widgetTypeId": "youtube",
+      "description": "Update the saved YouTube widget playback settings.",
+      "humanAction": "Save the YouTube widget auto-play setting in the widget settings panel.",
+      "parityScope": [
+        "write"
+      ],
+      "approvalRequired": false,
+      "redactArguments": false,
+      "redactResults": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "autoPlay": {
+            "type": "boolean",
+            "description": "Whether the YouTube widget should auto-play selected videos."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

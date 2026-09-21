@@ -6,6 +6,10 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "node --watch server.mjs",
-    "test:voice": "node --test voice/__tests__/voiceCache.test.mjs voice/__tests__/ttsBridge.test.mjs voice/__tests__/ttsHelper.test.mjs voice/__tests__/routeAuth.test.mjs voice/__tests__/prefsRoutes.test.mjs voice/__tests__/isolation.test.mjs"
+    "test:voice": "node --test voice/__tests__/voiceCache.test.mjs voice/__tests__/ttsBridge.test.mjs voice/__tests__/ttsHelper.test.mjs voice/__tests__/routeAuth.test.mjs voice/__tests__/prefsRoutes.test.mjs voice/__tests__/isolation.test.mjs",
+    "test:mcp": "node --test mcp/__tests__/scaicoClient.test.mjs mcp/__tests__/mcpServer.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }
