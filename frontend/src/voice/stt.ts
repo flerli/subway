@@ -16,14 +16,20 @@ import type { SttLanguage } from './vocabulary.ts'
  */
 
 /**
- * Vendored Whisper-tiny model id (tech doc §1.1: multilingual, quantized).
+ * Vendored Whisper model id (tech doc §1.1/§5: multilingual, quantized).
  *
- * Used as the repo-style path under the app's own model host
- * (`configureVoiceSttRuntime`) — the staged files live at
- * `public/voice-models/Xenova/whisper-tiny/` (see `scripts/fetch-voice-models.mjs`),
- * so the kiosk never talks to Hugging Face at runtime.
+ * `Xenova/whisper-small` (q8, ~250 MB) is the accuracy/size step-up from
+ * `tiny` (67 MB) chosen for the kiosk: materially better on accents, noise,
+ * and proper nouns while staying real-time for short utterances on CPU.
+ * Dev fallback: `VOICE_STT_MODEL=Xenova/whisper-tiny npm run fetch:voice-models`
+ * + revert this constant (must match the staged model — see
+ * `scripts/fetch-voice-models.mjs`).
+ *
+ * Staged under the app's own model host (`configureVoiceSttRuntime`) at
+ * `public/voice-models/<id>/` — the kiosk never talks to Hugging Face at
+ * runtime.
  */
-export const VOICE_STT_MODEL_ID = 'Xenova/whisper-tiny';
+export const VOICE_STT_MODEL_ID = 'Xenova/whisper-small';
 
 /** App-relative directory that serves the staged model files. */
 export const VOICE_STT_MODEL_BASE_PATH = 'voice-models/';

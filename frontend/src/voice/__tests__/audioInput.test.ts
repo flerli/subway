@@ -7,7 +7,9 @@ import {
   decodeToMono16k,
   downmixAndResample,
   isSilent,
+  normalizeSpeechLevel,
   pickSupportedMimeType,
+  trimSilenceEdges,
   validatePcmSamples,
   type PcmData,
   type VoiceAudioBufferLike,
@@ -99,6 +101,57 @@ describe('computeRmsLevel + isSilent', () => {
     assert.equal(isSilent(0), true);
     assert.equal(isSilent(0.5), false);
     assert.equal(isSilent(0.05, 0.1), true);
+  });
+});
+
+describe('trimSilenceEdges', () => {
+  it('removes leading/trailing silent frames and keeps speech (positive)', () => {
+    const silence = new Float32Array(16000 * 0.2).fill(0);
+    const speech = new Float32Array(16000 * 0.4).fill(0.4);
+    const input = new Float32Array([
+      ...silence,
+      ...speech,
+      ...silence,
+    ]);
+    const trimmed = trimSilenceEdges(input);
+    assert.ok(trimmed.length < input.length);
+    assert.ok(trimmed.length >= speech.length);
+    assert.ok(Math.abs((trimmed[0] ?? 0) - 0.4) < 1e-6);
+    assert.ok(Math.abs((trimmed[trimmed.length - 1] ?? 0) - 0.4) < 1e-6);
+  });
+
+  it('keeps at least one frame so the result is never empty (negative)', () => {
+    const allSilent = new Float32Array(16000).fill(0);
+    const trimmed = trimSilenceEdges(allSilent);
+    assert.ok(trimmed.length > 0);
+  });
+
+  it('leaves short/clean input effectively unchanged (positive)', () => {
+    const speech = new Float32Array([0.2, 0.3, 0.4, 0.1]);
+    const trimmed = trimSilenceEdges(speech);
+    assert.equal(trimmed.length, 4);
+    for (let index = 0; index < 4; index += 1) {
+      assert.ok(Math.abs((trimmed[index] ?? 0) - speech[index]!) < 1e-6);
+    }
+  });
+});
+
+describe('normalizeSpeechLevel', () => {
+  it('lifts quiet speech toward the target without clipping (positive)', () => {
+    const quiet = new Float32Array(16000).fill(0.05);
+    const normalized = normalizeSpeechLevel(quiet, 0.15);
+    assert.ok(computeRmsLevel(normalized) > 0.1);
+    let peak = 0;
+    for (const sample of normalized) {
+      peak = Math.max(peak, Math.abs(sample));
+    }
+    assert.ok(peak <= 0.95);
+  });
+
+  it('is a no-op for loud or empty input (negative)', () => {
+    const loud = new Float32Array([0.5, 0.6, 0.4]);
+    assert.deepEqual(normalizeSpeechLevel(loud), loud);
+    assert.equal(normalizeSpeechLevel(new Float32Array(0)).length, 0);
   });
 });
 

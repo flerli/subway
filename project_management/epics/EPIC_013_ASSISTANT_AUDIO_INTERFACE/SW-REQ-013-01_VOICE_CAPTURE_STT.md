@@ -18,18 +18,25 @@ assistant prompts without a keyboard.
    tapping again (manual stop) or a silence timeout ends capture.
 3. Capture SHALL normalize audio to 16 kHz mono `Float32Array` PCM
    (`getUserMedia` with echo cancellation/noise suppression/AGC →
-   `decodeAudioData` → `OfflineAudioContext` resample/downmix) and validate
-   rate, non-emptiness, and the 5-minute cap before inference.
-4. Transcription SHALL run in-process via Whisper-tiny
-   (`@huggingface/transformers`, singleton lazy pipeline, `dtype: 'q8'`),
-   biased by `buildInitialPrompt` and repaired by the shared
-   `postCorrectTranscript` module. The weights and the ONNX-runtime WASM SHALL
-   be staged into the built app at image-build time
-   (`frontend/scripts/fetch-voice-models.mjs` → `public/voice-models/`) and
-   loaded from the app's own origin only — never from Hugging Face or a CDN at
-   runtime. (`local_files_only` is unusable in browser builds: v4.3.0 sets
-   `env.allowLocalModels = false` unconditionally, so the runtime pins
-   `remoteHost` to this origin instead.)
+   `decodeAudioData` → `OfflineAudioContext` resample/downmix → silence-edge
+   trim → RMS level normalization) and validate rate, non-emptiness, and the
+   5-minute cap before inference.
+4. Transcription SHALL run in-process via vendored **Whisper-`small`**
+   (`Xenova/whisper-small`, q8, ~250 MB — the documented accuracy step-up
+   from `tiny`/67 MB, tech doc §5; `VOICE_STT_MODEL=Xenova/whisper-tiny` is
+   the dev fallback), singleton lazy pipeline, `dtype: 'q8'`, biased by
+   `buildInitialPrompt` and repaired by the shared `postCorrectTranscript`
+   module. The weights and the ONNX-runtime WASM SHALL be staged into the
+   built app at image-build time (`frontend/scripts/fetch-voice-models.mjs`
+   → `public/voice-models/`) and loaded from the app's own origin only —
+   never from Hugging Face or a CDN at runtime. (`local_files_only` is
+   unusable in browser builds: v4.3.0 sets `env.allowLocalModels = false`
+   unconditionally, so the runtime pins `remoteHost` to this origin
+   instead.) LANGUAGE: this port has NO auto-detection — the board language
+   is always forced; without it, output defaults to English and mangles
+   other languages.
+5. Short mic clips (≤ 30 s) transcribe in a single pass; chunk 30 s /
+   stride 5 s applies only to longer recordings (tech doc §1.2).
 
 ## Submit Semantics (refined SWE3-A-02)
 

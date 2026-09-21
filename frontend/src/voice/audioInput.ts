@@ -349,7 +349,18 @@ export const decodeToMono16k = async (
     return { ok: false, error: validationError };
   }
 
-  return { ok: true, samples };
+  // Real-mic conditioning: drop silent edges, lift quiet speech (both
+  // measurably improve Whisper accuracy on short utterances).
+  const conditioned = normalizeSpeechLevel(trimSilenceEdges(samples));
+
+  if (conditioned.length === 0) {
+    return {
+      ok: false,
+      error: voiceInputError('empty', 'Recording produced no audible audio.'),
+    };
+  }
+
+  return { ok: true, samples: conditioned };
 };
 
 /** Browser Web Audio implementation of {@link VoiceAudioDecoder}. */
@@ -420,3 +431,107 @@ export const computeRmsLevel = (samples: PcmData | readonly number[]): number =>
 /** Silence predicate for the push-to-talk auto-stop (threshold default 2% FS). */
 export const isSilent = (rmsLevel: number, threshold: number = 0.02): boolean =>
   !(rmsLevel >= threshold);
+
+/**
+ * Trim near-silent frames from both edges of a recording (pure).
+ *
+ * Whisper is robust to silence, but leading/trailing dead air measurably
+ * hurts short-utterance accuracy (hallucinated prefixes/tails) and wastes
+ * inference time. Frame = `frameMs` at 16 kHz (default 20 ms); a frame is
+ * kept when its RMS ≥ `threshold` (default 1.5% FS). At least one frame is
+ * always kept so the result is never empty.
+ */
+export const trimSilenceEdges = (
+  samples: PcmData,
+  threshold: number = 0.015,
+  frameMs: number = 20,
+): PcmData => {
+  const frameSize = Math.max(1, Math.round((VOICE_TARGET_SAMPLE_RATE * frameMs) / 1000));
+
+  if (samples.length <= frameSize) {
+    return samples.slice();
+  }
+
+  const frameRms = (frameIndex: number): number => {
+    const start = frameIndex * frameSize;
+    const end = Math.min(start + frameSize, samples.length);
+    let sum = 0;
+
+    for (let index = start; index < end; index += 1) {
+      const sample = samples[index] ?? 0;
+      sum += sample * sample;
+    }
+
+    return Math.sqrt(sum / (end - start));
+  };
+
+  const frameCount = Math.ceil(samples.length / frameSize);
+  let firstKept = 0;
+
+  while (firstKept < frameCount && frameRms(firstKept) < threshold) {
+    firstKept += 1;
+  }
+
+  let lastKept = frameCount - 1;
+
+  while (lastKept > firstKept && frameRms(lastKept) < threshold) {
+    lastKept -= 1;
+  }
+
+  const start = firstKept * frameSize;
+  const end = Math.min((lastKept + 1) * frameSize, samples.length);
+
+  if (start >= samples.length || start >= end) {
+    // Entire recording classified silent: keep the first frame so callers
+    // still see non-empty PCM and the normal fail-closed path applies.
+    return samples.slice(0, Math.min(frameSize, samples.length));
+  }
+
+  return samples.slice(start, end);
+};
+
+/**
+ * RMS-level normalization (pure): bring quiet recordings up to `targetRms`
+ * without clipping (peak ≤ 0.95). No-op when already at/above target or when
+ * the needed gain would clip. Quiet mics are a primary real-world accuracy
+ * killer for Whisper — soft normalization keeps loud speech unclipped while
+ * lifting whisper-quiet utterances into the model's sweet spot.
+ */
+export const normalizeSpeechLevel = (
+  samples: PcmData,
+  targetRms: number = 0.15,
+): PcmData => {
+  const rms = computeRmsLevel(samples);
+
+  if (rms <= 0 || rms >= targetRms) {
+    return samples;
+  }
+
+  let peak = 0;
+
+  for (const sample of samples) {
+    const magnitude = Math.abs(sample);
+
+    if (magnitude > peak) {
+      peak = magnitude;
+    }
+  }
+
+  if (peak <= 0) {
+    return samples;
+  }
+
+  const gain = Math.min(targetRms / rms, 0.95 / peak);
+
+  if (gain <= 1.0) {
+    return samples;
+  }
+
+  const output = new Float32Array(samples.length);
+
+  for (let index = 0; index < samples.length; index += 1) {
+    output[index] = (samples[index] ?? 0) * gain;
+  }
+
+  return output;
+};

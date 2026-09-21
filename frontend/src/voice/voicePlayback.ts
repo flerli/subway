@@ -216,12 +216,15 @@ export class VoicePlaybackController {
         player.duration = result.durationMs
         void player.play()
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         if (player !== this.player) {
           return
         }
         // Fail closed with user-facing copy instead of a silent flicker
         // (SW-REQ-013-04): the replay button must never die quietly.
+        if (typeof console !== 'undefined') {
+          console.warn('[voice] playback failed:', reason)
+        }
         this.deps.onError?.('tts-unavailable')
         this.outputLevels?.dispose()
         this.outputLevels = null

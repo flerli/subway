@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Stage the in-browser Whisper-tiny runtime for an offline kiosk.
+ * Stage the in-browser Whisper runtime for an offline kiosk.
  *
  * Why (SW-REQ-013-01 #4): transcription must never download at runtime. The
  * browser build of `@huggingface/transformers` cannot load a same-origin model
@@ -8,10 +8,17 @@
  * always false in browsers), so the model files are staged into the built
  * frontend and the runtime is pointed at this origin (see `stt.ts`).
  *
+ * Model selection (accuracy vs size, tech doc §1.2/§5):
+ *   - `Xenova/whisper-small` (q8, ~250 MB)  — DEFAULT: materially better on
+ *     accents/noise/proper nouns; the budgeted step-up from tiny.
+ *   - `Xenova/whisper-tiny` (q8, ~67 MB)    — dev fallback:
+ *     `VOICE_STT_MODEL=Xenova/whisper-tiny npm run fetch:voice-models`
+ * `stt.ts` MUST match: `VOICE_STT_MODEL_ID`.
+ *
  * What it does:
- *   1. downloads the q8 Whisper-tiny file set from the model host (default
+ *   1. downloads the q8 file set from the model host (default
  *      https://huggingface.co, override with `VOICE_MODEL_HOST`) into
- *      `frontend/public/voice-models/Xenova/whisper-tiny/`
+ *      `frontend/public/voice-models/<model-id>/`
  *   2. copies the ONNX-runtime WASM pair into
  *      `frontend/public/voice-models/ort/` (from node_modules — no download;
  *      without this, transformers.js fetches it from the jsDelivr CDN)
@@ -19,8 +26,8 @@
  * Run from the frontend build (`npm run fetch:voice-models`) or directly:
  *   node scripts/fetch-voice-models.mjs [--force] [--check]
  *
- * Build-time network only. The kiosk browser then loads ~67 MB once from the
- * app origin and keeps it in the browser cache.
+ * Build-time network only. The kiosk browser then loads the model once from
+ * the app origin and keeps it in the browser cache.
  */
 
 import { createWriteStream } from 'node:fs';
@@ -34,10 +41,10 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const frontendDirectory = resolve(scriptDirectory, '..');
 const modelRoot = join(frontendDirectory, 'public', 'voice-models');
 const modelHost = (process.env.VOICE_MODEL_HOST ?? 'https://huggingface.co').replace(/\/+$/, '');
-const modelId = 'Xenova/whisper-tiny';
+const modelId = process.env.VOICE_STT_MODEL ?? 'Xenova/whisper-small';
 const revision = 'main';
 
-/** q8 (`_quantized`) file set Whisper-tiny needs plus the tokenizer metadata. */
+/** q8 (`_quantized`) file set Whisper needs plus the tokenizer metadata. */
 const MODEL_FILES = [
   'config.json',
   'generation_config.json',
