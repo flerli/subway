@@ -23,7 +23,10 @@ interface CorrectionRule {
  */
 const DOMAIN_CORRECTION_RULES: readonly CorrectionRule[] = [
   {
-    pattern: /\b(swabian|swaiben|swaybian|swibian|schwabian)\b/gi,
+    // Whisper-tiny real-world renderings of "Swaibian" (incl. probe-verified
+    // "Svebian" and English-mode "Webeian").
+    pattern:
+      /\b(swabian|swaiben|swaybian|swibian|schwabian|svebian|swebian|swevian|sweibian|svaibian|webeian)\b/gi,
     replacement: 'Swaibian',
   },
   {

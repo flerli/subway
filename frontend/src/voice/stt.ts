@@ -132,8 +132,8 @@ export interface WhisperPipeline {
     options: {
       readonly task: 'transcribe';
       readonly language?: string;
-      readonly chunk_length_s: number;
-      readonly stride_length_s: number;
+      readonly chunk_length_s?: number;
+      readonly stride_length_s?: number;
     },
   ): Promise<SttRawOutput>;
 }
@@ -241,8 +241,22 @@ const readTranscriptText = (output: SttRawOutput): string => {
 };
 
 /**
+ * Long-form threshold: utterances shorter than one 30 s chunk transcribe in a
+ * single pass (tech doc §1.2 — "short mic clips go through in one pass").
+ * Passing chunk/stride for short clips is measurable-by-probe unnecessary and
+ * risks edge degradation; pass them only for genuinely long recordings.
+ */
+export const VOICE_STT_SINGLE_PASS_MAX_SAMPLES =
+  VOICE_STT_CHUNK_LENGTH_S * 16000;
+
+/**
  * Transcribe validated 16 kHz mono PCM. Never throws: model and inference
  * failures return typed errors so the capture controller fails closed.
+ * LANGUAGE NOTE (verified against v4.3.0): this port has NO language
+ * auto-detection — without a forced `language` it defaults to English and
+ * mangles other languages ("Guten Morgen" → "weis the sweater"). The board
+ * language MUST be forced (SW-REQ-013-01 #5); `auto` is a last-resort
+ * fallback only and is treated as English-by-default by the runtime.
  */
 export const transcribeUtterance = async (
   samples: PcmData,
@@ -274,11 +288,17 @@ export const transcribeUtterance = async (
   let output: SttRawOutput;
 
   try {
+    const longForm = samples.length >= VOICE_STT_SINGLE_PASS_MAX_SAMPLES;
+
     output = await pipeline(samples, {
       task: 'transcribe',
       ...(language === 'auto' ? {} : { language }),
-      chunk_length_s: VOICE_STT_CHUNK_LENGTH_S,
-      stride_length_s: VOICE_STT_STRIDE_LENGTH_S,
+      ...(longForm
+        ? {
+            chunk_length_s: VOICE_STT_CHUNK_LENGTH_S,
+            stride_length_s: VOICE_STT_STRIDE_LENGTH_S,
+          }
+        : {}),
     });
   } catch {
     return {

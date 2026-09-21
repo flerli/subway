@@ -27,6 +27,7 @@ export interface AssistantWidgetTranslation extends WidgetTranslationDefinition 
     voicePresetLabel: string
     voiceVolumeLabel: string
     voiceSampleAction: string
+    voiceLanguageHint: string
     voiceSaveAction: string
     voiceSavedState: string
     voiceLoadFailed: string
@@ -57,6 +58,7 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       voicePresetLabel: 'Voice',
       voiceVolumeLabel: 'Volume',
       voiceSampleAction: 'Play sample',
+      voiceLanguageHint: 'Speech recognition follows the board language (Settings / Language).',
       voiceSaveAction: 'Save voice settings',
       voiceSavedState: 'Voice settings saved.',
       voiceLoadFailed: 'Voice settings could not be loaded.',
@@ -103,6 +105,7 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       voicePresetLabel: 'Stimme',
       voiceVolumeLabel: 'Lautstarke',
       voiceSampleAction: 'Probe abspielen',
+      voiceLanguageHint: 'Die Spracherkennung folgt der Kiosksprache (Einstellungen / Sprache).',
       voiceSaveAction: 'Stimmeinstellungen speichern',
       voiceSavedState: 'Stimmeinstellungen gespeichert.',
       voiceLoadFailed: 'Stimmeinstellungen konnten nicht geladen werden.',
@@ -149,6 +152,7 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       voicePresetLabel: 'Voix',
       voiceVolumeLabel: 'Volume',
       voiceSampleAction: 'Ecouter un echantillon',
+      voiceLanguageHint: 'La reconnaissance vocale suit la langue du kiosque (Reglages / Langue).',
       voiceSaveAction: 'Enregistrer les reglages vocaux',
       voiceSavedState: 'Reglages vocaux enregistres.',
       voiceLoadFailed: 'Impossible de charger les reglages vocaux.',
@@ -195,6 +199,7 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       voicePresetLabel: 'Voz',
       voiceVolumeLabel: 'Volumen',
       voiceSampleAction: 'Reproducir muestra',
+      voiceLanguageHint: 'El reconocimiento de voz sigue el idioma del quiosco (Ajustes / Idioma).',
       voiceSaveAction: 'Guardar ajustes de voz',
       voiceSavedState: 'Ajustes de voz guardados.',
       voiceLoadFailed: 'No se pudieron cargar los ajustes de voz.',

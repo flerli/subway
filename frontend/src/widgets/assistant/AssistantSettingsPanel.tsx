@@ -665,6 +665,7 @@ export function AssistantSettingsPanel({
           </label>
 
           <p className="settings-label">{widgetText.copy.voicePresetLabel}</p>
+          <p className="settings-note">{widgetText.copy.voiceLanguageHint}</p>
           <div className="voice-preset-grid">
             {VOICE_PRESETS.map((presetVoice) => (
               <div

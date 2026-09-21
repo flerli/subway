@@ -18,6 +18,21 @@ describe('postCorrectTranscript', () => {
     assert.equal(postCorrectTranscript('zeige das sabway board'), 'zeige das Subway board');
   });
 
+  it('repairs whisper-typical renderings incl. probe-verified variants (positive)', () => {
+    assert.equal(
+      postCorrectTranscript('das sagt Svebian'),
+      'das sagt Swaibian',
+    );
+    assert.equal(
+      postCorrectTranscript('Webeian antwortet'),
+      'Swaibian antwortet',
+    );
+    assert.equal(
+      postCorrectTranscript('swebian und swevian und svaibian'),
+      'Swaibian und Swaibian und Swaibian',
+    );
+  });
+
   it('leaves clean transcripts untouched (positive)', () => {
     const clean = 'Swaibian zeigt das Wetter für Berlin';
     assert.equal(postCorrectTranscript(clean), clean);

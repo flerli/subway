@@ -2,6 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   VOICE_STT_CHUNK_LENGTH_S,
+  VOICE_STT_SINGLE_PASS_MAX_SAMPLES,
   VOICE_STT_MODEL_ID,
   VOICE_STT_STRIDE_LENGTH_S,
   configureVoiceSttRuntime,
@@ -94,8 +95,6 @@ describe('transcribeUtterance', () => {
     assert.deepEqual(seenOptions[0], {
       task: 'transcribe',
       language: 'en',
-      chunk_length_s: VOICE_STT_CHUNK_LENGTH_S,
-      stride_length_s: VOICE_STT_STRIDE_LENGTH_S,
     });
   });
 
@@ -111,6 +110,41 @@ describe('transcribeUtterance', () => {
     );
     assert.equal(result.ok, true);
     assert.ok(seen !== null && !('language' in (seen as Record<string, unknown>)));
+  });
+
+  it('passes a single-pass call for short mic clips (positive: tech doc §1.2)', async () => {
+    let seen: unknown = null;
+    await transcribeUtterance(
+      samples,
+      'de',
+      async () => async (_audio, options) => {
+        seen = options;
+        return { text: 'x' };
+      },
+    );
+    assert.deepEqual(seen, {
+      task: 'transcribe',
+      language: 'de',
+    });
+  });
+
+  it('enables long-form chunking only for >= 30 s recordings (positive)', async () => {
+    const longSamples = new Float32Array(VOICE_STT_SINGLE_PASS_MAX_SAMPLES + 1);
+    let seen: unknown = null;
+    await transcribeUtterance(
+      longSamples,
+      'de',
+      async () => async (_audio, options) => {
+        seen = options;
+        return { text: 'x' };
+      },
+    );
+    assert.deepEqual(seen, {
+      task: 'transcribe',
+      language: 'de',
+      chunk_length_s: VOICE_STT_CHUNK_LENGTH_S,
+      stride_length_s: VOICE_STT_STRIDE_LENGTH_S,
+    });
   });
 
   it('joins chunked output with spaces (positive)', async () => {
