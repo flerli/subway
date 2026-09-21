@@ -32,6 +32,7 @@ interface Harness {
   submitted: Array<{ text: string; voice: string; lang: string }>;
   players: Array<PlayableAudio & EventEmitter>;
   volumeChanges: number[];
+  errors: string[];
 }
 
 const makeHarness = (
@@ -40,6 +41,7 @@ const makeHarness = (
   const submitted: Array<{ text: string; voice: string; lang: string }> = [];
   const players: Array<PlayableAudio & EventEmitter> = [];
   const volumeChanges: number[] = [];
+  const errors: string[] = [];
   const deps: VoicePlaybackDeps = {
     synthesize: async (chunk) => {
       submitted.push(chunk);
@@ -75,7 +77,9 @@ const makeHarness = (
     },
     getPrefs: () => ({ ttsEnabled: true, voice: 'F1', volume: 80 }),
     language: () => 'de',
-    onError: () => undefined,
+    onError: (code) => {
+      errors.push(code);
+    },
     ...overrides,
   };
   const controller = new VoicePlaybackController(deps);
@@ -84,7 +88,7 @@ const makeHarness = (
     volumeChanges.push(volume);
     originalSetVolume(volume);
   };
-  return { controller, submitted, players, volumeChanges };
+  return { controller, submitted, players, volumeChanges, errors };
 };
 
 const endCurrent = (harness: Harness) => {
@@ -158,7 +162,7 @@ describe('VoicePlaybackController', () => {
     assert.equal(harness.controller.getSnapshot().playing, false);
   });
 
-  it('keeps queue empty or falls back quietly on synthesis failure (negative)', async () => {
+  it('reports a synthesis failure through onError (negative: fail-closed copy)', async () => {
     const harness = makeHarness({
       synthesize: async () => {
         throw new Error('Unavailable');
@@ -168,6 +172,17 @@ describe('VoicePlaybackController', () => {
     await flush();
     assert.equal(harness.controller.getSnapshot().playing, false);
     assert.equal(harness.players.length, 1);
+    assert.deepEqual(harness.errors, ['tts-unavailable']);
+  });
+
+  it('does not report onError on successful playback (positive)', async () => {
+    const harness = makeHarness();
+    await harness.controller.enqueueMessage('msg-1', 'One. Two.');
+    await flush();
+    endCurrent(harness);
+    await flush();
+    assert.equal(harness.submitted.length, 1);
+    assert.deepEqual(harness.errors, []);
   });
 
   it('applies the voice prefs to synthesis (positive)', async () => {

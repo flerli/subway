@@ -50,6 +50,8 @@ export interface AssistantDetailViewData {
     readOutputLevel: () => number
     onReplayMessage: (messageId: string) => void
     onVolumeChange: (volume: number) => void
+    /** Localized fail-closed copy for the last playback failure (SW-REQ-013-04); null when idle. */
+    error: string | null
   } | null
 }
 
@@ -500,6 +502,10 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
               <div className="assistant-turn-meta">
                 {turnError ? (
                   <p className="settings-note settings-note--warning">{turnError}</p>
+                ) : playback?.error ? (
+                  <p className="settings-note settings-note--warning" role="status">
+                    {playback.error}
+                  </p>
                 ) : !selectedThreadId ? (
                   <p className="settings-note">{appText.assistant.composerNoThreadCopy}</p>
                 ) : availability.status !== 'available' ? (

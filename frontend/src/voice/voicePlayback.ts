@@ -49,7 +49,8 @@ export interface VoicePlaybackDeps {
   readonly createOutputLevels?: OutputLevelsFactory
   readonly getPrefs?: () => VoicePlaybackPrefs
   readonly language?: () => string
-  readonly onError?: (message: string) => void
+  /** Fail-closed surface (SW-REQ-013-04): called with a stable error code when synthesis/playback fails. */
+  readonly onError?: (code: string) => void
 }
 
 export interface VoicePlaybackSnapshot {
@@ -219,6 +220,9 @@ export class VoicePlaybackController {
         if (player !== this.player) {
           return
         }
+        // Fail closed with user-facing copy instead of a silent flicker
+        // (SW-REQ-013-04): the replay button must never die quietly.
+        this.deps.onError?.('tts-unavailable')
         this.outputLevels?.dispose()
         this.outputLevels = null
         this.player = null

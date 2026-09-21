@@ -1283,6 +1283,8 @@ function App() {
     getVoicePrefsState,
   )
 
+  const [voicePlaybackError, setVoicePlaybackError] = useState<string | null>(null)
+
   const voicePlayback = useVoicePlayback({
     synthesize: ({ text, voice, lang }) =>
       synthesizeVoice({ text, voice, lang }),
@@ -1294,6 +1296,9 @@ function App() {
       volume: voicePrefsLive.volume,
     }),
     language: () => selectedLanguageCode,
+    // Fail closed with user-facing copy (SW-REQ-013-04): a dead TTS engine
+    // must show a note, not a silent replay flicker.
+    onError: (code) => setVoicePlaybackError(resolveVoiceErrorCopy(appText, code)),
   })
 
   const handleReplayAssistantMessage = (messageId: string) => {
@@ -1304,6 +1309,7 @@ function App() {
     ].flat().find((entry) => entry.id === messageId)
 
     if (message && message.content) {
+      setVoicePlaybackError(null)
       void voicePlayback.playMessage(message.id, message.content)
     }
   }
@@ -4073,6 +4079,7 @@ function App() {
                   readOutputLevel: voicePlayback.readOutputLevel,
                   onReplayMessage: handleReplayAssistantMessage,
                   onVolumeChange: handlePlaybackVolumeChange,
+                  error: voicePlaybackError,
                 },
               }}
               assistantActions={{

@@ -36,6 +36,8 @@ export function resolveVoiceErrorCopy(
       return appText.voice.errorUnsupported;
     case 'decode-failed':
       return appText.voice.errorDecodeFailed;
+    case 'tts-unavailable':
+      return appText.voice.errorTtsUnavailable;
     default:
       return appText.voice.errorTranscribeFailed;
   }

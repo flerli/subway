@@ -163,6 +163,7 @@ interface WidgetBoardHostProps {
       readOutputLevel: () => number
       onReplayMessage: (messageId: string) => void
       onVolumeChange: (volume: number) => void
+      error: string | null
     } | null
   }
   assistantActions: {
