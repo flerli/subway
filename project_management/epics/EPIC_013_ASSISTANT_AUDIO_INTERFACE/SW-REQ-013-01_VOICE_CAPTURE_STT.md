@@ -3,7 +3,7 @@
 **Epic**: E-013 (`project_management/epics/EPIC_013_ASSISTANT_AUDIO_INTERFACE.md`)
 **V-Model**: SWE1 (owned by TC-A; written by SWE3-A-01)
 **Status**: ✅ Defined
-**Last Updated**: 2026-09-21 (refined by SWE3-A-02: submit semantics)
+**Last Updated**: 2026-09-21 (TC-A-02 post-completion: staged offline STT runtime)
 
 ## Requirement
 
@@ -20,16 +20,16 @@ assistant prompts without a keyboard.
    (`getUserMedia` with echo cancellation/noise suppression/AGC →
    `decodeAudioData` → `OfflineAudioContext` resample/downmix) and validate
    rate, non-emptiness, and the 5-minute cap before inference.
-4. Transcription SHALL run in-process via vendored Whisper-tiny
-   (`@huggingface/transformers`, singleton lazy pipeline, `local_files_only`,
-   never a runtime download), biased by `buildInitialPrompt` and repaired by
-   the shared `postCorrectTranscript` module.
-5. The corrected transcript SHALL submit through the existing assistant
-   send flow, auto-creating a thread when none is selected.
-6. Raw audio buffers SHALL stay ephemeral: never persisted, never logged,
-   never leaving the capture/STT boundary except as 16 kHz PCM in memory.
-7. Denied/unavailable/failed capture SHALL fail closed with user-facing copy
-   (top-bar toast + transcript note), never silently.
+4. Transcription SHALL run in-process via Whisper-tiny
+   (`@huggingface/transformers`, singleton lazy pipeline, `dtype: 'q8'`),
+   biased by `buildInitialPrompt` and repaired by the shared
+   `postCorrectTranscript` module. The weights and the ONNX-runtime WASM SHALL
+   be staged into the built app at image-build time
+   (`frontend/scripts/fetch-voice-models.mjs` → `public/voice-models/`) and
+   loaded from the app's own origin only — never from Hugging Face or a CDN at
+   runtime. (`local_files_only` is unusable in browser builds: v4.3.0 sets
+   `env.allowLocalModels = false` unconditionally, so the runtime pins
+   `remoteHost` to this origin instead.)
 
 ## Submit Semantics (refined SWE3-A-02)
 
@@ -43,8 +43,12 @@ assistant prompts without a keyboard.
 
 ## Verification
 
-- SWE4 unit: PCM contract, validation caps, vocabulary corrections
-  (`frontend/src/voice/__tests__/`, `npm --prefix frontend run test:voice`).
+- SWE4 unit: PCM contract, validation caps, vocabulary corrections, runtime
+  config (`frontend/src/voice/__tests__/`, `npm --prefix frontend run test:voice`).
 - SWE5 integration (TC-A-04): permission → PCM → STT → submit incl.
   thread auto-create and silence auto-stop.
 - SYS3 smoke (TC-A-04): real stack, mic or documented fallback.
+- SYS3 browser proof (TC-A-02 post-completion, 2026-09-21): production bundle,
+  spoken WAV as fake mic → `idle → listening → transcribing → submitting →
+  idle`, transcript submitted, 0 external (HF/CDN) requests. Real-mic accuracy
+  on the kiosk remains an open HIGH gap.

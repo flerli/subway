@@ -2,13 +2,68 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   VOICE_STT_CHUNK_LENGTH_S,
-  VOICE_STT_MODEL_PATH,
+  VOICE_STT_MODEL_ID,
   VOICE_STT_STRIDE_LENGTH_S,
+  configureVoiceSttRuntime,
   resetSttPipelineCacheForTests,
+  resolveVoiceSttBaseUrl,
   transcribeUtterance,
+  type VoiceSttRuntimeEnv,
   type WhisperPipeline,
   type WhisperPipelineFactory,
 } from '../stt.ts';
+
+const makeRuntimeEnv = (): VoiceSttRuntimeEnv => ({
+  allowRemoteModels: false,
+  remoteHost: 'https://huggingface.co/',
+  remotePathTemplate: '{model}/resolve/{revision}/',
+  backends: { onnx: { wasm: {} } },
+});
+
+describe('configureVoiceSttRuntime', () => {
+  it('pins model + WASM to the app origin under the base path (positive)', () => {
+    const env = makeRuntimeEnv();
+    configureVoiceSttRuntime(env, 'https://kiosk.example/subway/');
+
+    assert.equal(env.allowRemoteModels, true);
+    assert.equal(env.remoteHost, 'https://kiosk.example/subway/voice-models/');
+    assert.equal(env.remotePathTemplate, '{model}/');
+    assert.deepEqual(env.backends.onnx.wasm.wasmPaths, {
+      mjs: 'https://kiosk.example/subway/voice-models/ort/ort-wasm-simd-threaded.asyncify.mjs',
+      wasm: 'https://kiosk.example/subway/voice-models/ort/ort-wasm-simd-threaded.asyncify.wasm',
+    });
+  });
+
+  it('keeps a configured model host when the runtime env is reused (positive)', () => {
+    const env = makeRuntimeEnv();
+    configureVoiceSttRuntime(env, 'https://kiosk.example/');
+    configureVoiceSttRuntime(env, 'https://kiosk.example/');
+
+    assert.equal(env.remoteHost, 'https://kiosk.example/voice-models/');
+  });
+
+  it('never points at Hugging Face or the jsDelivr CDN (negative: offline contract)', () => {
+    for (const baseUrl of ['https://kiosk.example/', 'https://kiosk.example/subway/', '/']) {
+      const env = makeRuntimeEnv();
+      configureVoiceSttRuntime(env, baseUrl);
+      const wasmPaths = env.backends.onnx.wasm.wasmPaths as { mjs: string; wasm: string };
+      const targets = [env.remoteHost, wasmPaths.mjs, wasmPaths.wasm];
+
+      for (const target of targets) {
+        assert.ok(!target.includes('huggingface.co'), `${target} must not use the model hub`);
+        assert.ok(!target.includes('jsdelivr'), `${target} must not use the WASM CDN`);
+      }
+    }
+  });
+
+  it('falls back to app-relative paths without a DOM origin (positive: node/SSR)', () => {
+    const env = makeRuntimeEnv();
+    configureVoiceSttRuntime(env);
+
+    assert.equal(env.remoteHost, '/voice-models/');
+    assert.equal(resolveVoiceSttBaseUrl(), '/');
+  });
+});
 
 describe('transcribeUtterance', () => {
   beforeEach(() => {
@@ -75,7 +130,7 @@ describe('transcribeUtterance', () => {
     };
     await transcribeUtterance(samples, 'en', factory);
     await transcribeUtterance(samples, 'fr', factory);
-    assert.deepEqual(seenPaths, [VOICE_STT_MODEL_PATH, VOICE_STT_MODEL_PATH]);
+    assert.deepEqual(seenPaths, [VOICE_STT_MODEL_ID, VOICE_STT_MODEL_ID]);
   });
 
   it('fails closed when the model is missing and retries next time (negative)', async () => {

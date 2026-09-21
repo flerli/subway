@@ -3,3 +3,7 @@ backend/data/*
 !backend/data/.gitkeep
 /-
 /voice-test-dist/
+# Staged offline STT runtime (Whisper-tiny q8 + ONNX WASM, ~69 MB); fetched by
+# `npm --prefix frontend run fetch:voice-models` (frontend/Dockerfile does this
+# at image build time). Never commit the binaries.
+/frontend/public/voice-models/

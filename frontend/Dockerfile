@@ -12,6 +12,11 @@ ARG VITE_BASE_PATH=/
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 
+# Stage the offline STT runtime (Whisper-tiny q8 + ONNX WASM) into public/ so the
+# kiosk browser never downloads models at runtime (SW-REQ-013-01 #4). Needs
+# network at build time only; skips files already staged in the context.
+RUN npm run fetch:voice-models
+
 RUN npm run build
 
 FROM nginx:1.27-alpine

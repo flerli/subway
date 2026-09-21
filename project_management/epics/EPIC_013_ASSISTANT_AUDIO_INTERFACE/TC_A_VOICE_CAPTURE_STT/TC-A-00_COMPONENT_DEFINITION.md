@@ -78,7 +78,7 @@ This repo has no central project logger yet (`docs/mvc_architecture.md` does not
 | [TC-A-04](TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE.md) | TC-A closer: integration, arch/traceability, SYS3 smoke | 🔨 Impl | SWE3-A-04 | P1-High | M | ✅ |
 
 > No SWE5 review issues (no-reviews variant). TC-A-04 is the closer and inherits review/docs duties.
-> Post-completion defect fix (2026-09-21) in TC-A-02: `createMediaRecorder` never started capture (0-byte blob → `decode-failed` on every utterance); fixed, regression-tested, browser-proven — see TC-A-02 report §Post-completion defect fix. Remaining blocker for real-browser STT: unstaged Whisper weights (`model-missing`).
+> Post-completion fixes (2026-09-21) in TC-A-02: (1) `createMediaRecorder` never started capture (0-byte blob → `decode-failed` on every utterance); (2) the offline STT runtime is now staged into the built app (`frontend/scripts/fetch-voice-models.mjs` → `public/voice-models/`, same-origin model host, local ONNX WASM) so the kiosk browser transcribes without any runtime download — see TC-A-02 report §Post-completion defect fix and §Post-completion follow-up: staged offline STT runtime. Arch/traceability statements about `local_files_only`/"not yet vendored" need a closer-owned refresh (ADR-002 proposed).
 
 ## Acceptance Test Plan (SWE6)
 
@@ -105,6 +105,8 @@ This repo has no central project logger yet (`docs/mvc_architecture.md` does not
 | 2026-09-21 | Circle self-animates; keyboard suppression via ref | No App re-render storm; focusin-only gate, idle behavior identical | — |
 | 2026-09-21 | Post-completion fix: `createMediaRecorder` starts capture on creation (was never started → 0-byte blob → `decode-failed` in the browser) | Defect found on real hardware; all capture tests previously faked the recorder factory, so the production recorder is now covered too | — |
 | 2026-09-21 | 0-byte recordings surface as `empty` ("nothing heard"), not `decode-failed` | Error copy now matches the actual failure; decoder never called on empty bytes | — |
+| 2026-09-21 | STT weights staged at **build time** into `frontend/public/voice-models/` (gitignored) via `frontend/scripts/fetch-voice-models.mjs`; Docker build runs it; runtime pinned to the app origin (`remoteHost`) + local ONNX WASM | Browser builds cannot use `local_files_only` (`env.allowLocalModels === false` in v4.3.0); "offline" = own-origin host, no HF/CDN at runtime. Repo stays lean; the VPS image ships the weights. Alternative (commit ~69 MB) documented in the report | — (closer proposes ADR-002) |
+| 2026-09-21 | Runtime env contract lives in `configureVoiceSttRuntime(env, baseUrl)` with structural typing | Unit-testable without importing the heavy library; the offline contract (no HF/jsDelivr target) is regression-tested | — |
 
 ## Architecture Documentation Revisions
 

@@ -6,28 +6,113 @@ import type { SttLanguage } from './vocabulary.ts'
  *
  * Contract: `transcribeUtterance` takes validated 16 kHz mono PCM and returns
  * the raw transcript (vocabulary repair happens in `vocabulary.ts`, owned by
- * the caller). Inference is fully local: the pipeline is constructed with
- * `local_files_only` and remote models are disabled process-wide, so a
- * missing bundled model fails closed instead of downloading.
+ * the caller). Inference is fully local: the runtime is pinned to this app's
+ * own staged model/WASM host by {@link configureVoiceSttRuntime}, so a missing
+ * bundle fails closed instead of downloading (SW-REQ-013-01 #4).
  *
  * Why a lazy cached singleton: model load costs hundreds of ms to seconds;
  * per-utterance inference on `tiny` is ~real-time. The dynamic import keeps
  * the ~MB-large transformers runtime out of the initial kiosk bundle.
  */
 
-/** Vendored Whisper-tiny model id (tech doc §1.1: multilingual, quantized). */
+/**
+ * Vendored Whisper-tiny model id (tech doc §1.1: multilingual, quantized).
+ *
+ * Used as the repo-style path under the app's own model host
+ * (`configureVoiceSttRuntime`) — the staged files live at
+ * `public/voice-models/Xenova/whisper-tiny/` (see `scripts/fetch-voice-models.mjs`),
+ * so the kiosk never talks to Hugging Face at runtime.
+ */
 export const VOICE_STT_MODEL_ID = 'Xenova/whisper-tiny';
 
-/**
- * Bundled model path served from the app. Model distribution (vendored vs
- * staged) is decided in TC-B-01; until then a missing path fails closed with
- * `model-missing` — never a runtime download.
- */
-export const VOICE_STT_MODEL_PATH = '/voice-models/whisper-tiny';
+/** App-relative directory that serves the staged model files. */
+export const VOICE_STT_MODEL_BASE_PATH = 'voice-models/';
+
+/** App-relative directory that serves the staged ONNX-runtime WASM pair. */
+export const VOICE_STT_ORT_BASE_PATH = 'voice-models/ort/';
+
+/** ONNX-runtime loader that transformers.js v4 requests by default (asyncify build). */
+export const VOICE_STT_ORT_MODULE_FILE = 'ort-wasm-simd-threaded.asyncify.mjs';
+
+/** ONNX-runtime binary that belongs to {@link VOICE_STT_ORT_MODULE_FILE}. */
+export const VOICE_STT_ORT_WASM_FILE = 'ort-wasm-simd-threaded.asyncify.wasm';
 
 /** Long-form recipe from the tech doc; mic clips transcribe in one pass. */
 export const VOICE_STT_CHUNK_LENGTH_S = 30;
 export const VOICE_STT_STRIDE_LENGTH_S = 5;
+
+/** ONNX-runtime WASM locations; `{ mjs, wasm }` is the shape transformers.js caches. */
+export interface VoiceSttWasmPaths {
+  mjs: string;
+  wasm: string;
+}
+
+/**
+ * Structural slice of the transformers.js runtime config this module owns.
+ * Declared structurally so unit tests configure a fake env without importing
+ * the (large) library.
+ */
+export interface VoiceSttRuntimeEnv {
+  allowRemoteModels: boolean;
+  remoteHost: string;
+  remotePathTemplate: string;
+  backends: {
+    onnx: {
+      wasm: {
+        wasmPaths?: string | VoiceSttWasmPaths;
+      };
+    };
+  };
+}
+
+/** App base URL (`VITE_BASE_PATH`), absolute when a DOM origin is available. */
+export const resolveVoiceSttBaseUrl = (): string => {
+  const basePath =
+    (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
+  const normalizedBasePath = basePath.length > 0 ? basePath : '/';
+  const origin =
+    typeof window !== 'undefined' && typeof window.location !== 'undefined'
+      ? window.location.origin
+      : null;
+
+  if (!origin) {
+    return normalizedBasePath;
+  }
+
+  return new URL(normalizedBasePath, origin).toString();
+};
+
+const joinUrl = (baseUrl: string, path: string): string => {
+  try {
+    return new URL(path, baseUrl).toString();
+  } catch {
+    return `${baseUrl.replace(/\/+$/, '')}/${path}`;
+  }
+};
+
+/**
+ * Point the transformers.js runtime at the app's own staged model and WASM.
+ *
+ * Why this shape (verified against `@huggingface/transformers` v4.3.0):
+ * browser builds set `env.allowLocalModels = false` unconditionally, so
+ * `local_files_only: true` / `allowRemoteModels = false` makes the library
+ * throw before any file is read — and by default the ONNX runtime is fetched
+ * from the jsDelivr CDN. Offline-by-construction therefore means: keep
+ * `allowRemoteModels = true` but pin `remoteHost` to this origin, so every
+ * model/WASM request stays inside the deployed app (SW-REQ-013-01 #4).
+ */
+export const configureVoiceSttRuntime = (
+  env: VoiceSttRuntimeEnv,
+  baseUrl: string = resolveVoiceSttBaseUrl(),
+): void => {
+  env.allowRemoteModels = true;
+  env.remoteHost = joinUrl(baseUrl, VOICE_STT_MODEL_BASE_PATH);
+  env.remotePathTemplate = '{model}/';
+  env.backends.onnx.wasm.wasmPaths = {
+    mjs: joinUrl(baseUrl, `${VOICE_STT_ORT_BASE_PATH}${VOICE_STT_ORT_MODULE_FILE}`),
+    wasm: joinUrl(baseUrl, `${VOICE_STT_ORT_BASE_PATH}${VOICE_STT_ORT_WASM_FILE}`),
+  };
+};
 
 export type SttErrorCode = 'model-missing' | 'transcribe-failed' | 'empty-audio';
 
@@ -58,8 +143,10 @@ export interface WhisperPipelineFactory {
 }
 
 /**
- * Production factory: dynamic import (code-split) + offline-by-construction
- * flags. NOTE on `initial_prompt`: the installed `@huggingface/transformers`
+ * Production factory: dynamic import (code-split) + own-origin model/WASM host.
+ * Model files are staged into the build (`scripts/fetch-voice-models.mjs`); a
+ * missing bundle fails closed with the repair copy instead of downloading.
+ * NOTE on `initial_prompt`: the installed `@huggingface/transformers`
  * v4.3.0 exposes no initial-prompt option (verified against the bundle —
  * zero `initial_prompt` references), so decoder bias is currently carried by
  * `buildInitialPrompt` documentation + the deterministic
@@ -78,7 +165,9 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     );
   }
 
-  transformers.env.allowRemoteModels = false;
+  configureVoiceSttRuntime(
+    transformers.env as unknown as VoiceSttRuntimeEnv,
+  );
 
   let rawPipeline: unknown;
 
@@ -86,7 +175,7 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     rawPipeline = await transformers.pipeline(
       'automatic-speech-recognition',
       modelPath,
-      { local_files_only: true, dtype: 'q8' },
+      { dtype: 'q8' },
     );
   } catch {
     throw new Error(
@@ -124,7 +213,7 @@ const getPipeline = (
 
   // Cache the promise itself: concurrent utterances share one model load,
   // and a failed load is retried on the next utterance (entry removed).
-  const loading = factory(VOICE_STT_MODEL_PATH, language).catch(
+  const loading = factory(VOICE_STT_MODEL_ID, language).catch(
     (error: unknown) => {
       pipelineCache.delete(language);
       throw error;

@@ -208,3 +208,61 @@ kiosk hardware test can transcribe.
 This also partially closes the closer's "live-mic E2E + visual/device proof"
 HIGH gap: the capture→decode→STT chain is now browser-proven with a fake
 device; the remaining hardware proof is a real-mic run with staged weights.
+
+---
+
+## Post-completion follow-up: staged offline STT runtime (2026-09-21)
+
+**Trigger**: after the recorder fix, the kiosk browser showed `model-missing`
+("Sprachmodell fehlt. App neu installieren oder reparieren.") — no Whisper
+weights were ever shipped, and even with files present the runtime could not
+read them: in browser builds `@huggingface/transformers` v4.3.0 sets
+`env.allowLocalModels = false` unconditionally, so `local_files_only: true`
+plus `allowRemoteModels = false` throws before any file is read (verified in
+the bundle: `allowLocalModels: !(fs && path && crypto)`), and the ONNX runtime
+WASM defaults to the jsDelivr CDN. The kiosk runs a browser against a VPS, so
+the weights must be served by the built frontend.
+
+**Design (offline-by-construction, same-origin model host)**
+
+| File | Change |
+|:-----|:-------|
+| `frontend/scripts/fetch-voice-models.mjs` (new) | Stages the q8 Whisper-tiny file set (~43 MB: configs, tokenizer, `onnx/encoder_model_quantized.onnx`, `onnx/decoder_model_merged_quantized.onnx`) from the model host into `frontend/public/voice-models/Xenova/whisper-tiny/`, plus the ONNX-runtime WASM pair (~26 MB) copied from `node_modules/onnxruntime-web/dist` — no download. Idempotent (atomic temp-file writes), `--check`, `--force`, `VOICE_MODEL_HOST` override |
+| `frontend/src/voice/stt.ts` | `configureVoiceSttRuntime(env, baseUrl)`: `remoteHost` pinned to the app origin (`…/voice-models/`), `remotePathTemplate = '{model}/'`, WASM paths pinned to the staged pair; `pipeline()` loses `local_files_only`, keeps `dtype: 'q8'`. Exports `VOICE_STT_MODEL_ID`, `VOICE_STT_MODEL_BASE_PATH`, `VOICE_STT_ORT_*`, `resolveVoiceSttBaseUrl` |
+| `frontend/package.json` | `fetch:voice-models` script |
+| `frontend/Dockerfile` | `RUN npm run fetch:voice-models` before `npm run build` — build-time network only; the runtime never downloads |
+| `frontend/.gitignore` | `public/voice-models/` (staged artifacts stay out of git; ~69 MB) |
+| `frontend/src/voice/__tests__/stt.test.ts` | +4 runtime-config tests (origin pinning, reuse, **no HF/jsDelivr target**, node/SSR relative fallback) |
+
+**Evidence**
+
+| Check | Command / setup | Result |
+|:------|:----------------|:-------|
+| Staging | `npm --prefix frontend run fetch:voice-models` + `--check` | ✅ 11 model entries + ORT pair staged (68.8 MB), re-run keeps files, `--check` verifies |
+| Build output | `npm --prefix frontend run build` | ✅ exit 0; `dist/voice-models/` = 69 MB |
+| Unit + integration | `npm --prefix frontend run test:voice` | ✅ 109 tests, 109 pass (105 + 4 new) |
+| Lint | `npm --prefix frontend run lint` | ✅ 48/14 = baseline, 0 new |
+| **Full voice loop, real browser** (`vite preview` of the staged build, Chromium with a spoken WAV as fake mic: `say` → 16 kHz mono WAV supplied via `--use-file-for-fake-audio-capture`) | click mic → 4.5 s speech → click stop | ✅ `data-voice-state`: `idle → listening → transcribing → submitting → idle`; transcribed + submitted payload: `{"content":"He's very beyond what is the weather like in Berlin tomorrow.", "stream":false, …}`; **11 `/voice-models/…` requests, 0 requests to huggingface.co / jsDelivr / any CDN** |
+| First-utterance latency (cold browser context, localhost) | timeline capture | ✅ stop → `submitting` ≈ 3.4 s (model + WASM load + inference). On the kiosk the first tap additionally pays the one-time ~69 MB transfer from the VPS; afterwards the browser cache (`useBrowserCache`/`useWasmCache`) serves it locally |
+
+**Residual risks / open items**
+
+1. **Build-time model-host dependency**: the Docker build downloads from
+   `huggingface.co` unless the staged directory is present in the build
+   context (a local staging run is copied in and skipped). Mirror via
+   `VOICE_MODEL_HOST`, or commit `frontend/public/voice-models/` if the VPS
+   build should be fully self-contained (+69 MB in git).
+2. **Prewarm still open** (unchanged MEDIUM gap): a cold kiosk pays ~69 MB on
+   the first tap; prewarming the pipeline after shell boot remains the
+   mitigation and needs an owner issue.
+3. **Accuracy**: the smoke transcript shows Whisper-tiny mishearing the
+   synthetic TTS voice ("He's very beyond" for "Hey Swaibian") — vocabulary
+   repair only fixes recognizable manglings; real-mic accuracy is the
+   remaining HIGH gap for kiosk bring-up.
+4. **Arch/traceability docs now stale** (closer-owned; pending correction by
+   TC-B-04 or the architect, not edited here per TC-A scope rules):
+   `flow-assistant-voice.md:10,24` and `component-overview.md:28` still state
+   `local_files_only` / "model binaries not yet vendored";
+   `ADR-001-local-stt-shared-pcm.md:21-22,41` describes
+   `env.allowRemoteModels = false`. The decision stands; the mechanism is now
+   "staged same-origin model host" → an ADR-002 amendment is proposed.
