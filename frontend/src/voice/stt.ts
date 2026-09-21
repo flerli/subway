@@ -165,9 +165,10 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
 
   try {
     transformers = await import('@huggingface/transformers');
-  } catch {
+  } catch (error) {
     throw new Error(
       'Speech runtime failed to load (reinstall / repair runtime).',
+      { cause: error },
     );
   }
 
@@ -183,9 +184,19 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
       modelPath,
       { dtype: 'q8' },
     );
-  } catch {
+  } catch (error) {
+    // Diagnostic only (no PII): pinpoints bundle/staging drift so the
+    // user-facing "model missing" copy is backed by a real cause.
+    if (typeof console !== 'undefined') {
+      console.warn(
+        `[voice] model missing: ${modelPath} not reachable at ${resolveVoiceSttBaseUrl()}${VOICE_STT_MODEL_BASE_PATH} (run npm run fetch:voice-models and rebuild)`,
+        error instanceof Error ? error.message : undefined,
+      );
+    }
+
     throw new Error(
       'Speech model is missing from the app bundle (reinstall / repair runtime).',
+      { cause: error },
     );
   }
 

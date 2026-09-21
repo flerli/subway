@@ -28,8 +28,13 @@ export interface PlayableAudio {
   volume: number
   onended: ((ev: Event) => void) | null
   src: string
-  duration: number
-  /** Underlying media element (for analyser sources); optional in fakes. */
+  /**
+   * Underlying media element (for analyser sources); optional in fakes.
+   * NOTE: media duration is a read-only property of the media element and is
+   * deliberately NOT part of this contract — assigning duration used to throw
+   * `TypeError: Cannot set property duration … only a getter` on every replay
+   * (fixed 2026-09-21, real-browser proof).
+   */
   element?: HTMLAudioElement
 }
 
@@ -129,7 +134,6 @@ export class VoicePlaybackController {
       volume: 1,
       onended: null,
       src: '',
-      duration: 0,
     }
   }
 
@@ -213,7 +217,6 @@ export class VoicePlaybackController {
           return
         }
         player.src = result.audioDataUrl
-        player.duration = result.durationMs
         void player.play()
       })
       .catch((reason: unknown) => {

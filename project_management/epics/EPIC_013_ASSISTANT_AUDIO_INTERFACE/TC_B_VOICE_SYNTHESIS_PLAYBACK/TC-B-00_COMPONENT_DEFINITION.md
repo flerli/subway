@@ -96,6 +96,8 @@ Follows the TC-A-01 precedent: backend TTS/prefs events log `[voice]`-prefixed w
 |:-----|:---------|:----------|:----|
 | 2026-09-21 | TTS via Python helper/sidecar, not browser-only | Supertonic-3 is Python/ONNX; Bring/Roborock precedent (brief §4) | — (closer proposes ADR) |
 | 2026-09-21 | Preset voices only (M1–M5/F1–F5), no custom import in V1 | Scope control (brief §8) | — |
+| 2026-09-21 | Backend image now stages the TTS engine itself: Debian base (glibc for onnxruntime), python venv with `supertonic==1.3.1`, weights via `backend/scripts/fetch-tts-models.py` into `/app/tts-models`, `TTS_MODEL_DIR`/`TTS_PYTHON_BIN` set at image build | Post-completion fix: the VPS backend had no python/weights → `/api/voice/status` unavailable → replay died silently. Runtime stays offline-by-construction; `SUPERTONIC_MODEL_HOST` mirrors the 380 MB build-time download | — (closer proposes ADR) |
+| 2026-09-21 | Frontend replay: `player.duration` assignment removed from the `PlayableAudio` contract (getter-only wrapper → TypeError killed every replay); synthesis failures now surface as localized copy + `[voice]` warn | Post-completion fix (TC-B-02 report): real-browser proof; `onError`/fail-closed copy per SW-REQ-013-04 | — |
 
 ## Architecture Documentation Revisions
 

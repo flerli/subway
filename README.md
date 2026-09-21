@@ -92,12 +92,14 @@ docker compose down
 ```
 
 The backend image ships the voice runtime modules (`backend/voice/`,
-`backend/tts_helper/`). **Assistant speech synthesis in Docker additionally
-requires Python + Supertonic weights staged into the image or mounted at
-`TTS_MODEL_DIR`** — until staged, the app boots normally and the voice
-routes fail closed (503 with repair guidance) instead of downloading at
-runtime (Epic 013 operating note; weights ~400 MB, see
-`project_management/epics/EPIC_013_ASSISTANT_AUDIO_INTERFACE/`).
+`backend/tts_helper/`) **and the full TTS engine**: the Docker build installs
+Python + `supertonic==1.3.1` (venv at `/opt/tts-venv`) and stages the
+Supertonic-3 weights (~380 MB) into `/app/tts-models` via
+`backend/scripts/fetch-tts-models.py` (build-time network to Hugging Face;
+mirror with `SUPERTONIC_MODEL_HOST`). The kiosk never downloads weights at
+runtime (helper runs `--offline`). For local dev without Docker, the helper
+uses `~/.cache/supertonic3` automatically; override with
+`TTS_MODEL_DIR`/`TTS_PYTHON_BIN`.
 
 The Dockerized backend now stores its runtime SQLite data in Docker-managed persistent storage mounted at `/app/data`.
 

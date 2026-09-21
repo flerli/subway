@@ -146,3 +146,35 @@ Requirement → `file:line` → test → status:
 Residual risks: Docker weight staging; system `python3`+`supertonic` availability at runtime (probe reflects truthfully; fail-closed 503 copy).
 
 Independent review intentionally omitted — TC-B is declared `no-reviews`; gap analysis is inherited by the TC closer (TC-B-04).
+
+---
+
+## Post-completion fix (2026-09-21): TTS engine is now part of the backend image
+
+**Source**: kiosk/VPS browser test — replay showed a streaming flicker and no
+audio; `/api/voice/status` on the VPS reported the engine unavailable because
+the `node:22-alpine` backend image ships **no python3, no supertonic, and no
+weights** (previously documented as "operating note: stage at runtime").
+Compose never set `TTS_MODEL_DIR` either, so even a manual python setup had no
+model directory.
+
+**Fix**
+
+| File | Change |
+|:-----|:-------|
+| `backend/Dockerfile` | Base `node:22-alpine` → `node:22-slim` (Debian/glibc: onnxruntime has no musl wheels). Installs `python3` + venv, `pip install supertonic==1.3.1`, then stages the weights via `scripts/fetch-tts-models.py` into `/app/tts-models`; `ENV TTS_MODEL_DIR=/app/tts-models` + `ENV TTS_PYTHON_BIN=/opt/tts-venv/bin/python`. Build-time network only; runtime stays offline (`--offline`). |
+| `backend/scripts/fetch-tts-models.py` (new) | Stages the exact `REQUIRED_MODEL_FILES` + 10 `voice_styles/*.json` + license files from `Supertone/supertonic-3` (~380 MB) into a target dir; idempotent (atomic temp+rename), `--verify`, `--force`, `SUPERTONIC_MODEL_HOST` override. |
+
+**Evidence**
+
+| Check | Result |
+|:------|:-------|
+| `npm --prefix backend run test:voice` | ✅ 40/40 |
+| Local engine probe (dev machine, weights in `~/.cache/supertonic3`) | ✅ `/api/voice/status` → `available:true`, 10 voices, supertonic 1.3.1 |
+| Real synthesis | ✅ `POST /api/voice/synthesize` (de, F1) → 200, `audio/wav`, ~352 KB, cold ≈ 2 s |
+| Fetch script | ✅ `--verify` passes against the full local staging (382.7 MB); URL pattern verified (public HF repo, correct layout) |
+
+**Residual**: the full 380 MB download happens at image build time (VPS needs
+network to HF; mirror via `SUPERTONIC_MODEL_HOST`). Local dev machines keep
+using `~/.cache/supertonic3` (helper default) — no `TTS_MODEL_DIR` needed.
+The frontend replay chain is fixed separately (TC-B-02 post-completion fix).

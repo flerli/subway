@@ -139,3 +139,44 @@ Requirement → `file:line` → test → status:
 Residual risks: autoplay policy (HW smoke), default prefs until TC-B-03.
 
 Independent review intentionally omitted — TC-B is declared `no-reviews`; gap analysis is inherited by the TC closer (TC-B-04).
+
+---
+
+## Post-completion defect fix (2026-09-21): replay never played on real hardware
+
+**Source**: kiosk/browser test — clicking "Wiederholen" showed a short
+"Streaming" flicker, then nothing, even with the TTS engine available.
+
+**Root cause**: `VoicePlaybackController.speakChunk` assigned
+`player.duration = result.durationMs`, but the production player wrapper
+(`createDomAudioPlayer`, App.tsx) exposes `duration` as a **getter-only**
+accessor. In the strict-mode ESM bundle the assignment throws
+`TypeError: Cannot set property duration … which has only a getter` after
+every successful synthesis → the `.catch` path ran → the speaking state
+collapsed instantly (and, from the user's view, the replay died silently).
+Unit tests never caught it: their fake players carry a plain writable
+`duration` property. A second, related defect: synthesis failure was fully
+silent (`onError` unwired) — SW-REQ-013-04 requires fail-closed copy.
+
+**Fix**
+
+| File | Change |
+|:-----|:-------|
+| `frontend/src/voice/voicePlayback.ts` | Removed the `player.duration` assignment; removed `duration` from the `PlayableAudio` contract (media duration is read-only by nature; the field was write-only dead code that broke playback). `onError` now reports `tts-unavailable` on synthesis/playback failure, and the failure is logged `[voice] playback failed:` (error message only — no transcript/audio content). |
+| `frontend/src/App.tsx` | `createDomAudioPlayer` no longer exposes a getter-only `duration` (contract aligned). |
+| `frontend/src/voice/__tests__/voicePlayback.test.ts` | Fake player without `duration`; synthesis-failure test asserts `onError('tts-unavailable')`; positive test asserts no `onError` on success. |
+
+**Evidence (real browser, real local engine, production bundle)**
+
+| Check | Result |
+|:------|:-------|
+| `npm --prefix frontend run test:voice` | ✅ 118/118 (parallel STT-accuracy work added tests) |
+| `npm --prefix frontend run build` / `lint` | ✅ exit 0 / 48:14 baseline, 0 new |
+| Replay success path (Playwright, real `/api/voice/synthesize` via Vite proxy, assistant endpoints stubbed) | ✅ exactly one synthesize **200**; speaking state ("Streaming" button label) held **4.1 s** (≥ audio duration); **no error note**; console clean |
+| Replay failure path (synthesize blocked → 503) | ✅ localized fail-closed note "Sprachausgabe ist gerade nicht verfügbar. Bitte erneut versuchen." + `[voice] playback failed:` warn (no PII) |
+| Regression power | pre-fix bundle shows `TypeError: Cannot set property duration … only a getter` in the console on every replay; post-fix console is clean while audio plays |
+
+**Residual**: real audible output on the kiosk requires the backend TTS engine
+(python3 + supertonic + staged weights — see the TC-B-01 post-completion fix)
+and depends on the kiosk speaker; this fix proves the frontend replay chain
+end-to-end in a browser.

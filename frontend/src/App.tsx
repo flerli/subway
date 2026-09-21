@@ -601,9 +601,6 @@ const createDomAudioPlayer = (): PlayableAudio => {
     set src(value: string) {
       audio.src = value
     },
-    get duration() {
-      return audio.duration
-    },
     element: audio,
   }
 

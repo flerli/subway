@@ -8,7 +8,6 @@ import {
 } from '../voicePlayback.ts';
 
 const makePlayer = (): PlayableAudio & EventEmitter => {
-  const state = { src: '', duration: 0 };
   const emitter = Object.assign(
     new EventEmitter() as EventEmitter & PlayableAudio,
     {
@@ -20,8 +19,7 @@ const makePlayer = (): PlayableAudio & EventEmitter => {
       },
       volume: 1,
       onended: null as ((ev: Event) => void) | null,
-      src: state.src,
-      duration: state.duration,
+      src: '',
     },
   );
   return emitter;
