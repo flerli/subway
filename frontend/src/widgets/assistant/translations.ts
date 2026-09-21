@@ -21,6 +21,15 @@ export interface AssistantWidgetTranslation extends WidgetTranslationDefinition 
     editorTitle: string
     storedApiKeyHint: string
     selectedDefaultMeta: string
+    voiceSectionTitle: string
+    voiceSectionDescription: string
+    voiceEnabledLabel: string
+    voicePresetLabel: string
+    voiceVolumeLabel: string
+    voiceSampleAction: string
+    voiceSaveAction: string
+    voiceSavedState: string
+    voiceLoadFailed: string
   }
 }
 
@@ -42,6 +51,15 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       editorTitle: 'Connection editor',
       storedApiKeyHint: 'Stored API key will be reused when the field stays empty.',
       selectedDefaultMeta: 'Used for all new conversations.',
+      voiceSectionTitle: 'Voice',
+      voiceSectionDescription: 'Choose how assistant answers sound and hear a sample for each voice.',
+      voiceEnabledLabel: 'Speak answers aloud',
+      voicePresetLabel: 'Voice',
+      voiceVolumeLabel: 'Volume',
+      voiceSampleAction: 'Play sample',
+      voiceSaveAction: 'Save voice settings',
+      voiceSavedState: 'Voice settings saved.',
+      voiceLoadFailed: 'Voice settings could not be loaded.',
     },
     settings: {
       title: 'Assistant widget settings',
@@ -79,6 +97,15 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       editorTitle: 'Verbindungseditor',
       storedApiKeyHint: 'Der gespeicherte API Schlussel bleibt erhalten, wenn das Feld leer bleibt.',
       selectedDefaultMeta: 'Wird fur alle neuen Unterhaltungen verwendet.',
+      voiceSectionTitle: 'Stimme',
+      voiceSectionDescription: 'Lege fest, wie Assistent Antworten klingen, und hoere eine Probe fur jede Stimme.',
+      voiceEnabledLabel: 'Antworten vorlesen',
+      voicePresetLabel: 'Stimme',
+      voiceVolumeLabel: 'Lautstarke',
+      voiceSampleAction: 'Probe abspielen',
+      voiceSaveAction: 'Stimmeinstellungen speichern',
+      voiceSavedState: 'Stimmeinstellungen gespeichert.',
+      voiceLoadFailed: 'Stimmeinstellungen konnten nicht geladen werden.',
     },
     settings: {
       title: 'Assistent Widget Einstellungen',
@@ -116,6 +143,15 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       editorTitle: 'Editeur de connexion',
       storedApiKeyHint: 'La cle API enregistree sera reutilisee si le champ reste vide.',
       selectedDefaultMeta: 'Utilisee pour toutes les nouvelles conversations.',
+      voiceSectionTitle: 'Voix',
+      voiceSectionDescription: 'Choisissez le son des reponses de l assistant et ecoutez un echantillon pour chaque voix.',
+      voiceEnabledLabel: 'Lire les reponses a voix haute',
+      voicePresetLabel: 'Voix',
+      voiceVolumeLabel: 'Volume',
+      voiceSampleAction: 'Ecouter un echantillon',
+      voiceSaveAction: 'Enregistrer les reglages vocaux',
+      voiceSavedState: 'Reglages vocaux enregistres.',
+      voiceLoadFailed: 'Impossible de charger les reglages vocaux.',
     },
     settings: {
       title: 'Reglages du widget assistant',
@@ -153,6 +189,15 @@ const assistantWidgetTranslationCatalog = createWidgetTranslationCatalog<Assista
       editorTitle: 'Editor de conexion',
       storedApiKeyHint: 'La clave API guardada se reutilizara si el campo queda vacio.',
       selectedDefaultMeta: 'Se usa para todas las conversaciones nuevas.',
+      voiceSectionTitle: 'Voz',
+      voiceSectionDescription: 'Elige como suenan las respuestas del asistente y escucha una muestra de cada voz.',
+      voiceEnabledLabel: 'Leer respuestas en voz alta',
+      voicePresetLabel: 'Voz',
+      voiceVolumeLabel: 'Volumen',
+      voiceSampleAction: 'Reproducir muestra',
+      voiceSaveAction: 'Guardar ajustes de voz',
+      voiceSavedState: 'Ajustes de voz guardados.',
+      voiceLoadFailed: 'No se pudieron cargar los ajustes de voz.',
     },
     settings: {
       title: 'Ajustes del widget asistente',

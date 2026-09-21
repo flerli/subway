@@ -156,6 +156,14 @@ interface WidgetBoardHostProps {
     resolvingApprovalRequestId: string | null
     isTurnBusy: boolean
     voiceNote: string | null
+    playback: {
+      playing: boolean
+      speakingMessageId: string | null
+      volume: number
+      readOutputLevel: () => number
+      onReplayMessage: (messageId: string) => void
+      onVolumeChange: (volume: number) => void
+    } | null
   }
   assistantActions: {
     onCreateThread: () => void
@@ -1231,6 +1239,7 @@ export function WidgetBoardHost({
                     resolvingApprovalRequestId: assistantState.resolvingApprovalRequestId,
                     isTurnBusy: assistantState.isTurnBusy,
                     voiceNote: assistantState.voiceNote,
+                    playback: assistantState.playback,
                     onCreateThread: assistantActions.onCreateThread,
                     onDeleteThread: assistantActions.onDeleteThread,
                     onSelectThread: assistantActions.onSelectThread,

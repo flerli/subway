@@ -62,70 +62,70 @@ See: `project_management/architecture/README.md` for full context.
 ## 📋 Task List
 
 ### 0.0 Read Architecture Documentation [MANDATORY]
-- [ ] **Read: `project_management/architecture/README.md`**
-- [ ] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
+- [x] **Read: `project_management/architecture/README.md`**
+- [x] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
 
 ### 0.1 Read Predecessor Context [MANDATORY]
-- [ ] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
-- [ ] **Read: `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`**
-- [ ] **Read: `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`**
-- [ ] **Read: `TC-B-03_VOICE_PREFS_SETTINGS_COMPLETION_REPORT.md`**
-- [ ] **Read: `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`** (non-adjacent dependency: capture contract for full-loop smoke)
+- [x] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
+- [x] **Read: `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-B-03_VOICE_PREFS_SETTINGS_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`** (non-adjacent dependency: capture contract for full-loop smoke)
 
 > Closer reads ALL TC-B predecessor reports + the TC-A closer handoff.
 
 ### 0.2 Run Full Test Suite [MANDATORY GATE 🔴]
-- [ ] Build [🔴] + lint [🔴] + all unit suites; record baseline; new failures → STOP.
+- [x] Build [🔴] + lint [🔴] + all unit suites; record baseline; new failures → STOP.
 
 ### 1. Gap Analysis over TC-B-01…03 (SWE5 duty)
-- [ ] Re-read all three completion reports; disposition every open risk, Known Limitation, deferred item (fixed here / accepted with rationale / epic follow-up with owner)
-- [ ] Verify consistency: cache keys vs prefs voice values, guard contract vs settings writes, strip/chunk vs real transcript shapes, sample strategy vs cache
-- [ ] Audit TC-B decisions against ADR triggers; each non-elevated decision gets an explicit no-ADR note in the completion report
+- [x] Re-read all three completion reports; disposition every open risk, Known Limitation, deferred item (fixed here / accepted with rationale / epic follow-up with owner)
+- [x] Verify consistency: cache keys vs prefs voice values, guard contract vs settings writes, strip/chunk vs real transcript shapes, sample strategy vs cache
+- [x] Audit TC-B decisions against ADR triggers; each non-elevated decision gets an explicit no-ADR note in the completion report
 
 ### 2. Bug/Flaw Fixes Found in Review
-- [ ] Fix gaps (wrong-voice cache collisions, autoplay races, isolation holes, missing copy); each fix tested
+- [x] Fix gaps (wrong-voice cache collisions, autoplay races, isolation holes, missing copy); each fix tested
 
 ### 3. Integration Tests SWE5 (MANDATORY on closer 🔴)
-- [ ] `synthesis.integration`: answer text → strip → chunk → synthesize (mocked helper) → cache hit on repeat → playback queue order with cumulative offsets
-- [ ] Prefs isolation: user B denied on user A's prefs (read + write), unauthenticated denied on all `/api/voice/*`, session-isolation with two sessions
-- [ ] Failure paths: helper error → fail-closed copy; stdout impurity rejected; TTS-disabled → silence without errors
-- [ ] 0 failures allowed
+- [x] `synthesis.integration`: answer text → strip → chunk → synthesize (mocked helper) → cache hit on repeat → playback queue order with cumulative offsets
+- [x] Prefs isolation: user B denied on user A's prefs (read + write), unauthenticated denied on all `/api/voice/*`, session-isolation with two sessions
+- [x] Failure paths: helper error → fail-closed copy; stdout impurity rejected; TTS-disabled → silence without errors
+- [x] 0 failures allowed
 
 ### 4. Architecture / Traceability Updates SWE2 (closer duty)
-- [ ] Populate `flow-assistant-voice.md` synthesis half + full-loop sequence (Mermaid + table + `Last updated by: SWE3-B-04`)
-- [ ] Update `component-overview.md` (bridge, cache, playback, prefs), `data-model.md` (prefs storage), `api-contracts.md` (all `/api/voice/*` with signatures)
-- [ ] Update `traceability/requirements-matrix.md` + `coverage-map.md` rows for SW-REQ-013-02/03/04-output
-- [ ] Write ADRs: TTS helper/sidecar choice; per-user prefs storage; model-distribution decision (or explicit deferred-gate follow-up). Non-elevated decisions get no-ADR notes.
-- [ ] Update `architecture/README.md` changelog (`Last updated by: SWE3-B-04`); confirm TC-A-04 entries coherent
+- [x] Populate `flow-assistant-voice.md` synthesis half + full-loop sequence (Mermaid + table + `Last updated by: SWE3-B-04`)
+- [x] Update `component-overview.md` (bridge, cache, playback, prefs), `data-model.md` (prefs storage), `api-contracts.md` (all `/api/voice/*` with signatures)
+- [x] Update `traceability/requirements-matrix.md` + `coverage-map.md` rows for SW-REQ-013-02/03/04-output
+- [x] Write ADRs: TTS helper/sidecar choice; per-user prefs storage; model-distribution decision (or explicit deferred-gate follow-up). Non-elevated decisions get no-ADR notes.
+- [x] Update `architecture/README.md` changelog (`Last updated by: SWE3-B-04`); confirm TC-A-04 entries coherent
 
 ### 5. Unit-Test Health
-- [ ] Fill coverage holes in TC-B-01…03; coverage must not regress
+- [x] Fill coverage holes in TC-B-01…03; coverage must not regress
 
 ### 6. Run Full Test Suite + Coverage [MANDATORY GATE 🔴]
-- [ ] Build + lint (🔴) + unit + integration; 0 failures; coverage not regressed
+- [x] Build + lint (🔴) + unit + integration; 0 failures; coverage not regressed
 
 ### 7. Create Documentation
-- [ ] Final voice-loop docs: bridge ops (model dir, env, Docker notes), cache ops (location, eviction), prefs API, licensing/attribution checklist
+- [x] Final voice-loop docs: bridge ops (model dir, env, Docker notes), cache ops (location, eviction), prefs API, licensing/attribution checklist
 
 ### 8. Licensing & Distribution Check
-- [ ] Verify attributions ship (Whisper Apache-2.0 LICENSE + NOTICE, supertonic SDK MIT, weights OpenRAIL-M, lamejs MIT)
-- [ ] Record model-distribution decision (vendored vs staged) + deferred build-gate follow-up as explicit gap with owner
+- [x] Verify attributions ship (Whisper Apache-2.0 LICENSE + NOTICE, supertonic SDK MIT, weights OpenRAIL-M, lamejs MIT)
+- [x] Record model-distribution decision (vendored vs staged) + deferred build-gate follow-up as explicit gap with owner
 
 ### 9. SYS3 Runtime Smoke (MANDATORY on closer 🔴)
-- [ ] Start the stack: `npm --prefix backend run dev` + `npm --prefix frontend run dev`
-- [ ] Trigger the full loop: mic submit (or seeded prompt when no mic) → assistant answer → autoplay speech → replay + volume + voice change + sample playback
-- [ ] Verify output: audible playback (or audio-pipeline evidence: synthesized MP3 + playback state), prefs persist per user, isolation holds across two sessions
-- [ ] If models/hardware absent: run the documented fallback path, record `SYS3 SMOKE (fallback)` evidence + remaining HIGH gap. Skip only with documented reason.
+- [x] Start the stack: `npm --prefix backend run dev` + `npm --prefix frontend run dev`
+- [x] Trigger the full loop: mic submit (or seeded prompt when no mic) → assistant answer → autoplay speech → replay + volume + voice change + sample playback
+- [x] Verify output: audible playback (or audio-pipeline evidence: synthesized MP3 + playback state), prefs persist per user, isolation holds across two sessions
+- [x] If models/hardware absent: run the documented fallback path, record `SYS3 SMOKE (fallback)` evidence + remaining HIGH gap. Skip only with documented reason.
 
 ### 10. Write Completion Report & Handoff [MANDATORY]
-- [ ] Complete `TC-B-04_SYNTHESIS_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`
-- [ ] **Write epic-handoff section** — MUST include:
+- [x] Complete `TC-B-04_SYNTHESIS_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`
+- [x] **Write epic-handoff section** — MUST include:
   - What was verified: synthesis path + full voice loop results, smoke evidence (or fallback + gap)
   - Architecture artifacts updated (exact files + changes), ADRs written (or no-ADR notes)
   - Gaps fixed vs deferred (severity + owner for each deferred item, incl. build-gate follow-up)
   - Operating notes for release (model dir, env, Docker, cache, licenses)
   - Gate results table
-- [ ] Update `TC-B-00_COMPONENT_DEFINITION.md`: all rows ✅, Status → ✅ Complete, decisions + arch-revision entry; notify epic (TC table → ✅)
+- [x] Update `TC-B-00_COMPONENT_DEFINITION.md`: all rows ✅, Status → ✅ Complete, decisions + arch-revision entry; notify epic (TC table → ✅)
 
 ---
 
@@ -156,11 +156,11 @@ See: `project_management/architecture/README.md` for full context.
 
 ## ✅ Acceptance Criteria
 
-- [ ] Gap analysis covers TC-B-01…03 with every item dispositioned; no-ADR notes recorded
-- [ ] Integration tests green incl. prefs isolation (SWE5 🔴); unit green; build+lint clean (🔴); coverage not regressed
-- [ ] Architecture + traceability + ADRs current (or explicit deferred gaps with owners)
-- [ ] SYS3 full-loop smoke with evidence (or documented fallback + HIGH gap); licenses verified; distribution decision recorded
-- [ ] Completion report with epic handoff; TC-B-00 Status ✅ Complete
+- [x] Gap analysis covers TC-B-01…03 with every item dispositioned; no-ADR notes recorded
+- [x] Integration tests green incl. prefs isolation (SWE5 🔴); unit green; build+lint clean (🔴); coverage not regressed
+- [x] Architecture + traceability + ADRs current (or explicit deferred gaps with owners)
+- [x] SYS3 full-loop smoke with evidence (or documented fallback + HIGH gap); licenses verified; distribution decision recorded
+- [x] Completion report with epic handoff; TC-B-00 Status ✅ Complete
 
 ---
 

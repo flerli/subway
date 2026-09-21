@@ -127,7 +127,19 @@ const sttErrorToCaptureError = (error: { code: string; message: string }): Voice
   return captureError('transcribe-failed', error.message);
 };
 
-/** Production recorder: MediaRecorder with negotiated container. */
+/**
+ * Production recorder: MediaRecorder with negotiated container.
+ *
+ * Contract: `stop()` resolves the recorded utterance as one blob; `cancel()`
+ * discards it. Capture starts the moment the factory runs (the controller
+ * creates the recorder exactly when push-to-talk begins) — an unstoppered
+ * recorder stays `inactive`, so `stop()` would yield a 0-byte blob and every
+ * utterance would die in `decode-failed` before STT (real-browser defect,
+ * fixed 2026-09-21).
+ *
+ * Why (SW-REQ-013-01 #2/#3): capture must begin on the explicit tap and every
+ * recorded byte must reach the shared 16 kHz PCM normalizer.
+ */
 export const createMediaRecorder: UtteranceRecorderFactory = (
   stream: MediaStream,
 ): UtteranceRecorder => {
@@ -155,6 +167,11 @@ export const createMediaRecorder: UtteranceRecorderFactory = (
     settled = true;
     resolveStopped?.(new Blob(chunks, { type: recorder.mimeType || 'audio/webm' }));
   };
+
+  // Push-to-talk begins here: without this call the recorder never records.
+  // A throwing `start()` (unsupported configuration) bubbles out so the
+  // controller fails closed with `unsupported` instead of a silent empty blob.
+  recorder.start();
 
   return {
     stop: (): Promise<Blob> =>
@@ -319,6 +336,17 @@ export class VoiceCaptureController {
     const permission: MicPermissionResult = await requestPermission();
 
     if (run !== this.runId) {
+      // Cancelled (or restarted) while permission was pending: never leak the granted stream.
+      if (permission.ok) {
+        for (const track of permission.stream.getTracks()) {
+          try {
+            track.stop();
+          } catch {
+            // Track teardown must never throw into the controller.
+          }
+        }
+      }
+
       return;
     }
 

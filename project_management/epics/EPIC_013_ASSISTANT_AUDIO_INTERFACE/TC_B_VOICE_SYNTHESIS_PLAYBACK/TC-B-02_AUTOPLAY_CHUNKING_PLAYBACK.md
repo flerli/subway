@@ -56,61 +56,61 @@ See: `project_management/architecture/README.md` for full context.
 ## 📋 Task List
 
 ### 0.0 Read Architecture Documentation [MANDATORY]
-- [ ] **Read: `project_management/architecture/README.md`**
-- [ ] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
+- [x] **Read: `project_management/architecture/README.md`**
+- [x] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
 
 ### 0.1 Read Predecessor Context [MANDATORY]
-- [ ] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
-- [ ] **Read: `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`** ← predecessor's handoff
+- [x] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
+- [x] **Read: `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`** ← predecessor's handoff
 
 ### 0.2 Run Full Test Suite [MANDATORY GATE 🔴]
-- [ ] Build [🔴] + lint [🔴 MANDATORY from TC-B-02] + all prior voice suites; record baseline; new failures → STOP.
+- [x] Build [🔴] + lint [🔴 MANDATORY from TC-B-02] + all prior voice suites; record baseline; new failures → STOP.
 
 ### 1. Investigate Requirements
-- [ ] Read: SW-REQ-013-02 (TC-B-01) + DISCOVERY_BRIEF §5 interaction 1
-- [ ] Read: `frontend/src/assistant/AssistantMarkdown.tsx` + Epic 010-005 rendering (code fences, tables, task lists to strip)
-- [ ] Read: `frontend/src/widgets/assistant/AssistantDetailPanel.tsx` (message list, turn states for autoplay trigger)
+- [x] Read: SW-REQ-013-02 (TC-B-01) + DISCOVERY_BRIEF §5 interaction 1
+- [x] Read: `frontend/src/assistant/AssistantMarkdown.tsx` + Epic 010-005 rendering (code fences, tables, task lists to strip)
+- [x] Read: `frontend/src/widgets/assistant/AssistantDetailPanel.tsx` (message list, turn states for autoplay trigger)
 
 ### 1.5 Logging & Observability Integration [MANDATORY CROSS-CUTTING]
-- [ ] Playback events (started/finished/interrupted/failed) with user/session context; never log message content or audio
-- [ ] Record logger evidence or specific tested `N/A` rationale
+- [x] Playback events (started/finished/interrupted/failed) with user/session context; never log message content or audio
+- [x] Record logger evidence or specific tested `N/A` rationale
 
 ### 2. Write/Update Requirements
-- [ ] Refine SW-REQ-013-02 playback semantics (autoplay trigger, chunk size, interrupt rule, volume default)
+- [x] Refine SW-REQ-013-02 playback semantics (autoplay trigger, chunk size, interrupt rule, volume default)
 
 ### 3. Investigate Architecture
-- [ ] Review: TC-A-03 circle visuals — output circle shares the language (direction variant)
-- [ ] Review: turn lifecycle (`streaming` vs `completed`) — decide autoplay on complete vs progressive chunk playback
+- [x] Review: TC-A-03 circle visuals — output circle shares the language (direction variant)
+- [x] Review: turn lifecycle (`streaming` vs `completed`) — decide autoplay on complete vs progressive chunk playback
 
 ### 4. Implement Code
-- [ ] `frontend/src/voice/speechText.ts`: `stripMarkdownToSpeech()` (drop code fences, tables→ prose, task lists, links→text, tool-event blocks excluded), `chunkForSpeech(text)` (2–5 sentences, stable boundaries)
-- [ ] `frontend/src/voice/useVoicePlayback.ts`: chunk queue, parallel fan-out synthesis, cumulative `startMs` offsets, volume, per-message replay, interrupt (mic tap / replay tap / unmount), TTS-disabled guard (reads prefs; TC-B-03 finalizes API but default-off behavior here)
-- [ ] `frontend/src/voice/OutputLevelCircle.tsx`: output-direction pulsating circle (shared tokens with input circle)
-- [ ] Wire into `AssistantDetailPanel` transcript: autoplay latest assistant message, replay button per message, volume control
-- [ ] Wire into Runtime Instantiation Map ("transcript wires playback" responsibility)
+- [x] `frontend/src/voice/speechText.ts`: `stripMarkdownToSpeech()` (drop code fences, tables→ prose, task lists, links→text, tool-event blocks excluded), `chunkForSpeech(text)` (2–5 sentences, stable boundaries)
+- [x] `frontend/src/voice/useVoicePlayback.ts`: chunk queue, parallel fan-out synthesis, cumulative `startMs` offsets, volume, per-message replay, interrupt (mic tap / replay tap / unmount), TTS-disabled guard (reads prefs; TC-B-03 finalizes API but default-off behavior here)
+- [x] `frontend/src/voice/OutputLevelCircle.tsx`: output-direction pulsating circle (shared tokens with input circle)
+- [x] Wire into `AssistantDetailPanel` transcript: autoplay latest assistant message, replay button per message, volume control
+- [x] Wire into Runtime Instantiation Map ("transcript wires playback" responsibility)
 
 ### 5. Create Unit Tests (SWE4) [MANDATORY]
-- [ ] Strip tests: code fence/table/task-list/link/tool-block fixtures → speakable text without markup artifacts
-- [ ] Chunker tests: boundary stability, 2–5 sentence sizing, retry granularity (failed chunk re-synthesizes alone)
-- [ ] Playback-hook tests (mocked audio + synthesize): autoplay trigger, interrupt, volume applied, disabled guard, unmount cleanup
-- [ ] Redaction test: no message content in logs
+- [x] Strip tests: code fence/table/task-list/link/tool-block fixtures → speakable text without markup artifacts
+- [x] Chunker tests: boundary stability, 2–5 sentence sizing, retry granularity (failed chunk re-synthesizes alone)
+- [x] Playback-hook tests (mocked audio + synthesize): autoplay trigger, interrupt, volume applied, disabled guard, unmount cleanup
+- [x] Redaction test: no message content in logs
 
 ### 6. Run Full Test Suite + Coverage [MANDATORY GATE 🔴]
-- [ ] Build + lint (both 🔴) + unit suites; 0 new failures; coverage not regressed
+- [x] Build + lint (both 🔴) + unit suites; 0 new failures; coverage not regressed
 
 ### 7. Create Documentation
-- [ ] JSDoc for strip/chunk/hook contracts + autoplay/interrupt semantics
-- [ ] Note for closer: playback modules to add to flow/component diagrams
+- [x] JSDoc for strip/chunk/hook contracts + autoplay/interrupt semantics
+- [x] Note for closer: playback modules to add to flow/component diagrams
 
 ### 8. Write Completion Report & Handoff [MANDATORY]
-- [ ] Complete `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`
-- [ ] **Write handoff section for TC-B-03 team** — MUST include:
+- [x] Complete `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`
+- [x] **Write handoff section for TC-B-03 team** — MUST include:
   - What was built: hook API with usage example, strip/chunk behavior + fixtures, wiring points, prefs guard contract TC-B-03 must satisfy
   - Key decisions/deviations (autoplay timing, fan-out degree, volume default)
   - Known limitations (voice fixed until prefs land, no samples yet, long-answer edge cases)
   - Open risks (CPU contention on fan-out, mobile autoplay policies)
   - Gate results table
-- [ ] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
+- [x] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
 
 ---
 
@@ -136,11 +136,11 @@ See: `project_management/architecture/README.md` for full context.
 
 ## ✅ Acceptance Criteria
 
-- [ ] New assistant answer autoplays (when enabled) with volume + replay; tap interrupts
-- [ ] Markup fixtures produce clean speech text; chunks 2–5 sentences
-- [ ] Disabled-voice guard silences autoplay without errors
-- [ ] Build+lint clean (🔴); tests green; coverage not regressed
-- [ ] Completion report with TC-B-03 handoff; TC-B-00 updated; logger evidence included
+- [x] New assistant answer autoplays (when enabled) with volume + replay; tap interrupts
+- [x] Markup fixtures produce clean speech text; chunks 2–5 sentences
+- [x] Disabled-voice guard silences autoplay without errors
+- [x] Build+lint clean (🔴); tests green; coverage not regressed
+- [x] Completion report with TC-B-03 handoff; TC-B-00 updated; logger evidence included
 
 ---
 

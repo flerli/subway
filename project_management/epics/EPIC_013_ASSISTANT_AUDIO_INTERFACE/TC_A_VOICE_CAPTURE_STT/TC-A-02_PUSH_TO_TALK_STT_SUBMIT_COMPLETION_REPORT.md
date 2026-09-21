@@ -151,3 +151,60 @@ Wiring chain: header → button → hook → controller → stt → vocab → Ap
 Residual risks / limitations / open questions: see Handoff + Known Issues (model binaries, live sampler, first-load latency, Safari).
 
 Independent review intentionally omitted — TC-A is declared `no-reviews`; gap analysis is inherited by the TC closer (TC-A-04).
+
+---
+
+## Post-completion defect fix (2026-09-21)
+
+**Source**: user browser test on the kiosk — the top-bar mic showed the German
+`decode-failed` copy ("Die Aufnahme konnte nicht gelesen werden. Bitte erneut
+versuchen.") for every utterance (tap → speak → tap stop). This issue owns
+`createMediaRecorder`, so the fix lands here.
+
+**Root cause**: `createMediaRecorder` never called `recorder.start()`. The
+recorder stayed `inactive`, so the stop path skipped `recorder.stop()` and
+resolved a **0-byte blob**; `decodeToMono16k` handed that empty buffer to
+`decodeAudioData`, which throws → `decode-failed`. Every unit/integration test
+faked the recorder factory (`createRecorder`), so the production recorder was
+never exercised anywhere; the closer's no-mic/no-browser fallback smoke could
+not observe it either.
+
+**Fix**
+
+| File | Change |
+|:-----|:-------|
+| `frontend/src/voice/voiceCapture.ts` | `createMediaRecorder` starts capture on creation (contract documented on the factory); a throwing `start()` bubbles out so the controller fails closed with `unsupported` instead of a silent empty blob |
+| `frontend/src/voice/audioInput.ts` | `decodeToMono16k` reports a 0-byte recording as `empty` ("nothing was heard") instead of the misleading `decode-failed` |
+
+**Regression tests (+5, suite 105/105)**
+
+| Test | Covers |
+|:-----|:-------|
+| `voiceCapture.test.ts` › `createMediaRecorder` "starts capture on creation and returns the recorded bytes" | recorder is `recording` after factory creation; negotiated container; non-empty blob |
+| `…` "falls back to the browser default container when nothing is supported" | no probe hit → default constructor, still started |
+| `…` "fails closed when the browser refuses to start recording" | `start()` throw → factory throws → controller `unsupported` + mic released |
+| `…` "hands real recorded bytes to the decoder through the controller" | controller → production recorder → decoder receives a **non-empty** blob |
+| `audioInput.test.ts` › "reports a 0-byte recording as empty, never decode-failed" | empty-blob taxonomy, decoder never called |
+
+**Evidence**
+
+| Check | Command / setup | Result |
+|:------|:----------------|:-------|
+| Regression power | temporarily comment out `recorder.start()` → `npm --prefix frontend run test:voice` | ✅ 4 new recorder tests fail (101/105), i.e. they catch the defect |
+| Unit + integration | `npm --prefix frontend run test:voice` | ✅ 105 tests, 105 pass, 0 fail |
+| Typecheck/build | `npm --prefix frontend run build` | ✅ exit 0, 0 errors |
+| Lint | `npm --prefix frontend run lint` | ✅ 48 errors / 14 warnings = baseline, 0 new |
+| Browser, module level (Playwright Chromium + `--use-fake-device-for-media-stream`, real modules from the Vite dev server) | production factory vs raw recorder control | ✅ before fix: 0-byte blob → `decode-failed`; after fix: 24 446-byte blob → decodes to 24 000 samples (1.5 s @ 16 kHz). Control (raw recorder with `start()`) decoded before and after — isolates the missing `start()` |
+| Browser, app level (production bundle via `vite preview`, `/api/**` stubbed at the HTTP boundary, fake mic) | click `button[data-voice-state]` → speak → click stop | ✅ `data-voice-state`: `idle → listening → error`; note = "Speech model is missing. Reinstall or repair the app." — the decode hop now succeeds and STT is reached (screenshot captured) |
+
+**Residual gap (unchanged, now the only blocker for real-browser STT)**: no
+Whisper weights are staged — `frontend/public/voice-models/` does not exist, so
+`/voice-models/whisper-tiny/*` falls back to the SPA `index.html` and the
+runtime fails closed with `model-missing` exactly as designed. The
+distribution decision (epic §6 risk row) is recorded as TC-B-closer /
+staging follow-up; the STT-weight staging owner issue must be named before the
+kiosk hardware test can transcribe.
+
+This also partially closes the closer's "live-mic E2E + visual/device proof"
+HIGH gap: the capture→decode→STT chain is now browser-proven with a fake
+device; the remaining hardware proof is a real-mic run with staged weights.

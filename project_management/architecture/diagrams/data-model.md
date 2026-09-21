@@ -1,6 +1,6 @@
 # Data Model
 
-> `Last updated by: swaibian-architect-no-reviews` (2026-09-21, scaffold — real data populated by TC-B-04)
+> `Last updated by: SWE3-B-04` (2026-09-21, voice_preferences populated — confirmed by SWE3-A-04: TC-A adds no tables)
 
 ```mermaid
 erDiagram
@@ -9,14 +9,12 @@ erDiagram
     USERS ||--o{ ASSISTANT_THREADS : owns
     ASSISTANT_THREADS ||--o{ ASSISTANT_MESSAGES : contains
     USERS ||--o{ ASSISTANT_ROUTES : owns
-    USERS ||--o{ VOICE_PREFS : owns
+    USERS ||--|| VOICE_PREFERENCES : owns
 ```
 
-| Table (planned/confirmed by closer) | Key columns | Owner |
+| Table (confirmed) | Key columns | Owner |
 |-------------------------------------|-------------|-------|
 | `users`, `sessions` | Existing auth model (Epic 003) | — |
 | `assistant_threads/messages/routes` | Existing assistant model (Epic 010) | — |
-| `voice_prefs` | `user_id`, `tts_enabled`, `voice` (M1–M5/F1–F5), `volume`, `updated_at` — exact shape decided TC-B-03 | TC-B-04 populates |
-| TTS cache | Disk entries keyed SHA256(sdk+text+voice+lang), age/size eviction — not a DB table | TC-B-04 populates |
-
-Populated by the TC's last implementation issue (TC-B-04 confirms storage shape; TC-A stores nothing — ephemeral audio only).
+| `voice_preferences` | `owner_user_id` TEXT PK → users(id), `tts_enabled` INTEGER DEFAULT 1, `voice` TEXT DEFAULT 'F1', `volume` INTEGER DEFAULT 80, `updated_at` TEXT — upserted via `PUT /api/voice/preferences`, defaults for new users | SWE3-B-03 ✅ |
+| TTS cache | Disk entries under `backend/data/voice-cache/<safeUserId>/<sha256>.wav`; key = SHA256(sdk\|text\|voice\|lang); eviction 7 d / 500 MB oldest-first — NOT a DB table | SWE3-B-01 ✅ |

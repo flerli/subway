@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppTextBundle } from '../../i18n/appText'
 import {
   createAssistantRoute,
@@ -11,10 +11,23 @@ import {
   type AssistantAvailabilityRecord,
   type AssistantSettingsRecord,
 } from '../../api/assistant'
+import {
+  DEFAULT_VOICE_PREFS,
+  fetchVoicePreferences,
+  fetchVoiceSample,
+  updateVoicePreferences,
+  type VoicePreferencesRecord,
+} from '../../api/voice'
+import { setVoicePrefsState } from '../../voice/voicePrefsStore'
 import type { SupportedLanguageCode } from '../../i18n/localization'
 import type { RegisteredWidget } from '../widgetTypes'
 import type { WidgetSettingsValues } from '../widgetTypes'
 import type { AssistantWidgetTranslation } from './translations'
+
+/** Supertonic-3 preset voices (M1–M5 male, F1–F5 female) — SW-REQ-013-03. */
+const VOICE_PRESETS: readonly string[] = [
+  'M1', 'M2', 'M3', 'M4', 'M5', 'F1', 'F2', 'F3', 'F4', 'F5',
+]
 
 interface AssistantSettingsPanelProps {
   appText: AppTextBundle
@@ -95,6 +108,11 @@ export function AssistantSettingsPanel({
   const [hasStoredApiKey, setHasStoredApiKey] = useState(false)
   const [requestState, setRequestState] = useState<RequestState>('idle')
   const [statusMessage, setStatusMessage] = useState(widgetText.settings?.description ?? '')
+  const [voicePrefs, setVoicePrefs] = useState<VoicePreferencesRecord>(DEFAULT_VOICE_PREFS)
+  const [voiceRequestState, setVoiceRequestState] = useState<RequestState>('idle')
+  const [voiceStatusMessage, setVoiceStatusMessage] = useState(widgetText.copy.voiceSectionDescription)
+  const [playingVoiceSample, setPlayingVoiceSample] = useState<string | null>(null)
+  const sampleAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -140,10 +158,29 @@ export function AssistantSettingsPanel({
         }
       })
 
+    fetchVoicePreferences()
+      .then((prefs) => {
+        if (!cancelled) {
+          setVoicePrefs(prefs)
+          setVoicePrefsState({
+            ttsEnabled: prefs.ttsEnabled,
+            voice: prefs.voice,
+            volume: prefs.volume,
+          })
+          setVoiceRequestState('idle')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVoiceRequestState('error')
+          setVoiceStatusMessage(widgetText.copy.voiceLoadFailed)
+        }
+      })
+
     return () => {
       cancelled = true
     }
-  }, [appText.messages.assistantLoadFailed, languageCode, widgetText.settings?.description])
+  }, [appText.messages.assistantLoadFailed, languageCode, widgetText.settings?.description, widgetText.copy.voiceLoadFailed])
 
   const selectedRoute = useMemo(
     () => routes.find((route) => route.routeId === selectedRouteId) ?? null,
@@ -287,6 +324,63 @@ export function AssistantSettingsPanel({
       setStatusMessage(
         error instanceof Error ? error.message : appText.messages.assistantLoadFailed,
       )
+    }
+  }
+
+  const handleVoiceSave = async () => {
+    setVoiceRequestState('saving')
+
+    try {
+      const saved = await updateVoicePreferences({
+        ttsEnabled: voicePrefs.ttsEnabled,
+        voice: voicePrefs.voice,
+        volume: voicePrefs.volume,
+      })
+      setVoicePrefs(saved)
+      setVoicePrefsState({
+        ttsEnabled: saved.ttsEnabled,
+        voice: saved.voice,
+        volume: saved.volume,
+      })
+      setVoiceRequestState('saved')
+      setVoiceStatusMessage(widgetText.copy.voiceSavedState)
+    } catch {
+      setVoiceRequestState('error')
+      setVoiceStatusMessage(widgetText.copy.voiceLoadFailed)
+    }
+  }
+
+  const stopVoiceSample = () => {
+    sampleAudioRef.current?.pause()
+    sampleAudioRef.current = null
+    setPlayingVoiceSample(null)
+  }
+
+  const handlePlayVoiceSample = async (voice: string) => {
+    if (playingVoiceSample === voice) {
+      stopVoiceSample()
+      return
+    }
+
+    stopVoiceSample()
+    setPlayingVoiceSample(voice)
+
+    try {
+      const sample = await fetchVoiceSample(voice, languageCode)
+      const audio = new Audio(sample.audioDataUrl)
+      sampleAudioRef.current = audio
+      audio.volume = 0.8
+
+      audio.onended = () => {
+        sampleAudioRef.current = null
+        setPlayingVoiceSample(null)
+      }
+
+      await audio.play()
+    } catch {
+      sampleAudioRef.current = null
+      setPlayingVoiceSample(null)
+      setVoiceStatusMessage(widgetText.copy.voiceLoadFailed)
     }
   }
 
@@ -547,6 +641,95 @@ export function AssistantSettingsPanel({
           </div>
         </section>
       </div>
+
+      <section className="settings-card widget-settings-card widget-settings-card--voice">
+        <div className="settings-card-head">
+          <p className="widget-kicker">{widgetText.boardKicker}</p>
+          <h3>{widgetText.copy.voiceSectionTitle}</h3>
+          <p>{widgetText.copy.voiceSectionDescription}</p>
+        </div>
+
+        <div className="widget-settings-fields">
+          <label className="settings-toggle">
+            <span>{widgetText.copy.voiceEnabledLabel}</span>
+            <input
+              type="checkbox"
+              checked={voicePrefs.ttsEnabled}
+              onChange={(event) =>
+                setVoicePrefs((current) => ({
+                  ...current,
+                  ttsEnabled: event.target.checked,
+                }))
+              }
+            />
+          </label>
+
+          <p className="settings-label">{widgetText.copy.voicePresetLabel}</p>
+          <div className="voice-preset-grid">
+            {VOICE_PRESETS.map((presetVoice) => (
+              <div
+                key={presetVoice}
+                className={`voice-preset${presetVoice === voicePrefs.voice ? ' is-active' : ''}`}
+              >
+                <button
+                  type="button"
+                  className="voice-preset-select"
+                  aria-pressed={presetVoice === voicePrefs.voice}
+                  onClick={() =>
+                    setVoicePrefs((current) => ({
+                      ...current,
+                      voice: presetVoice,
+                    }))
+                  }
+                >
+                  <strong>{presetVoice}</strong>
+                </button>
+                <button
+                  type="button"
+                  className="widget-action-button voice-preset-sample"
+                  onClick={() => void handlePlayVoiceSample(presetVoice)}
+                >
+                  <span>
+                    {playingVoiceSample === presetVoice
+                      ? appText.assistant.turnStateStreaming
+                      : widgetText.copy.voiceSampleAction}
+                  </span>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <label className="settings-toggle">
+            <span>{widgetText.copy.voiceVolumeLabel}</span>
+            <input
+              className="settings-range"
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={voicePrefs.volume}
+              onChange={(event) =>
+                setVoicePrefs((current) => ({
+                  ...current,
+                  volume: Number(event.target.value),
+                }))
+              }
+              aria-label={widgetText.copy.voiceVolumeLabel}
+            />
+          </label>
+        </div>
+
+        <div className="widget-settings-actions">
+          <button className="settings-submit" type="button" onClick={() => void handleVoiceSave()}>
+            {widgetText.copy.voiceSaveAction}
+          </button>
+          <p className="settings-note">
+            {voiceRequestState === 'saving'
+              ? appText.widgetSettingsHost.savingState
+              : voiceStatusMessage}
+          </p>
+        </div>
+      </section>
     </article>
   )
 }

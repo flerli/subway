@@ -106,6 +106,9 @@ export interface AppTextBundle {
     toolApprovalExpiresLabel: string
     toolApprovalResolvedLabel: string
     toolRedactedValue: string
+    replayAction: string
+    playbackLabel: string
+    playbackVolumeLabel: string
   }
   voice: {
     micLabel: string
@@ -439,6 +442,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Expires',
       toolApprovalResolvedLabel: 'Resolved',
       toolRedactedValue: '[redacted]',
+      replayAction: 'Replay',
+      playbackLabel: 'Speaking answer',
+      playbackVolumeLabel: 'Volume',
     },
     voice: {
       micLabel: 'Voice input',
@@ -794,6 +800,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Lauft ab',
       toolApprovalResolvedLabel: 'Bearbeitet',
       toolRedactedValue: '[redacted]',
+      replayAction: 'Wiederholen',
+      playbackLabel: 'Spreche Antwort',
+      playbackVolumeLabel: 'Lautstarke',
     },
     voice: {
       micLabel: 'Spracheingabe',
@@ -1163,6 +1172,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Expire le',
       toolApprovalResolvedLabel: 'Traite le',
       toolRedactedValue: '[redacted]',
+      replayAction: 'Rejouer',
+      playbackLabel: 'Reponse en cours',
+      playbackVolumeLabel: 'Volume',
     },
     voice: {
       micLabel: 'Entree vocale',
@@ -1533,6 +1545,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Expira',
       toolApprovalResolvedLabel: 'Resuelto',
       toolRedactedValue: '[redacted]',
+      replayAction: 'Repetir',
+      playbackLabel: 'Respuesta hablada',
+      playbackVolumeLabel: 'Volumen',
     },
     voice: {
       micLabel: 'Entrada de voz',

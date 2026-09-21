@@ -61,66 +61,66 @@ See: `project_management/architecture/README.md` for full context.
 ## 📋 Task List
 
 ### 0.0 Read Architecture Documentation [MANDATORY]
-- [ ] **Read: `project_management/architecture/README.md`**
-- [ ] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
+- [x] **Read: `project_management/architecture/README.md`**
+- [x] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
 
 ### 0.1 Read Predecessor Context [MANDATORY]
-- [ ] **Read: `TC-A-00_COMPONENT_DEFINITION.md`**
-- [ ] **Read: `TC-A-01_SHARED_MIC_PCM_PERMISSION_LEVEL_FOUNDATION_COMPLETION_REPORT.md`**
-- [ ] **Read: `TC-A-02_PUSH_TO_TALK_STT_SUBMIT_COMPLETION_REPORT.md`**
-- [ ] **Read: `TC-A-03_INPUT_CIRCLE_ERRORS_KEYBOARD_I18N_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-A-00_COMPONENT_DEFINITION.md`**
+- [x] **Read: `TC-A-01_SHARED_MIC_PCM_PERMISSION_LEVEL_FOUNDATION_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-A-02_PUSH_TO_TALK_STT_SUBMIT_COMPLETION_REPORT.md`**
+- [x] **Read: `TC-A-03_INPUT_CIRCLE_ERRORS_KEYBOARD_I18N_COMPLETION_REPORT.md`**
 
 > Closer reads ALL TC-A predecessor reports (review-duty equivalent).
 
 ### 0.2 Run Full Test Suite [MANDATORY GATE 🔴]
-- [ ] Build [🔴] + lint [🔴] + all unit suites; record baseline; new failures → STOP.
+- [x] Build [🔴] + lint [🔴] + all unit suites; record baseline; new failures → STOP.
 
 ### 1. Gap Analysis over TC-A-01…03 (SWE5 duty)
-- [ ] Re-read all three completion reports; list every open risk, Known Limitation, and deferred item
-- [ ] Verify each: fixed in this issue, owned by TC-B with explicit handoff, or recorded as accepted gap with rationale
-- [ ] Check cross-issue consistency: PCM contract vs STT call, hook API vs circle props, i18n keys vs rendered copy, keyboard rule vs actual focus flow
+- [x] Re-read all three completion reports; list every open risk, Known Limitation, and deferred item
+- [x] Verify each: fixed in this issue, owned by TC-B with explicit handoff, or recorded as accepted gap with rationale
+- [x] Check cross-issue consistency: PCM contract vs STT call, hook API vs circle props, i18n keys vs rendered copy, keyboard rule vs actual focus flow
 
 ### 2. Bug/Flaw Fixes Found in Review
-- [ ] Fix gaps found in Task 1 (mic release leaks, double-submit races, missing error copy, stale hook states)
-- [ ] Each fix gets a unit test or an explicit why-not-tested note
+- [x] Fix gaps found in Task 1 (mic release leaks, double-submit races, missing error copy, stale hook states)
+- [x] Each fix gets a unit test or an explicit why-not-tested note
 
 ### 3. Integration Tests SWE5 (MANDATORY on closer 🔴)
-- [ ] `capture.integration`: permission→PCM→STT(mocked)→correction→submit→thread auto-create, end to end with mocked hardware + mocked pipeline
-- [ ] Denial/isolation: unauthenticated submit blocked (reuses Epic 003 session enforcement — assert, don't reimplement auth); no transcript in logs asserted
-- [ ] Silence auto-stop + interrupt + error-taxonomy paths at integration level
-- [ ] 0 failures allowed
+- [x] `capture.integration`: permission→PCM→STT(mocked)→correction→submit→thread auto-create, end to end with mocked hardware + mocked pipeline
+- [x] Denial/isolation: unauthenticated submit blocked (reuses Epic 003 session enforcement — assert, don't reimplement auth); no transcript in logs asserted
+- [x] Silence auto-stop + interrupt + error-taxonomy paths at integration level
+- [x] 0 failures allowed
 
 ### 4. Architecture / Traceability Updates SWE2 (closer duty)
-- [ ] Populate `project_management/architecture/diagrams/flow-assistant-voice.md` capture half (Mermaid + table + `Last updated by: SWE3-A-04`)
-- [ ] Update `component-overview.md` (voice capture modules), `api-contracts.md` (reused thread/message endpoints — no new endpoints in TC-A)
-- [ ] Update `traceability/requirements-matrix.md` + `coverage-map.md` rows for SW-REQ-013-01 / 013-04-input
-- [ ] Propose ADR (local STT singleton + shared PCM module) if the decision has lasting impact; otherwise record explicit no-ADR rationale in completion report
-- [ ] Update `architecture/README.md` changelog (`Last updated by: SWE3-A-04`)
+- [x] Populate `project_management/architecture/diagrams/flow-assistant-voice.md` capture half (Mermaid + table + `Last updated by: SWE3-A-04`)
+- [x] Update `component-overview.md` (voice capture modules), `api-contracts.md` (reused thread/message endpoints — no new endpoints in TC-A)
+- [x] Update `traceability/requirements-matrix.md` + `coverage-map.md` rows for SW-REQ-013-01 / 013-04-input
+- [x] Propose ADR (local STT singleton + shared PCM module) if the decision has lasting impact; otherwise record explicit no-ADR rationale in completion report
+- [x] Update `architecture/README.md` changelog (`Last updated by: SWE3-A-04`)
 
 ### 5. Unit-Test Health
-- [ ] Fill any coverage holes in TC-A-01…03 pure modules found during review; coverage must not regress
+- [x] Fill any coverage holes in TC-A-01…03 pure modules found during review; coverage must not regress
 
 ### 6. Run Full Test Suite + Coverage [MANDATORY GATE 🔴]
-- [ ] Build + lint (🔴) + unit + integration; 0 failures; coverage not regressed
+- [x] Build + lint (🔴) + unit + integration; 0 failures; coverage not regressed
 
 ### 7. Create Documentation
-- [ ] Document final hook/module APIs + keyboard rule + error taxonomy for TC-B consumers
+- [x] Document final hook/module APIs + keyboard rule + error taxonomy for TC-B consumers
 
 ### 8. SYS3 Runtime Smoke (MANDATORY on closer 🔴)
-- [ ] Start the stack: `npm --prefix backend run dev` + `npm --prefix frontend run dev`
-- [ ] Trigger the feature: authenticated session → top-bar mic → speak/stop (or simulated utterance when no mic hardware) → verify transcript submits to a thread
-- [ ] Verify output: thread contains the prompt; errors (if hardware absent) show the designed fallback copy
-- [ ] If no mic/display available: run the documented hardware-fallback path and record `SYS3 SMOKE (fallback)` evidence + remaining HIGH gap note. Skip only with documented reason.
+- [x] Start the stack: `npm --prefix backend run dev` + `npm --prefix frontend run dev`
+- [x] Trigger the feature: authenticated session → top-bar mic → speak/stop (or simulated utterance when no mic hardware) → verify transcript submits to a thread
+- [x] Verify output: thread contains the prompt; errors (if hardware absent) show the designed fallback copy
+- [x] If no mic/display available: run the documented hardware-fallback path and record `SYS3 SMOKE (fallback)` evidence + remaining HIGH gap note. Skip only with documented reason.
 
 ### 9. Write Completion Report & Handoff [MANDATORY]
-- [ ] Complete `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`
-- [ ] **Write handoff section for TC-B team** — MUST include:
+- [x] Complete `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`
+- [x] **Write handoff section for TC-B team** — MUST include:
   - What was verified: capture path integration results, smoke evidence (or fallback + gap)
   - Architecture artifacts updated (exact files + what changed)
   - Gaps fixed vs deferred (each deferred gap: severity + explicit TC-B owner or accepted rationale)
   - Reuse contract for TC-B/Epic 007: module paths, import examples, level-hook rate
   - Gate results table (build/lint/unit/integration/smoke)
-- [ ] Update `TC-A-00_COMPONENT_DEFINITION.md`: all rows ✅, Status → ✅ Complete, decisions + arch-revision entry
+- [x] Update `TC-A-00_COMPONENT_DEFINITION.md`: all rows ✅, Status → ✅ Complete, decisions + arch-revision entry
 
 ---
 
@@ -149,11 +149,11 @@ See: `project_management/architecture/README.md` for full context.
 
 ## ✅ Acceptance Criteria
 
-- [ ] Gap analysis covers TC-A-01…03 with every open item dispositioned (fixed / owned by TC-B / accepted with rationale)
-- [ ] Integration tests green (SWE5 🔴); unit suite green; build+lint clean (🔴); coverage not regressed
-- [ ] Architecture + traceability updated (or explicit gap note); ADR proposed or no-ADR rationale recorded
-- [ ] SYS3 smoke executed with evidence (or documented fallback + HIGH gap)
-- [ ] Completion report with TC-B handoff; TC-A-00 Status ✅ Complete
+- [x] Gap analysis covers TC-A-01…03 with every open item dispositioned (fixed / owned by TC-B / accepted with rationale)
+- [x] Integration tests green (SWE5 🔴); unit suite green; build+lint clean (🔴); coverage not regressed
+- [x] Architecture + traceability updated (or explicit gap note); ADR proposed or no-ADR rationale recorded
+- [x] SYS3 smoke executed with evidence (or documented fallback + HIGH gap)
+- [x] Completion report with TC-B handoff; TC-A-00 Status ✅ Complete
 
 ---
 

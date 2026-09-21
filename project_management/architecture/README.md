@@ -1,7 +1,7 @@
 # Subway Architecture
 
 > Living architecture overview. Every implementation issue reads this at Task 0.0; each TC's last implementation issue updates it.
-> `Last updated by: swaibian-architect-no-reviews` (2026-09-21, Epic E-013 scaffold)
+> `Last updated by: SWE3-B-04` (2026-09-21, TC-B closer: synthesis/playback/prefs flow + data-model + API real, ADR-002/003 accepted)
 
 ## 1. Purpose
 
@@ -41,7 +41,9 @@ See [api-contracts.md](diagrams/api-contracts.md) — `/api/*` endpoint sequence
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| _none yet_ | _First ADRs proposed by E-013 closers (STT singleton, TTS bridge, prefs storage, model distribution)_ | — | — |
+| [ADR-001](decisions/ADR-001-local-stt-shared-pcm.md) | Local STT singleton + shared PCM module | Accepted | 2026-09-21 |
+| [ADR-002](decisions/ADR-002-tts-bridge-cache.md) | Supertonic-3 TTS bridge + per-user keyed cache | Accepted | 2026-09-21 |
+| [ADR-003](decisions/ADR-003-voice-prefs-store.md) | Per-user voice preferences — table + live store | Accepted | 2026-09-21 |
 
 ## 8. Traceability
 
@@ -53,5 +55,5 @@ See [api-contracts.md](diagrams/api-contracts.md) — `/api/*` endpoint sequence
 | Date | Issue | Change |
 |------|-------|--------|
 | 2026-09-21 | swaibian-architect-no-reviews (E-013) | Initial scaffold: README, diagram stubs, traceability headers, decisions folder |
-| — | SWE3-A-04 (planned) | Populate voice-capture flow + component/API/traceability entries |
-| — | SWE3-B-04 (planned) | Populate synthesis/playback flow + data-model/API/ADRs + full-loop smoke |
+| 2026-09-21 | SWE3-A-04 | TC-A close: capture flow populated, component/API entries real, traceability ✅ for SW-REQ-013-01/04-input, ADR-001 accepted |
+| 2026-09-21 | SWE3-B-04 | TC-B close: synthesis/playback/prefs flow, `voice_preferences` in data-model, `/api/voice/*` signatures real, traceability ✅ (all E-013 SW-REQs), ADR-002/003 accepted |

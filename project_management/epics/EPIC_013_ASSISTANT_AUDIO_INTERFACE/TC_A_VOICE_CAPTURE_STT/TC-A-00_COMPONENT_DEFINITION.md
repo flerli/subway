@@ -4,7 +4,7 @@
 > **V-Model**: SWE1-A (derived from SYS1-013)
 > **Requirements**: [SW-REQ-013-01](../SW-REQ-013-01_VOICE_CAPTURE_STT.md), [SW-REQ-013-04](../SW-REQ-013-04_AUDIO_FEEDBACK_I18N.md) (draft)
 > **Review Mode**: no-reviews (impl self-verifies per STEP E-NR; no reviewer is spawned)
-> **Status**: 🔄 In Progress
+> **Status**: ✅ Complete
 > **Last Updated**: 2026-09-21
 
 ---
@@ -75,9 +75,10 @@ This repo has no central project logger yet (`docs/mvc_architecture.md` does not
 | [TC-A-01](TC-A-01_SHARED_MIC_PCM_PERMISSION_LEVEL_FOUNDATION.md) | Shared mic/PCM/permission/level foundation + tooling gate | 🔨 Impl | SWE3-A-01 | P0-Critical | M | ✅ |
 | [TC-A-02](TC-A-02_PUSH_TO_TALK_STT_SUBMIT.md) | Push-to-talk STT submit with thread auto-create | 🔨 Impl | SWE3-A-02 | P0-Critical | L | ✅ |
 | [TC-A-03](TC-A-03_INPUT_CIRCLE_ERRORS_KEYBOARD_I18N.md) | Input circle, errors, keyboard suppression, i18n, mobile | 🔨 Impl | SWE3-A-03 | P1-High | M | ✅ |
-| [TC-A-04](TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE.md) | TC-A closer: integration, arch/traceability, SYS3 smoke | 🔨 Impl | SWE3-A-04 | P1-High | M | 🔲 |
+| [TC-A-04](TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE.md) | TC-A closer: integration, arch/traceability, SYS3 smoke | 🔨 Impl | SWE3-A-04 | P1-High | M | ✅ |
 
 > No SWE5 review issues (no-reviews variant). TC-A-04 is the closer and inherits review/docs duties.
+> Post-completion defect fix (2026-09-21) in TC-A-02: `createMediaRecorder` never started capture (0-byte blob → `decode-failed` on every utterance); fixed, regression-tested, browser-proven — see TC-A-02 report §Post-completion defect fix. Remaining blocker for real-browser STT: unstaged Whisper weights (`model-missing`).
 
 ## Acceptance Test Plan (SWE6)
 
@@ -102,12 +103,14 @@ This repo has no central project logger yet (`docs/mvc_architecture.md` does not
 | 2026-09-21 | No toast framework; header-inline status note + transcript note | Only widget-local toast exists; framework would be scope creep | — |
 | 2026-09-21 | Mic cell persists outside collapsible mobile filters | Collapse hid the mic; `terminal-cell--voice` never collapses | — |
 | 2026-09-21 | Circle self-animates; keyboard suppression via ref | No App re-render storm; focusin-only gate, idle behavior identical | — |
+| 2026-09-21 | Post-completion fix: `createMediaRecorder` starts capture on creation (was never started → 0-byte blob → `decode-failed` in the browser) | Defect found on real hardware; all capture tests previously faked the recorder factory, so the production recorder is now covered too | — |
+| 2026-09-21 | 0-byte recordings surface as `empty` ("nothing heard"), not `decode-failed` | Error copy now matches the actual failure; decoder never called on empty bytes | — |
 
 ## Architecture Documentation Revisions
 
 | Date | Issue | Changes Made |
 |------|-------|-------------|
-| — | TC-A-04 | (closer populates: voice flow diagram, component overview entries, traceability rows) |
+| 2026-09-21 | SWE3-A-04 | Capture flow populated; component/API/data-model entries real; requirements-matrix + coverage-map TC-A rows ✅; README changelog; ADR-001 accepted |
 
 ---
 

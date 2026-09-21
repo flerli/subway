@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import './App.css'
 import {
   fetchCurrentSession,
@@ -13,6 +13,7 @@ import {
   updateAppPreferences,
   type AppPreferencesRecord,
 } from './api/appPreferences'
+import { fetchVoicePreferences } from './api/voice'
 import {
   currentFrontendBuildId,
   fetchBackendRuntimeInfo,
@@ -74,10 +75,19 @@ import {
   type SoftwareKeyboardTarget,
 } from './keyboard/softwareKeyboard'
 import { isUiClickSoundTarget, playUiClickSound } from './uiClickSound'
+import {
+  getVoicePrefsState,
+  setVoicePrefsState,
+  subscribeVoicePrefsState,
+} from './voice/voicePrefsStore'
 import { createMicrophoneLevelSource } from './voice/audioLevel'
+import { createPlaybackLevelSource } from './voice/playbackLevel'
 import { useVoiceCapture } from './voice/useVoiceCapture'
+import { useVoicePlayback } from './voice/useVoicePlayback'
+import type { PlayableAudio } from './voice/voicePlayback'
 import { resolveVoiceErrorCopy } from './voice/voiceCopy'
 import { isVoiceCaptureActiveState } from './voice/voiceCapture'
+import { synthesizeVoice } from './voice/tts'
 import { VoiceMicButton } from './voice/VoiceMicButton'
 import { useViewportLayoutState } from './viewportLayout'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
@@ -570,6 +580,38 @@ const getFullscreenElement = () => {
   const fullscreenDocument = document as FullscreenDocument
 
   return document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement ?? null
+}
+
+/** DOM <audio> adapter matching the voice PlayableAudio contract (SW-REQ-013-02). */
+const createDomAudioPlayer = (): PlayableAudio => {
+  const audio = new Audio()
+  const bound: PlayableAudio = {
+    play: () => audio.play(),
+    pause: () => audio.pause(),
+    get volume() {
+      return audio.volume
+    },
+    set volume(value: number) {
+      audio.volume = value
+    },
+    onended: null,
+    get src() {
+      return audio.src
+    },
+    set src(value: string) {
+      audio.src = value
+    },
+    get duration() {
+      return audio.duration
+    },
+    element: audio,
+  }
+
+  audio.onended = () => {
+    bound.onended?.(new Event('ended'))
+  }
+
+  return bound
 }
 
 function App() {
@@ -1236,6 +1278,40 @@ function App() {
     createStreamLevels: (stream: MediaStream) => createMicrophoneLevelSource(stream),
   })
 
+  const voicePrefsLive = useSyncExternalStore(
+    subscribeVoicePrefsState,
+    getVoicePrefsState,
+  )
+
+  const voicePlayback = useVoicePlayback({
+    synthesize: ({ text, voice, lang }) =>
+      synthesizeVoice({ text, voice, lang }),
+    createPlayer: createDomAudioPlayer,
+    createOutputLevels: (player) => createPlaybackLevelSource(player),
+    getPrefs: () => ({
+      ttsEnabled: voicePrefsLive.ttsEnabled,
+      voice: voicePrefsLive.voice,
+      volume: voicePrefsLive.volume,
+    }),
+    language: () => selectedLanguageCode,
+  })
+
+  const handleReplayAssistantMessage = (messageId: string) => {
+    const message = [
+      selectedAssistantThread?.messages ?? [],
+      assistantPendingUserMessage ? [assistantPendingUserMessage] : [],
+      assistantStreamingMessage ? [assistantStreamingMessage] : [],
+    ].flat().find((entry) => entry.id === messageId)
+
+    if (message && message.content) {
+      void voicePlayback.playMessage(message.id, message.content)
+    }
+  }
+
+  const handlePlaybackVolumeChange = (volume: number) => {
+    voicePlayback.setVolume(volume)
+  }
+
   const voiceSnapshot = voiceCapture.snapshot
   const isVoiceCaptureActive = isVoiceCaptureActiveState(voiceSnapshot.state)
   const voiceErrorCopy =
@@ -1255,6 +1331,8 @@ function App() {
     } else if (captureState === 'requesting') {
       voiceCapture.cancel()
     } else {
+      // New utterance: stop any ongoing answer playback (interrupt rule).
+      voicePlayback.interrupt()
       void voiceCapture.start(selectedLanguageCode)
     }
   }
@@ -1389,6 +1467,11 @@ function App() {
     setAssistantTurnState('completed')
     setAssistantStreamingEvents([])
     void refreshAssistantThreadList()
+
+    // Autoplay the completed answer as speech (SW-REQ-013-02; prefs guard in TC-B-03).
+    if (assistantMessage.role === 'assistant' && assistantMessage.content) {
+      void voicePlayback.enqueueMessage(assistantMessage.id, assistantMessage.content)
+    }
   }
 
   const runAssistantTurn = async (currentThreadId: string, promptContent: string) => {
@@ -1645,6 +1728,24 @@ function App() {
         if (!sessionState.authenticated || !sessionState.user) {
           enterUnauthenticatedState()
           return
+        }
+
+        try {
+          fetchVoicePreferences()
+            .then((voicePreferences) => {
+              if (!cancelled) {
+                setVoicePrefsState({
+                  ttsEnabled: voicePreferences.ttsEnabled,
+                  voice: voicePreferences.voice,
+                  volume: voicePreferences.volume,
+                })
+              }
+            })
+            .catch(() => {
+              // Defaults stay live; settings panel surfaces errors on open.
+            })
+        } catch {
+          // Non-fatal: playback keeps default prefs.
         }
 
         try {
@@ -3965,6 +4066,14 @@ function App() {
                 resolvingApprovalRequestId: assistantResolvingApprovalRequestId,
                 isTurnBusy: isAssistantTurnBusy,
                 voiceNote: voiceErrorCopy,
+                playback: {
+                  playing: voicePlayback.snapshot.playing,
+                  speakingMessageId: voicePlayback.snapshot.speakingMessageId,
+                  volume: voicePlayback.snapshot.volume,
+                  readOutputLevel: voicePlayback.readOutputLevel,
+                  onReplayMessage: handleReplayAssistantMessage,
+                  onVolumeChange: handlePlaybackVolumeChange,
+                },
               }}
               assistantActions={{
                 onCreateThread: () => {

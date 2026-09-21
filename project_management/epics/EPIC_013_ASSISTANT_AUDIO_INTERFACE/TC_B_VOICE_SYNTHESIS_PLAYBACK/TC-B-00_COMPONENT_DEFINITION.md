@@ -4,7 +4,7 @@
 > **V-Model**: SWE1-B (derived from SYS1-013)
 > **Requirements**: SW-REQ-013-02 (local TTS synthesis + autoplay/replay), SW-REQ-013-03 (per-user voice prefs), SW-REQ-013-04 (output circle, errors, 4-language copy — output half)
 > **Review Mode**: no-reviews (impl self-verifies per STEP E-NR; no reviewer is spawned)
-> **Status**: 🔲 Not Started
+> **Status**: ✅ Complete
 > **Last Updated**: 2026-09-21
 
 ---
@@ -72,10 +72,11 @@ Follows the TC-A-01 precedent: backend TTS/prefs events log `[voice]`-prefixed w
 
 | Issue | Title | Type | V-Model | Priority | Effort | Status |
 |:------|:------|:-----|:--------|:---------|:-------|:-------|
-| [TC-B-01](TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION.md) | TTS bridge + WAV→MP3 + cache foundation | 🔨 Impl | SWE3-B-01 | P0-Critical | L | 🔲 |
+| [TC-B-01](TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION.md) | TTS bridge + WAV→MP3 + cache foundation | 🔨 Impl | SWE3-B-01 | P0-Critical | L | ✅ |
+| [TC-B-02](TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK.md) | Autoplay/chunking/playback + output circle | 🔨 Impl | SWE3-B-02 | P0-Critical | L | ✅ |
 | [TC-B-02](TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK.md) | Autoplay/chunking/playback + output circle | 🔨 Impl | SWE3-B-02 | P0-Critical | L | 🔲 |
-| [TC-B-03](TC-B-03_VOICE_PREFS_SETTINGS.md) | Per-user voice prefs API + settings voice section | 🔨 Impl | SWE3-B-03 | P1-High | M | 🔲 |
-| [TC-B-04](TC-B-04_SYNTHESIS_CLOSER_INTEGRATION_SMOKE.md) | TC-B closer: integration, arch/traceability, SYS3 smoke | 🔨 Impl | SWE3-B-04 | P1-High | M | 🔲 |
+| [TC-B-03](TC-B-03_VOICE_PREFS_SETTINGS.md) | Per-user voice prefs API + settings voice section | 🔨 Impl | SWE3-B-03 | P1-High | M | ✅ |
+| [TC-B-04](TC-B-04_SYNTHESIS_CLOSER_INTEGRATION_SMOKE.md) | TC-B closer: integration, arch/traceability, SYS3 smoke | 🔨 Impl | SWE3-B-04 | P1-High | M | ✅ |
 
 > No SWE5 review issues (no-reviews variant). TC-B-04 is the closer and inherits review/docs duties.
 
@@ -100,7 +101,8 @@ Follows the TC-A-01 precedent: backend TTS/prefs events log `[voice]`-prefixed w
 
 | Date | Issue | Changes Made |
 |------|-------|-------------|
-| — | TC-B-04 | (closer populates: synthesis/playback flow, data-model, api-contracts, traceability, ADRs) |
+| 2026-09-21 | SWE3-A-04 | Capture flow populated; component/API/data-model entries real; requirements-matrix + coverage-map TC-A rows ✅; README changelog; ADR-001 accepted |
+| 2026-09-21 | SWE3-B-04 | Synthesis/playback/prefs flow populated; `voice_preferences` data-model real; `/api/voice/*` signatures real; traceability ✅ (all E-013 SW-REQs); ADR-002/003 accepted |
 
 ---
 

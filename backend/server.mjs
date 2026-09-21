@@ -18,9 +18,22 @@ import {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import {
+  buildVoiceCacheKey,
+  ensureVoiceCacheDir,
+  evictVoiceCache,
+  lookupVoiceCache,
+  normalizeTtsLang,
+  normalizeVoiceName,
+  sanitizeVoiceUserId,
+  storeVoiceCache,
+  validateSynthesisText,
+  voiceCacheFilePath,
+} from './voice/voiceCache.mjs'
+import { probeTtsEngine, synthesizeSpeech } from './voice/ttsBridge.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const dataDirectory = join(__dirname, 'data')
+const dataDirectory = process.env.BACKEND_DATA_DIR ?? join(__dirname, 'data')
 const audioVisualStorageDirectory = join(dataDirectory, 'audio-visual')
 const databasePath = join(dataDirectory, 'subway.sqlite')
 const localCalendarSeedEventsPath = join(dataDirectory, 'calendarSeedEvents.local.json')
@@ -57,6 +70,23 @@ const ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS = Number.parseInt(
   process.env.ASSISTANT_BACKEND_REQUEST_TIMEOUT_MS ?? '30000',
   10,
 )
+const TTS_HELPER_PATH =
+  process.env.TTS_HELPER_PATH ?? join(__dirname, 'tts_helper', 'tts_helper.py')
+const TTS_MODEL_DIR = process.env.TTS_MODEL_DIR ?? ''
+const TTS_PYTHON_BIN = process.env.TTS_PYTHON_BIN ?? 'python3'
+const TTS_SYNTH_TIMEOUT_MS = Number.parseInt(
+  process.env.TTS_SYNTH_TIMEOUT_MS ?? '120000',
+  10,
+)
+const voiceCacheDirectory = join(dataDirectory, 'voice-cache')
+
+/** Fixed per-language sample text for the voice-preview route (SW-REQ-013-03). */
+const VOICE_SAMPLE_TEXTS = Object.freeze({
+  en: 'This is a sample of the selected voice.',
+  de: 'Das ist eine Beispielstimme fuer die ausgewaehlte Stimme.',
+  fr: 'Ceci est un exemple de la voix selectionnee.',
+  es: 'Esta es una muestra de la voz seleccionada.',
+})
 const ASSISTANT_BACKEND_API_KEY = process.env.ASSISTANT_BACKEND_API_KEY ?? ''
 const ASSISTANT_BACKEND_HEADERS_JSON = process.env.ASSISTANT_BACKEND_HEADERS_JSON ?? ''
 const ASSISTANT_MCP_SERVERS_JSON = process.env.ASSISTANT_MCP_SERVERS_JSON ?? ''
@@ -1381,6 +1411,16 @@ const createAssistantToolApprovalRequestsTableSql = `
   )
 `
 
+const createVoicePreferencesTableSql = `
+  CREATE TABLE IF NOT EXISTS voice_preferences (
+    owner_user_id TEXT PRIMARY KEY REFERENCES users(id),
+    tts_enabled INTEGER NOT NULL DEFAULT 1,
+    voice TEXT NOT NULL DEFAULT 'F1',
+    volume INTEGER NOT NULL DEFAULT 80,
+    updated_at TEXT NOT NULL
+  )
+`
+
 const defaultAppUserId = ensureInitialUserRecord()
 
 migrateOwnedTable({
@@ -1488,6 +1528,7 @@ db.exec(createAssistantThreadsTableSql)
 db.exec(createAssistantMessagesTableSql)
 db.exec(createAssistantMessageEventsTableSql)
 db.exec(createAssistantToolApprovalRequestsTableSql)
+db.exec(createVoicePreferencesTableSql)
 db.exec(`
   CREATE INDEX IF NOT EXISTS audio_visual_recordings_owner_deleted_created_idx
   ON audio_visual_recordings(owner_user_id, deleted_at, created_at)
@@ -5357,6 +5398,49 @@ const markBringListSnapshotStale = (ownerUserId, staleAt) =>
     `)
     .run(staleAt, staleAt, ownerUserId)
 
+const DEFAULT_VOICE_PREFS = Object.freeze({
+  ttsEnabled: true,
+  voice: 'F1',
+  volume: 80,
+})
+
+const normalizeVoicePrefsRow = (row) => ({
+  ttsEnabled: row?.tts_enabled !== 0,
+  voice: normalizeVoiceName(row?.voice) ?? DEFAULT_VOICE_PREFS.voice,
+  volume:
+    typeof row?.volume === 'number' && row.volume >= 0 && row.volume <= 100
+      ? row.volume
+      : DEFAULT_VOICE_PREFS.volume,
+  updatedAt: typeof row?.updated_at === 'string' ? row.updated_at : null,
+})
+
+const selectVoicePreferences = (ownerUserId) =>
+  normalizeVoicePrefsRow(
+    db
+      .prepare(`
+        SELECT tts_enabled, voice, volume, updated_at
+        FROM voice_preferences
+        WHERE owner_user_id = ?
+      `)
+      .get(ownerUserId),
+  )
+
+const upsertVoicePreferences = (ownerUserId, { ttsEnabled, voice, volume }) => {
+  const now = new Date().toISOString()
+  db.prepare(`
+    INSERT INTO voice_preferences (owner_user_id, tts_enabled, voice, volume, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(owner_user_id)
+    DO UPDATE SET
+      tts_enabled = excluded.tts_enabled,
+      voice = excluded.voice,
+      volume = excluded.volume,
+      updated_at = excluded.updated_at
+  `).run(ownerUserId, ttsEnabled ? 1 : 0, voice, volume, now)
+
+  return selectVoicePreferences(ownerUserId)
+}
+
 const selectAppPreferences = (ownerUserId) => {
   const row = db
     .prepare(`
@@ -8854,6 +8938,71 @@ const sendAuthenticationRequired = (response, authContext) => {
   )
 }
 
+/** Shared synth pipeline: cache-first WAV bytes per user (SW-REQ-013-02). */
+const synthesizeVoiceWavBytes = async ({ text, voice, lang, ownerUserId }) => {
+  const safeUserId = sanitizeVoiceUserId(ownerUserId)
+
+  if (!safeUserId) {
+    return { ok: false, code: 'internal' }
+  }
+
+  try {
+    const key = buildVoiceCacheKey({ text, voice, lang })
+    ensureVoiceCacheDir(voiceCacheDirectory, safeUserId)
+    const filePath = voiceCacheFilePath({ cacheDir: voiceCacheDirectory, userId: safeUserId, key })
+    let audioBytes = lookupVoiceCache(filePath)
+    const cacheHit = Boolean(audioBytes)
+
+    if (!audioBytes) {
+      const tmpPath = `${filePath}.${randomUUID()}.tmp.wav`
+      const synth = await synthesizeSpeech({
+        pythonBin: TTS_PYTHON_BIN,
+        helperPath: TTS_HELPER_PATH,
+        modelDir: TTS_MODEL_DIR || undefined,
+        offline: true,
+        text,
+        voice,
+        lang,
+        outputFile: tmpPath,
+        timeoutMs: TTS_SYNTH_TIMEOUT_MS,
+      })
+
+      if (!synth.ok) {
+        for (const cleanupPath of new Set([tmpPath])) {
+          try {
+            unlinkSync(cleanupPath)
+          } catch {
+            // Best effort cleanup.
+          }
+        }
+
+        return { ok: false, code: synth.code, message: synth.message, diagnostic: synth.diagnostic }
+      }
+
+      try {
+        audioBytes = readFileSync(synth.payload.audio_path)
+      } catch {
+        return { ok: false, code: 'unreadable-output' }
+      }
+
+      for (const cleanupPath of new Set([tmpPath, synth.payload.audio_path])) {
+        try {
+          unlinkSync(cleanupPath)
+        } catch {
+          // Best effort cleanup of helper output files.
+        }
+      }
+
+      storeVoiceCache(filePath, audioBytes)
+      evictVoiceCache(voiceCacheDirectory)
+    }
+
+    return { ok: true, audioBytes, cacheHit }
+  } catch {
+    return { ok: false, code: 'internal' }
+  }
+}
+
 const server = createServer(async (request, response) => {
   if (!request.url) {
     sendJson(response, 400, { error: 'Missing request URL.' })
@@ -9861,6 +10010,171 @@ const server = createServer(async (request, response) => {
       sendAssistantRuntimeError(response, error)
       return
     }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/voice/status') {
+    try {
+      const probe = await probeTtsEngine({
+        pythonBin: TTS_PYTHON_BIN,
+        helperPath: TTS_HELPER_PATH,
+        modelDir: TTS_MODEL_DIR || undefined,
+      })
+      sendJson(response, 200, {
+        voice: {
+          available: probe.available,
+          sdkVersion: probe.sdkVersion,
+          voices: probe.voices,
+          modelDirConfigured: TTS_MODEL_DIR.length > 0,
+          detail: probe.available ? null : (probe.detail ?? 'Speech engine is not ready.'),
+        },
+      })
+      return
+    } catch (error) {
+      console.error('Unexpected voice status failure.', { userId: ownerUserId })
+      sendJson(response, 500, { error: 'Voice status check failed.', errorCode: 'voice_status_error' })
+      return
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/api/voice/synthesize') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const text = validateSynthesisText(body?.text)
+
+    if (!text) {
+      sendJson(response, 400, { error: 'Missing or invalid text (1-1000 characters).' })
+      return
+    }
+
+    const voice = normalizeVoiceName(body?.voice)
+
+    if (!voice) {
+      sendJson(response, 400, { error: 'Unknown voice.' })
+      return
+    }
+
+    const lang = normalizeTtsLang(body?.lang)
+    const outcome = await synthesizeVoiceWavBytes({ text, voice, lang, ownerUserId })
+
+    if (!outcome.ok) {
+      if (outcome.code === 'timeout') {
+        sendJson(response, 504, { error: 'Speech synthesis timed out.', errorCode: 'voice_synthesis_timeout' })
+        return
+      }
+
+      const engineUnavailable = /missing|unavailable|not installed|repair/i.test(outcome.message ?? '')
+
+      if (engineUnavailable) {
+        sendJson(response, 503, { error: outcome.message, errorCode: 'voice_engine_unavailable' })
+        return
+      }
+
+      console.error('Unexpected voice synthesis failure.', { userId: ownerUserId, code: outcome.code })
+      sendJson(response, 500, { error: 'Voice synthesis failed.', errorCode: 'voice_synthesis_error' })
+      return
+    }
+
+    sendJson(response, 200, {
+      voice: {
+        audioBase64: outcome.audioBytes.toString('base64'),
+        mimeType: 'audio/wav',
+        voice,
+        language: lang,
+        cacheHit: outcome.cacheHit,
+      },
+    })
+    return
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/api/voice/preferences') {
+    sendJson(response, 200, { voicePreferences: selectVoicePreferences(ownerUserId) })
+    return
+  }
+
+  if (request.method === 'PUT' && requestUrl.pathname === '/api/voice/preferences') {
+    let body
+
+    try {
+      body = await readRequestBody(request)
+    } catch {
+      sendJson(response, 400, { error: 'Invalid JSON body.' })
+      return
+    }
+
+    const current = selectVoicePreferences(ownerUserId)
+    const ttsEnabled =
+      typeof body?.ttsEnabled === 'boolean' ? body.ttsEnabled : current.ttsEnabled
+    const voice =
+      typeof body?.voice === 'string' ? normalizeVoiceName(body.voice) : current.voice
+
+    if (!voice) {
+      sendJson(response, 400, { error: 'Unknown voice.' })
+      return
+    }
+
+    const volume =
+      typeof body?.volume === 'number'
+        ? Math.round(body.volume)
+        : current.volume
+
+    if (!Number.isInteger(volume) || volume < 0 || volume > 100) {
+      sendJson(response, 400, { error: 'Volume must be an integer between 0 and 100.' })
+      return
+    }
+
+    sendJson(response, 200, {
+      voicePreferences: upsertVoicePreferences(ownerUserId, { ttsEnabled, voice, volume }),
+    })
+    return
+  }
+
+  if (request.method === 'GET' && /^\/api\/voice\/samples\/[^/]+$/.test(requestUrl.pathname)) {
+    const voice = normalizeVoiceName(requestUrl.pathname.replace('/api/voice/samples/', ''))
+
+    if (!voice) {
+      sendJson(response, 400, { error: 'Unknown voice.' })
+      return
+    }
+
+    const lang = normalizeTtsLang(requestUrl.searchParams.get('lang'))
+    const sampleText = VOICE_SAMPLE_TEXTS[lang] ?? VOICE_SAMPLE_TEXTS.en
+    const outcome = await synthesizeVoiceWavBytes({ text: sampleText, voice, lang, ownerUserId })
+
+    if (!outcome.ok) {
+      const engineUnavailable = /missing|unavailable|not installed|repair/i.test(outcome.message ?? '')
+
+      if (engineUnavailable) {
+        sendJson(response, 503, { error: outcome.message, errorCode: 'voice_engine_unavailable' })
+        return
+      }
+
+      if (outcome.code === 'timeout') {
+        sendJson(response, 504, { error: 'Speech synthesis timed out.', errorCode: 'voice_synthesis_timeout' })
+        return
+      }
+
+      console.error('Unexpected voice sample failure.', { userId: ownerUserId, code: outcome.code })
+      sendJson(response, 500, { error: 'Voice sample failed.', errorCode: 'voice_synthesis_error' })
+      return
+    }
+
+    sendJson(response, 200, {
+      voice: {
+        audioBase64: outcome.audioBytes.toString('base64'),
+        mimeType: 'audio/wav',
+        voice,
+        language: lang,
+        cacheHit: outcome.cacheHit,
+      },
+    })
+    return
   }
 
   if (

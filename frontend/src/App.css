@@ -2732,6 +2732,80 @@ select {
   min-width: min(100%, 340px);
 }
 
+.assistant-playback-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.assistant-volume-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.assistant-volume-field span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-soft);
+}
+
+.settings-range {
+  width: 110px;
+  accent-color: #4aa8ff;
+}
+
+.assistant-message-voice-actions {
+  display: flex;
+  margin-top: 8px;
+}
+
+.widget-settings-card--voice {
+  margin-top: 18px;
+}
+
+.voice-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.voice-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.voice-preset.is-active {
+  border-color: rgba(214, 232, 255, 0.35);
+  background: rgba(214, 232, 255, 0.12);
+}
+
+.voice-preset-select {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  cursor: pointer;
+  text-align: left;
+  padding: 2px 0;
+}
+
+.voice-preset-sample {
+  font-size: 0.68rem;
+  padding: 4px 6px;
+}
+
 .assistant-turn-state {
   margin: 0;
   display: inline-flex;

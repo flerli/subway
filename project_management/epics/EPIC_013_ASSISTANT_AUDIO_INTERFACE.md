@@ -75,8 +75,8 @@ Assistant settings ──► voice prefs API (per-user) ──► voice toggle/p
 
 | TC | Name | V-Model | Issues | Review Issues | Status |
 |:---|:-----|:--------|:-------|:--------------|:-------|
-| TC-A | Voice Capture + STT | SWE1-A | 4 (TC-A-01…04) | none (no-reviews; TC-A-04 is closer) | 🔲 |
-| TC-B | Voice Synthesis + Playback + Prefs | SWE1-B | 4 (TC-B-01…04) | none (no-reviews; TC-B-04 is closer) | 🔲 |
+| TC-A | Voice Capture + STT | SWE1-A | 4 (TC-A-01…04) | none (no-reviews; TC-A-04 is closer) | ✅ |
+| TC-B | Voice Synthesis + Playback + Prefs | SWE1-B | 4 (TC-B-01…04) | none (no-reviews; TC-B-04 is closer) | ✅ |
 
 ## Test Plan
 

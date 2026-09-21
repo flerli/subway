@@ -56,61 +56,61 @@ See: `project_management/architecture/README.md` for full context.
 ## 📋 Task List
 
 ### 0.0 Read Architecture Documentation [MANDATORY]
-- [ ] **Read: `project_management/architecture/README.md`**
-- [ ] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
+- [x] **Read: `project_management/architecture/README.md`**
+- [x] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
 
 ### 0.1 Read Predecessor Context [MANDATORY]
-- [ ] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
-- [ ] **Read: `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`** ← predecessor's handoff (guard contract to satisfy)
+- [x] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
+- [x] **Read: `TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK_COMPLETION_REPORT.md`** ← predecessor's handoff (guard contract to satisfy)
 
 ### 0.2 Run Full Test Suite [MANDATORY GATE 🔴]
-- [ ] Build [🔴] + lint [🔴] + all voice suites; record baseline; new failures → STOP.
+- [x] Build [🔴] + lint [🔴] + all voice suites; record baseline; new failures → STOP.
 
 ### 1. Investigate Requirements
-- [ ] Read: SW-REQ-013-03 draft (TC-B-01) + DISCOVERY_BRIEF §2 (voice settings) + §5 interaction 2
-- [ ] Read: `frontend/src/widgets/assistant/AssistantSettingsPanel.tsx` (route editor patterns to extend, not duplicate)
-- [ ] Read: Epic 003-003 enforcement (`003_USER_MANAGEMENT__ISSUE_DEFINITION__003_*`) + `backend/server.mjs` session middleware (patterns to reuse)
-- [ ] Read: Epic 004 translation standard for new settings copy
+- [x] Read: SW-REQ-013-03 draft (TC-B-01) + DISCOVERY_BRIEF §2 (voice settings) + §5 interaction 2
+- [x] Read: `frontend/src/widgets/assistant/AssistantSettingsPanel.tsx` (route editor patterns to extend, not duplicate)
+- [x] Read: Epic 003-003 enforcement (`003_USER_MANAGEMENT__ISSUE_DEFINITION__003_*`) + `backend/server.mjs` session middleware (patterns to reuse)
+- [x] Read: Epic 004 translation standard for new settings copy
 
 ### 1.5 Logging & Observability Integration [MANDATORY CROSS-CUTTING]
-- [ ] Prefs read/write events with user/session context; never log voice audio, message content, or secrets
-- [ ] Record logger evidence or specific tested `N/A` rationale
+- [x] Prefs read/write events with user/session context; never log voice audio, message content, or secrets
+- [x] Record logger evidence or specific tested `N/A` rationale
 
 ### 2. Write/Update Requirements
-- [ ] Finalize SW-REQ-013-03 (fields: `ttsEnabled`, `voice` enum M1–M5/F1–F5, `volume` 0–100; defaults; ownership; denial/isolation expectations)
+- [x] Finalize SW-REQ-013-03 (fields: `ttsEnabled`, `voice` enum M1–M5/F1–F5, `volume` 0–100; defaults; ownership; denial/isolation expectations)
 
 ### 3. Investigate Architecture
-- [ ] Review: assistant settings persistence shape (extend route/widget-settings pattern vs new table — decide, document, follow Epic 010 precedent)
-- [ ] Review: sample-audio strategy (pre-generated per preset via TC-B-01 bridge vs live synthesize on demand — decide for latency + cache)
+- [x] Review: assistant settings persistence shape (extend route/widget-settings pattern vs new table — decide, document, follow Epic 010 precedent)
+- [x] Review: sample-audio strategy (pre-generated per preset via TC-B-01 bridge vs live synthesize on demand — decide for latency + cache)
 
 ### 4. Implement Code
-- [ ] Backend (authenticated): `GET /api/voice/preferences`, `PUT /api/voice/preferences` (validated: voice enum, volume range, boolean toggle), per-user ownership enforced; `GET /api/voice/samples/:voice` (or equivalent) for preset previews
-- [ ] Frontend voice section in `AssistantSettingsPanel`: TTS toggle, preset grid with per-voice sample-play button, volume slider, saved-state copy; satisfies TC-B-02 guard contract (playback reads live prefs)
-- [ ] Validation: unknown voice rejected, volume clamped, `na` language fallback honored at synthesize time
-- [ ] i18n: all settings copy en/de/fr/es; attributions note where required (weights OpenRAIL-M)
+- [x] Backend (authenticated): `GET /api/voice/preferences`, `PUT /api/voice/preferences` (validated: voice enum, volume range, boolean toggle), per-user ownership enforced; `GET /api/voice/samples/:voice` (or equivalent) for preset previews
+- [x] Frontend voice section in `AssistantSettingsPanel`: TTS toggle, preset grid with per-voice sample-play button, volume slider, saved-state copy; satisfies TC-B-02 guard contract (playback reads live prefs)
+- [x] Validation: unknown voice rejected, volume clamped, `na` language fallback honored at synthesize time
+- [x] i18n: all settings copy en/de/fr/es; attributions note where required (weights OpenRAIL-M)
 
 ### 5. Create Unit Tests (SWE4) [MANDATORY]
-- [ ] Validation tests: enum/range/boolean coercion, defaults for new users
-- [ ] Auth tests: unauthenticated prefs read/write denied; user B cannot read/write user A's prefs (denial + session isolation); no token/secret in responses
-- [ ] Settings-panel tests: toggle/preset/sample/volume render + save flow (mocked API)
-- [ ] Guard-integration test: playback honors toggled-off + changed voice without restart
+- [x] Validation tests: enum/range/boolean coercion, defaults for new users
+- [x] Auth tests: unauthenticated prefs read/write denied; user B cannot read/write user A's prefs (denial + session isolation); no token/secret in responses
+- [x] Settings-panel tests: toggle/preset/sample/volume render + save flow (mocked API)
+- [x] Guard-integration test: playback honors toggled-off + changed voice without restart
 
 ### 6. Run Full Test Suite + Coverage [MANDATORY GATE 🔴]
-- [ ] Build + lint (both 🔴) + unit suites; 0 new failures; coverage not regressed
+- [x] Build + lint (both 🔴) + unit suites; 0 new failures; coverage not regressed
 
 ### 7. Create Documentation
-- [ ] Prefs API doc (paths, payloads, auth, error codes) + settings UX notes
-- [ ] Note for closer: prefs storage + new endpoints to add to data-model/api-contracts diagrams
+- [x] Prefs API doc (paths, payloads, auth, error codes) + settings UX notes
+- [x] Note for closer: prefs storage + new endpoints to add to data-model/api-contracts diagrams
 
 ### 8. Write Completion Report & Handoff [MANDATORY]
-- [ ] Complete `TC-B-03_VOICE_PREFS_SETTINGS_COMPLETION_REPORT.md`
-- [ ] **Write handoff section for TC-B-04 (closer) team** — MUST include:
+- [x] Complete `TC-B-03_VOICE_PREFS_SETTINGS_COMPLETION_REPORT.md`
+- [x] **Write handoff section for TC-B-04 (closer) team** — MUST include:
   - What was built: endpoint table (path/method/payload/auth/errors), settings UI map, guard wiring proof
   - Key decisions/deviations (storage shape, sample strategy, defaults)
   - Known limitations (migration for existing users, Docker volume behavior for prefs/cache)
   - Open risks for closer verification (isolation edge cases, sample latency)
   - Gate results table
-- [ ] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
+- [x] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
 
 ---
 
@@ -136,11 +136,11 @@ See: `project_management/architecture/README.md` for full context.
 
 ## ✅ Acceptance Criteria
 
-- [ ] Prefs persist per user and drive playback (toggle/voice/volume take effect without restart)
-- [ ] Per-user denial + session isolation proven by tests; unauthenticated denied
-- [ ] Each preset plays a sample; volume slider works; copy complete in 4 languages
-- [ ] Build+lint clean (🔴); tests green; coverage not regressed
-- [ ] Completion report with TC-B-04 handoff; TC-B-00 updated; logger evidence included
+- [x] Prefs persist per user and drive playback (toggle/voice/volume take effect without restart)
+- [x] Per-user denial + session isolation proven by tests; unauthenticated denied
+- [x] Each preset plays a sample; volume slider works; copy complete in 4 languages
+- [x] Build+lint clean (🔴); tests green; coverage not regressed
+- [x] Completion report with TC-B-04 handoff; TC-B-00 updated; logger evidence included
 
 ---
 

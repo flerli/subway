@@ -2,8 +2,8 @@
 
 **Epic**: E-013 (`project_management/epics/EPIC_013_ASSISTANT_AUDIO_INTERFACE.md`)
 **V-Model**: SWE1 (input half TC-A, output half TC-B; drafted by SWE3-A-01)
-**Status**: 🔄 Partial (input half ✅ defined by SWE3-A-03; output half open for TC-B)
-**Last Updated**: 2026-09-21 (input half finalized by SWE3-A-03)
+**Status**: ✅ Defined (input half ✅, output half ✅ by SWE3-B-02)
+**Last Updated**: 2026-09-21 (output half finalized by SWE3-B-02)
 
 ## Requirement (input half)
 
@@ -30,10 +30,19 @@ The user receives continuous, localized feedback that voice input is live.
 5. The mic cell (`terminal-cell--voice`) SHALL persist outside the collapsible
    mobile filters cell; header buttons meet the 44 px mobile touch target.
 
-## Open (output half, TC-B)
+## Output Half (finalized by SWE3-B-02)
 
-Output-direction circle, autoplay/replay/volume copy, TTS error copy —
-finalized by SWE3-B-02 / SWE3-B-03.
+1. A pulsating output-direction circle (`OutputLevelCircle`, `voiceCircleStyle(...,'output')`)
+   SHALL visualize synthesized-speech amplitude while playing, driven by scalar
+   levels from the playback controller's analyser source; `prefers-reduced-motion`
+   freezes the pulse; audio buffers never enter the render path.
+2. Every assistant answer SHALL be playable: autoplay on completion (when TTS
+   enabled), per-message replay, and a volume slider; any new mic tap or
+   re-enqueue SHALL interrupt current playback.
+3. Markdown answers SHALL be stripped to speakable prose (code fences, tables,
+   images, task artifacts never read aloud) and chunked into 2–5 sentence
+   units for synthesis; a single long sentence SHALL never be split mid-utterance.
+4. Copy: `replayAction`, `playbackLabel`, `playbackVolumeLabel` in en/de/fr/es.
 
 ## Verification
 

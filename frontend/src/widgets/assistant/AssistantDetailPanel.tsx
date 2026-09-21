@@ -2,6 +2,7 @@ import { useEffect, useRef, type FormEventHandler, type KeyboardEventHandler } f
 import type { AppTextBundle } from '../../i18n/appText'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import { AssistantMarkdown } from '../../assistant/AssistantMarkdown'
+import { OutputLevelCircle } from '../../voice/OutputLevelCircle'
 import type {
   AssistantAvailabilityRecord,
   AssistantMessageEventRecord,
@@ -41,6 +42,15 @@ export interface AssistantDetailViewData {
   ) => void
   /** Voice-capture error note (SW-REQ-013-04); rendered under the transcript head when set. */
   voiceNote?: string | null
+  /** Speech playback (SW-REQ-013-02): per-message replay + volume/output circle controls. */
+  playback?: {
+    playing: boolean
+    speakingMessageId: string | null
+    volume: number
+    readOutputLevel: () => number
+    onReplayMessage: (messageId: string) => void
+    onVolumeChange: (volume: number) => void
+  } | null
 }
 
 interface AssistantDetailPanelProps {
@@ -153,6 +163,7 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
     onComposerKeyDown,
     onResolveToolApproval,
     voiceNote = null,
+    playback = null,
   } = data
 
   const displayedMessages = selectedThread
@@ -162,6 +173,11 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
         ...(streamingMessage ? [streamingMessage] : []),
       ]
     : []
+  const messageContentById = new Map<string, string>()
+
+  for (const message of displayedMessages) {
+    messageContentById.set(message.id, message.content)
+  }
   const displayedEvents = selectedThread
     ? [...selectedThread.events, ...streamingEvents]
     : []
@@ -282,6 +298,26 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
                     ) : (
                       <p className="assistant-message-copy">{message.content}</p>
                     )}
+
+                    {playback &&
+                    message.role === 'assistant' &&
+                    message.content.trim().length > 0 ? (
+                      <div className="assistant-message-voice-actions">
+                        <button
+                          type="button"
+                          className="widget-action-button"
+                          disabled={isTurnBusy}
+                          onClick={() => playback.onReplayMessage(message.id)}
+                        >
+                          <span>
+                            {playback.playing &&
+                            playback.speakingMessageId === message.id
+                              ? appText.assistant.turnStateStreaming
+                              : appText.assistant.replayAction}
+                          </span>
+                        </button>
+                      </div>
+                    ) : null}
 
                     {relatedEvents.length > 0 ? (
                       <div className="assistant-tool-event-list">
@@ -423,6 +459,44 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
             </label>
 
             <div className="assistant-composer-footer">
+              {playback ? (
+                <div className="assistant-playback-row">
+                  <OutputLevelCircle
+                    readLevel={playback.readOutputLevel}
+                    playing={playback.playing}
+                    label={appText.assistant.playbackLabel}
+                  />
+                  <label className="settings-label assistant-volume-field">
+                    <span>{appText.assistant.playbackVolumeLabel}</span>
+                    <input
+                      className="settings-range"
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={playback.volume}
+                      onChange={(event) =>
+                        playback.onVolumeChange(Number(event.target.value))
+                      }
+                      aria-label={appText.assistant.playbackVolumeLabel}
+                    />
+                  </label>
+                  {playback.playing ? (
+                    <button
+                      type="button"
+                      className="widget-action-button"
+                      onClick={() => {
+                        // Replaying the same message acts as an interrupt toggle.
+                        if (playback.speakingMessageId) {
+                          playback.onReplayMessage(playback.speakingMessageId)
+                        }
+                      }}
+                    >
+                      <span>{appText.assistant.turnStateStreaming}</span>
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="assistant-turn-meta">
                 {turnError ? (
                   <p className="settings-note settings-note--warning">{turnError}</p>

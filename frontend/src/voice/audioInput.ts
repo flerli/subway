@@ -265,11 +265,23 @@ export const validatePcmSamples = (samples: PcmData): VoiceInputError | null => 
 /**
  * Decode a recorded blob and normalize it to 16 kHz mono PCM.
  * Buffers stay in memory only — nothing here writes audio to disk or storage.
+ *
+ * An empty recording (0 bytes: recorder never captured anything) is reported as
+ * `empty` — "nothing was heard" — instead of the misleading `decode-failed`
+ * ("could not be read"), so the user copy matches the actual failure
+ * (real-browser defect, fixed 2026-09-21).
  */
 export const decodeToMono16k = async (
   recording: Blob,
   decoder: VoiceAudioDecoder,
 ): Promise<PcmDecodeResult> => {
+  if (recording.size === 0) {
+    return {
+      ok: false,
+      error: voiceInputError('empty', 'Recording contains no audio bytes.'),
+    };
+  }
+
   let rawBytes: ArrayBuffer;
 
   try {

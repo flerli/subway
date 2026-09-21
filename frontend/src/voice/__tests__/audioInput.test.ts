@@ -182,4 +182,20 @@ describe('decodeToMono16k', () => {
     }
     assert.equal(rendered, false);
   });
+
+  it('reports a 0-byte recording as empty, never decode-failed (negative: defect regression)', async () => {
+    let decoderCalls = 0;
+    const result = await decodeToMono16k(new Blob([]), {
+      decodeAudioData: async () => {
+        decoderCalls += 1;
+        return fakeBuffer(16000, [new Float32Array(1)]);
+      },
+      renderMonoAt16k: async () => fakeBuffer(16000, [new Float32Array(1)]),
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'empty');
+    }
+    assert.equal(decoderCalls, 0);
+  });
 });

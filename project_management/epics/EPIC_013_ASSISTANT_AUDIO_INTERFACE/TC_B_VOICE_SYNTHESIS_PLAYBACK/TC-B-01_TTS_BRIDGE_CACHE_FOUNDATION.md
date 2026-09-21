@@ -58,66 +58,66 @@ See: `project_management/architecture/README.md` for full context.
 ## 📋 Task List
 
 ### 0.0 Read Architecture Documentation [MANDATORY]
-- [ ] **Read: `project_management/architecture/README.md`**
-- [ ] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
+- [x] **Read: `project_management/architecture/README.md`**
+- [x] **Read: relevant diagrams** in `project_management/architecture/diagrams/`
 
 ### 0.1 Read Predecessor Context [MANDATORY]
-- [ ] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
-- [ ] **Read: `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`** ← TC-A closer handoff (reuse contract, level conventions, open gaps)
+- [x] **Read: `TC-B-00_COMPONENT_DEFINITION.md`**
+- [x] **Read: `TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE_COMPLETION_REPORT.md`** ← TC-A closer handoff (reuse contract, level conventions, open gaps)
 
 > TC-B-01 is the first TC-B issue: component definition + TC-A closer handoff. No TC-B predecessor report exists yet.
 
 ### 0.2 Run Full Test Suite [MANDATORY GATE 🔴]
-- [ ] `npm --prefix frontend run build` [🔴] + `npm --prefix frontend run lint` [🟢 ADVISORY on TC-B-01] + backend boot check + TC-A voice unit suites
-- [ ] **TOOLING GATE**: typecheck + tests + lint recorded; clean before handoff. Record baseline.
+- [x] `npm --prefix frontend run build` [🔴] + `npm --prefix frontend run lint` [🟢 ADVISORY on TC-B-01] + backend boot check + TC-A voice unit suites
+- [x] **TOOLING GATE**: typecheck + tests + lint recorded; clean before handoff. Record baseline.
 
 ### 1. Investigate Requirements
-- [ ] Read: DISCOVERY_BRIEF §2/§4/§6 + `audio_interface_documentation.md` §2 (SDK), §2.3 (process boundary), §3 (codec), §4 (reuse checklist)
-- [ ] Read: `backend/server.mjs` (route/auth/persistence patterns for assistant + Bring/Roborock sidecar precedent: spawn, timeout, per-user scoping)
-- [ ] Read: `backend/bring_sidecar/server.py` + `backend/roborock_sidecar/server.py` (bridge patterns to mirror)
+- [x] Read: DISCOVERY_BRIEF §2/§4/§6 + `audio_interface_documentation.md` §2 (SDK), §2.3 (process boundary), §3 (codec), §4 (reuse checklist)
+- [x] Read: `backend/server.mjs` (route/auth/persistence patterns for assistant + Bring/Roborock sidecar precedent: spawn, timeout, per-user scoping)
+- [x] Read: `backend/bring_sidecar/server.py` + `backend/roborock_sidecar/server.py` (bridge patterns to mirror)
 
 ### 1.5 Logging & Observability Integration [MANDATORY CROSS-CUTTING]
-- [ ] Backend `[voice]` events for synthesize/status with user/session context; never log text prompts, message content, audio bytes, or secrets
-- [ ] Helper stdout discipline enforced + tested (JSON only); stderr for diagnostics; probe failures cached briefly, never permanently
-- [ ] Record logger evidence or specific tested `N/A` rationale
+- [x] Backend `[voice]` events for synthesize/status with user/session context; never log text prompts, message content, audio bytes, or secrets
+- [x] Helper stdout discipline enforced + tested (JSON only); stderr for diagnostics; probe failures cached briefly, never permanently
+- [x] Record logger evidence or specific tested `N/A` rationale
 
 ### 2. Write/Update Requirements
-- [ ] Write SW-REQ-013-02 (synthesis: engine, process contract, timeout, cache, status probe, offline behavior)
-- [ ] Draft SW-REQ-013-03 (prefs storage + isolation expectations; finalized TC-B-03)
+- [x] Write SW-REQ-013-02 (synthesis: engine, process contract, timeout, cache, status probe, offline behavior)
+- [x] Draft SW-REQ-013-03 (prefs storage + isolation expectations; finalized TC-B-03)
 
 ### 3. Investigate Architecture
-- [ ] Review: model distribution decision (vendored vs staged; record decision + gap for build-gate follow-up)
-- [ ] Review: cache location + eviction (age 7 d / size 500 MB guidance from tech doc) adapted to backend data dir conventions
+- [x] Review: model distribution decision (vendored vs staged; record decision + gap for build-gate follow-up)
+- [x] Review: cache location + eviction (age 7 d / size 500 MB guidance from tech doc) adapted to backend data dir conventions
 
 ### 4. Implement Code
-- [ ] `backend/tts_helper/tts_helper.py`: CLI (`--text --voice --lang --output-dir --format [--model-dir --offline]`), `TTS(model='supertonic-3', auto_download=False, …)`, `get_voice_style`, `synthesize(..., total_steps=8)`, JSON-only stdout contract + error object (never traceback on stdout)
-- [ ] Backend routes (cookie-session authenticated): `GET /api/voice/status` (readiness probe), `POST /api/voice/synthesize` (spawn with timeout TERM→KILL, buffer caps, `--model-dir` + offline in production), cache lookup/store keyed SHA256(sdk + text + voice + lang), eviction by age/size
-- [ ] `frontend/src/voice/tts.ts`: client (`getStatus`, `synthesize`), WAV→MP3 via `@breezystack/lamejs` (1 ch, 64 kbps, 1152-sample frames + flush), `data:audio/mpeg;base64` + `durationMs`; never label WAV as MP3
-- [ ] Deps: `supertonic==1.3.1` (helper env), `@breezystack/lamejs` (frontend, pinned); document model sources (`Supertone/supertonic-3`, voices JSONs) + license files to ship
-- [ ] No autoplay UI in this issue (TC-B-02); no prefs UI (TC-B-03) — routes return real audio for tests/scripts
+- [x] `backend/tts_helper/tts_helper.py`: CLI (`--text --voice --lang --output-dir --format [--model-dir --offline]`), `TTS(model='supertonic-3', auto_download=False, …)`, `get_voice_style`, `synthesize(..., total_steps=8)`, JSON-only stdout contract + error object (never traceback on stdout)
+- [x] Backend routes (cookie-session authenticated): `GET /api/voice/status` (readiness probe), `POST /api/voice/synthesize` (spawn with timeout TERM→KILL, buffer caps, `--model-dir` + offline in production), cache lookup/store keyed SHA256(sdk + text + voice + lang), eviction by age/size
+- [x] `frontend/src/voice/tts.ts`: client (`getStatus`, `synthesize`), WAV→MP3 via `@breezystack/lamejs` (1 ch, 64 kbps, 1152-sample frames + flush), `data:audio/mpeg;base64` + `durationMs`; never label WAV as MP3
+- [x] Deps: `supertonic==1.3.1` (helper env), `@breezystack/lamejs` (frontend, pinned); document model sources (`Supertone/supertonic-3`, voices JSONs) + license files to ship
+- [x] No autoplay UI in this issue (TC-B-02); no prefs UI (TC-B-03) — routes return real audio for tests/scripts
 
 ### 5. Create Unit Tests (SWE4) [MANDATORY]
-- [ ] Helper-contract tests: ok/error JSON shapes, stdout purity (no traceback/bytes), timeout behavior mocked
-- [ ] Cache-key tests: voice/language in key (same text + different voice ⇒ different entries), eviction rules
-- [ ] Route tests: unauthenticated denied, per-user cache separation, status probe states
-- [ ] Codec tests: WAV parse (8/16/24/32-bit, mono/stereo downmix) → MP3 frames + durationMs math
+- [x] Helper-contract tests: ok/error JSON shapes, stdout purity (no traceback/bytes), timeout behavior mocked
+- [x] Cache-key tests: voice/language in key (same text + different voice ⇒ different entries), eviction rules
+- [x] Route tests: unauthenticated denied, per-user cache separation, status probe states
+- [x] Codec tests: WAV parse (8/16/24/32-bit, mono/stereo downmix) → MP3 frames + durationMs math
 
 ### 6. Run Full Test Suite + Coverage [MANDATORY GATE 🔴]
-- [ ] Build [🔴] + lint [🟢 this issue] + unit suites; 0 new failures; coverage not regressed; TOOLING GATE clean before handoff
+- [x] Build [🔴] + lint [🟢 this issue] + unit suites; 0 new failures; coverage not regressed; TOOLING GATE clean before handoff
 
 ### 7. Create Documentation
-- [ ] Helper CLI contract doc + cache/eviction doc + model/licensing note (Apache-2.0 NOTICE, MIT, OpenRAIL-M)
-- [ ] Note for closer: bridge + cache + routes to add to api-contracts/data-model/flow diagrams
+- [x] Helper CLI contract doc + cache/eviction doc + model/licensing note (Apache-2.0 NOTICE, MIT, OpenRAIL-M)
+- [x] Note for closer: bridge + cache + routes to add to api-contracts/data-model/flow diagrams
 
 ### 8. Write Completion Report & Handoff [MANDATORY]
-- [ ] Complete `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`
-- [ ] **Write handoff section for TC-B-02 team** — MUST include:
+- [x] Complete `TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION_COMPLETION_REPORT.md`
+- [x] **Write handoff section for TC-B-02 team** — MUST include:
   - What was built: routes (paths, payloads, auth, error codes), helper CLI usage examples, client API + cache conventions
   - Key decisions/deviations (model-dir strategy, timeouts, eviction values, dep pins)
   - Known limitations (no UI yet, model distribution gap, first-synthesis latency)
   - Open risks (CPU contention RTF≈0.2, Docker image size, sidecar env parity)
   - Gate results table
-- [ ] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
+- [x] Update `TC-B-00_COMPONENT_DEFINITION.md` with status + new decisions
 
 ---
 
@@ -144,12 +144,12 @@ See: `project_management/architecture/README.md` for full context.
 
 ## ✅ Acceptance Criteria
 
-- [ ] `synthesize(text, voice, lang)` returns playable MP3 data + duration through the real helper path (or documented model-absent fallback with status probe reflecting it)
-- [ ] Status probe reports readiness truthfully (import/version/files/voices)
-- [ ] Cache keyed correctly with eviction; stdout JSON-only proven by test
-- [ ] Unauthenticated synthesize/status denied; users isolated
-- [ ] Build clean (🔴), lint recorded (🟢), tests green; SW-REQ-013-02 written
-- [ ] Completion report with TC-B-02 handoff; TC-B-00 updated; logger evidence included
+- [x] `synthesize(text, voice, lang)` returns playable MP3 data + duration through the real helper path (or documented model-absent fallback with status probe reflecting it)
+- [x] Status probe reports readiness truthfully (import/version/files/voices)
+- [x] Cache keyed correctly with eviction; stdout JSON-only proven by test
+- [x] Unauthenticated synthesize/status denied; users isolated
+- [x] Build clean (🔴), lint recorded (🟢), tests green; SW-REQ-013-02 written
+- [x] Completion report with TC-B-02 handoff; TC-B-00 updated; logger evidence included
 
 ---
 

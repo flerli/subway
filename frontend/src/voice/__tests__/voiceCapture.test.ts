@@ -2,6 +2,7 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   VoiceCaptureController,
+  createMediaRecorder,
   isVoiceCaptureActiveState,
   type VoiceCaptureDeps,
   type VoiceCaptureTimers,
@@ -272,6 +273,27 @@ describe('VoiceCaptureController', () => {
     assert.equal(isVoiceCaptureActiveState('submitting'), true);
   });
 
+  it('releases a late-granted stream after cancel-during-request (positive: leak fix)', async () => {
+    const released: string[] = [];
+    let releasePermission!: () => void;
+    const gate = new Promise<MediaStream>((resolve) => {
+      releasePermission = () => {
+        resolve(makeStream(released));
+      };
+    });
+    const controller = new VoiceCaptureController({
+      requestPermission: () => gate.then((stream) => ({ ok: true as const, stream })),
+      isBusy: () => false,
+    });
+    const started = controller.start('en');
+    controller.cancel();
+    releasePermission();
+    await started;
+    await flushMicrotasks();
+    assert.equal(controller.getSnapshot().state, 'idle');
+    assert.deepEqual(released, ['track']);
+  });
+
   it('never logs transcripts or audio (negative: PII)', async () => {
     const calls: unknown[][] = [];
     const originalLog = console.log;
@@ -297,6 +319,164 @@ describe('VoiceCaptureController', () => {
       console.warn = originalWarn;
     }
     assert.deepEqual(calls, []);
+  });
+});
+
+/**
+ * Fake `MediaRecorder` for the production-factory tests. Models the spec
+ * behaviors the factory relies on: `isTypeSupported` negotiation, `start()`
+ * moving the recorder to `recording`, and `stop()` throwing while `inactive`.
+ */
+class FakeMediaRecorder {
+  static instances: FakeMediaRecorder[] = [];
+  static supported: string[] = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+  static startShouldThrow = false;
+
+  static isTypeSupported(mimeType: string): boolean {
+    return FakeMediaRecorder.supported.includes(mimeType);
+  }
+
+  state: 'inactive' | 'recording' = 'inactive';
+  readonly mimeType: string;
+  readonly options: MediaRecorderOptions | undefined;
+  payload: Blob | null = new Blob(['recorded-bytes']);
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor(_stream: MediaStream, options?: MediaRecorderOptions) {
+    this.options = options;
+    this.mimeType = options?.mimeType ?? 'audio/webm';
+    FakeMediaRecorder.instances.push(this);
+  }
+
+  start(): void {
+    if (FakeMediaRecorder.startShouldThrow) {
+      throw new DOMException('recorder refused to start', 'NotSupportedError');
+    }
+
+    this.state = 'recording';
+  }
+
+  stop(): void {
+    if (this.state !== 'recording') {
+      throw new DOMException('recorder is not recording', 'InvalidStateError');
+    }
+
+    this.state = 'inactive';
+
+    if (this.payload) {
+      this.ondataavailable?.({ data: this.payload });
+    }
+
+    this.onstop?.();
+  }
+}
+
+const resetFakeMediaRecorder = (): void => {
+  FakeMediaRecorder.instances = [];
+  FakeMediaRecorder.supported = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+  FakeMediaRecorder.startShouldThrow = false;
+};
+
+const installFakeMediaRecorder = (): (() => void) => {
+  const holder = globalThis as { MediaRecorder?: unknown };
+  const previous = holder.MediaRecorder;
+  holder.MediaRecorder = FakeMediaRecorder;
+
+  return () => {
+    if (previous === undefined) {
+      delete holder.MediaRecorder;
+    } else {
+      holder.MediaRecorder = previous;
+    }
+  };
+};
+
+describe('createMediaRecorder (production factory)', () => {
+  it('starts capture on creation and returns the recorded bytes (positive: recorder-start regression)', async () => {
+    resetFakeMediaRecorder();
+    const restore = installFakeMediaRecorder();
+
+    try {
+      const recorder = createMediaRecorder(makeStream([]));
+      const fake = FakeMediaRecorder.instances.at(-1);
+
+      // Defect regression: without `start()` the recorder stayed `inactive`,
+      // `stop()` resolved a 0-byte blob and every utterance died in decode-failed.
+      assert.equal(fake?.state, 'recording');
+      assert.equal(fake?.options?.mimeType, 'audio/webm;codecs=opus');
+
+      const blob = await recorder.stop();
+
+      assert.ok(blob.size > 0);
+      assert.equal(blob.type, 'audio/webm;codecs=opus');
+      assert.equal(fake?.state, 'inactive');
+    } finally {
+      restore();
+    }
+  });
+
+  it('falls back to the browser default container when nothing is supported (negative: no probe hit)', () => {
+    resetFakeMediaRecorder();
+    FakeMediaRecorder.supported = [];
+    const restore = installFakeMediaRecorder();
+
+    try {
+      createMediaRecorder(makeStream([]));
+      const fake = FakeMediaRecorder.instances.at(-1);
+
+      assert.equal(fake?.options, undefined);
+      assert.equal(fake?.state, 'recording');
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails closed when the browser refuses to start recording (negative: unsupported)', async () => {
+    resetFakeMediaRecorder();
+    FakeMediaRecorder.startShouldThrow = true;
+    const restore = installFakeMediaRecorder();
+
+    try {
+      assert.throws(() => createMediaRecorder(makeStream([])));
+
+      const harness = makeHarness({
+        createRecorder: (stream: MediaStream) => createMediaRecorder(stream),
+      });
+      await harness.controller.start('en');
+      const snapshot = harness.controller.getSnapshot();
+
+      assert.equal(snapshot.state, 'error');
+      assert.equal(snapshot.error?.code, 'unsupported');
+      assert.deepEqual(harness.released, ['track']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('hands real recorded bytes to the decoder through the controller (positive: no silent empty blob)', async () => {
+    resetFakeMediaRecorder();
+    const restore = installFakeMediaRecorder();
+    const decodedSizes: number[] = [];
+
+    try {
+      const harness = makeHarness({
+        createRecorder: (stream: MediaStream) => createMediaRecorder(stream),
+        decode: async (blob: Blob) => {
+          decodedSizes.push(blob.size);
+          return { ok: true as const, samples: new Float32Array([0.2, 0.3]) };
+        },
+      });
+
+      await harness.controller.start('en');
+      await harness.controller.stop();
+
+      assert.equal(harness.submitted.length, 1);
+      assert.equal(decodedSizes.length, 1);
+      assert.ok((decodedSizes[0] ?? 0) > 0);
+    } finally {
+      restore();
+    }
   });
 });
 

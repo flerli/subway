@@ -1,6 +1,6 @@
 # API Contracts
 
-> `Last updated by: swaibian-architect-no-reviews` (2026-09-21, scaffold — real data populated by TC-A-04 / TC-B-04)
+> `Last updated by: SWE3-B-04` (2026-09-21, all `/api/voice/*` signatures real — TC-A adds no endpoints)
 
 ```mermaid
 sequenceDiagram
@@ -23,10 +23,8 @@ sequenceDiagram
 | Endpoint | Method | Auth | Payload / Response | Owner |
 |----------|--------|------|-------------------|-------|
 | `/api/auth/session` | GET | Public | Session probe | — |
-| Assistant thread/message routes | * | Cookie session, per-user | Existing (Epic 010) — reused by voice submit | TC-A-04 notes |
-| `/api/voice/status` | GET | Cookie session | Readiness: import/version/files/voices | TC-B-01 → TC-B-04 populates |
-| `/api/voice/synthesize` | POST | Cookie session | `{text, voice, lang}` → MP3 + durationMs; errors fail closed | TC-B-01 → TC-B-04 populates |
-| `/api/voice/preferences` | GET/PUT | Cookie session, per-user | `{ttsEnabled, voice, volume}` validated | TC-B-03 → TC-B-04 populates |
-| `/api/voice/samples/:voice` | GET | Cookie session | Preset preview audio | TC-B-03 → TC-B-04 populates |
-
-Populated by the TC's last implementation issue (TC-A-04: reused endpoints; TC-B-04: new `/api/voice/*` signatures).
+| Assistant thread/message routes | * | Cookie session, per-user | Existing (Epic 010) — voice submit reuses `POST /assistant/threads`, `POST /assistant/threads/:id/messages` via `createAssistantThread` / `stream\|sendAssistantThreadMessage` | SWE3-A-02 ✅ |
+| `/api/voice/status` | GET | Cookie session | `{voice: {available, sdkVersion, voices[], modelDirConfigured, detail}}` — probe TTL 60 s, failures never cached permanently | SWE3-B-01 ✅ |
+| `/api/voice/synthesize` | POST | Cookie session | `{text (1–1000), voice (M1–M5/F1–F5), lang}` → `{voice: {audioBase64 WAV, mimeType 'audio/wav', voice, language, cacheHit}}`; 400 invalid / 503 engine down / 504 timeout / 500; per-user cache-first | SWE3-B-01 ✅ |
+| `/api/voice/preferences` | GET/PUT | Cookie session, per-user | `{voicePreferences: {ttsEnabled, voice, volume, updatedAt}}`; PUT validates voice enum + volume int 0–100 (400); defaults `{true,'F1',80}`; upsert on `owner_user_id` | SWE3-B-03 ✅ |
+| `/api/voice/samples/:voice` | GET | Cookie session | `?lang=` (default `na`→en sample text); fixed per-language sample sentence; same cache-first pipeline as synthesize; 400 unknown voice | SWE3-B-03 ✅ |
