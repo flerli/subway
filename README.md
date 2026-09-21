@@ -91,6 +91,14 @@ docker compose logs -f
 docker compose down
 ```
 
+The backend image ships the voice runtime modules (`backend/voice/`,
+`backend/tts_helper/`). **Assistant speech synthesis in Docker additionally
+requires Python + Supertonic weights staged into the image or mounted at
+`TTS_MODEL_DIR`** — until staged, the app boots normally and the voice
+routes fail closed (503 with repair guidance) instead of downloading at
+runtime (Epic 013 operating note; weights ~400 MB, see
+`project_management/epics/EPIC_013_ASSISTANT_AUDIO_INTERFACE/`).
+
 The Dockerized backend now stores its runtime SQLite data in Docker-managed persistent storage mounted at `/app/data`.
 
 If you want to use the Bring settings flow in Docker, provide `BRING_CREDENTIAL_ENCRYPTION_KEY` in the compose environment before starting the stack. Without it, the Bring settings routes return a configuration error instead of storing credentials.
