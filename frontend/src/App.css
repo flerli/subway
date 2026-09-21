@@ -322,6 +322,15 @@ select {
   max-width: 18rem;
 }
 
+.terminal-voice-detail {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: #ffd0d0;
+  word-break: break-all;
+}
+
 .terminal-copy {
   display: grid;
   gap: 0;
@@ -4649,6 +4658,26 @@ select {
 .settings-toggle input {
   width: 18px;
   height: 18px;
+}
+
+/* Range inputs inside the same label must NOT be shrunk to checkbox size
+   (the 18px rule above otherwise makes sliders immovable). */
+.settings-toggle input.settings-range {
+  width: 180px;
+  height: auto;
+  min-height: 28px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.settings-toggle .settings-runtime-value {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .settings-toggle input.settings-range {
+    width: 120px;
+  }
 }
 
 .widget-settings-actions {

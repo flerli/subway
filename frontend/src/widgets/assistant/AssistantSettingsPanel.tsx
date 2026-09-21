@@ -113,6 +113,60 @@ export function AssistantSettingsPanel({
   const [voiceStatusMessage, setVoiceStatusMessage] = useState(widgetText.copy.voiceSectionDescription)
   const [playingVoiceSample, setPlayingVoiceSample] = useState<string | null>(null)
   const sampleAudioRef = useRef<HTMLAudioElement | null>(null)
+  const voicePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /**
+   * Apply voice changes LIVE: update local state + the shared prefs store
+   * (playback/reactivity react immediately) and auto-persist after a short
+   * debounce so sliders and the toggle work without pressing Save.
+   */
+  const commitVoicePrefs = (next: VoicePreferencesRecord) => {
+    setVoicePrefs(next)
+    setVoicePrefsState({
+      ttsEnabled: next.ttsEnabled,
+      voice: next.voice,
+      volume: next.volume,
+      speed: next.speed,
+    })
+
+    if (voicePersistTimerRef.current !== null) {
+      clearTimeout(voicePersistTimerRef.current)
+    }
+
+    voicePersistTimerRef.current = setTimeout(() => {
+      void updateVoicePreferences({
+        ttsEnabled: next.ttsEnabled,
+        voice: next.voice,
+        volume: next.volume,
+        speed: next.speed,
+      })
+        .then((saved) => {
+          setVoicePrefs(saved)
+          setVoicePrefsState({
+            ttsEnabled: saved.ttsEnabled,
+            voice: saved.voice,
+            volume: saved.volume,
+            speed: saved.speed,
+          })
+          setVoiceRequestState('saved')
+          setVoiceStatusMessage(widgetText.copy.voiceSavedState)
+        })
+        .catch(() => {
+          setVoiceRequestState('error')
+          setVoiceStatusMessage(widgetText.copy.voiceLoadFailed)
+        })
+    }, 300)
+  }
+
+  useEffect(
+    () => () => {
+      if (voicePersistTimerRef.current !== null) {
+        clearTimeout(voicePersistTimerRef.current)
+        voicePersistTimerRef.current = null
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -659,10 +713,7 @@ export function AssistantSettingsPanel({
               type="checkbox"
               checked={voicePrefs.ttsEnabled}
               onChange={(event) =>
-                setVoicePrefs((current) => ({
-                  ...current,
-                  ttsEnabled: event.target.checked,
-                }))
+                commitVoicePrefs({ ...voicePrefs, ttsEnabled: event.target.checked })
               }
             />
           </label>
@@ -679,12 +730,7 @@ export function AssistantSettingsPanel({
                   type="button"
                   className="voice-preset-select"
                   aria-pressed={presetVoice === voicePrefs.voice}
-                  onClick={() =>
-                    setVoicePrefs((current) => ({
-                      ...current,
-                      voice: presetVoice,
-                    }))
-                  }
+                  onClick={() => commitVoicePrefs({ ...voicePrefs, voice: presetVoice })}
                 >
                   <strong>{presetVoice}</strong>
                 </button>
@@ -713,10 +759,7 @@ export function AssistantSettingsPanel({
               step={5}
               value={voicePrefs.volume}
               onChange={(event) =>
-                setVoicePrefs((current) => ({
-                  ...current,
-                  volume: Number(event.target.value),
-                }))
+                commitVoicePrefs({ ...voicePrefs, volume: Number(event.target.value) })
               }
               aria-label={widgetText.copy.voiceVolumeLabel}
             />
@@ -732,10 +775,7 @@ export function AssistantSettingsPanel({
               step={0.05}
               value={voicePrefs.speed}
               onChange={(event) =>
-                setVoicePrefs((current) => ({
-                  ...current,
-                  speed: Number(event.target.value),
-                }))
+                commitVoicePrefs({ ...voicePrefs, speed: Number(event.target.value) })
               }
               aria-label={widgetText.copy.voiceSpeedLabel}
             />

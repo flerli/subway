@@ -200,7 +200,7 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     }
 
     throw new Error(
-      'Speech model is missing from the app bundle (reinstall / repair runtime).',
+      `Speech model is missing from the app bundle (reinstall / repair runtime): ${joinUrl(resolveVoiceSttBaseUrl(), `${VOICE_STT_MODEL_BASE_PATH}${modelPath}/`)}`,
       { cause: error },
     );
   }

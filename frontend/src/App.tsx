@@ -1322,6 +1322,14 @@ function App() {
     voiceSnapshot.state === 'error' && voiceSnapshot.error
       ? resolveVoiceErrorCopy(appText, voiceSnapshot.error.code)
       : null
+  // Surface the exact failing artifact on-device for model-missing (the
+  // stt factory embeds the resolved URL in the error message).
+  const voiceErrorDetail =
+    voiceSnapshot.state === 'error' &&
+    voiceSnapshot.error?.code === 'model-missing' &&
+    voiceSnapshot.error.message
+      ? voiceSnapshot.error.message
+      : null
 
   useEffect(() => {
     voiceCaptureActiveRef.current = isVoiceCaptureActive
@@ -3884,6 +3892,9 @@ function App() {
             {voiceErrorCopy ? (
               <p className="terminal-voice-note" role="status">
                 {voiceErrorCopy}
+                {voiceErrorDetail ? (
+                  <span className="terminal-voice-detail">{voiceErrorDetail}</span>
+                ) : null}
               </p>
             ) : null}
           </div>
