@@ -131,17 +131,22 @@ export type TranscribeResult =
   | { readonly ok: true; readonly text: string }
   | { readonly ok: false; readonly error: SttError };
 
+/** Pipeline invocation options (single-pass for short clips; long-form chunked). */
+export interface WhisperRunOptions {
+  readonly task: 'transcribe';
+  readonly language?: string;
+  readonly chunk_length_s?: number;
+  readonly stride_length_s?: number;
+}
+
 /** Structural pipeline: satisfied by the real transformers pipeline and by test fakes. */
 export interface WhisperPipeline {
-  (
-    audio: PcmData,
-    options: {
-      readonly task: 'transcribe';
-      readonly language?: string;
-      readonly chunk_length_s?: number;
-      readonly stride_length_s?: number;
-    },
-  ): Promise<SttRawOutput>;
+  (audio: PcmData, options: WhisperRunOptions): Promise<SttRawOutput>;
+}
+
+/** Interop shape: some bundler/runtime combinations surface `_call` objects. */
+interface CallablePipelineLike {
+  _call?: (audio: PcmData, options: WhisperRunOptions) => Promise<SttRawOutput>;
 }
 
 export interface WhisperPipelineFactory {
@@ -205,15 +210,48 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     );
   }
 
-  if (typeof rawPipeline !== 'function') {
-    throw new Error(
-      'Speech model is missing from the app bundle (reinstall / repair runtime).',
-    );
+  return adaptRawPipeline(rawPipeline, modelPath)
+}
+
+/**
+ * Normalize whatever `transformers.pipeline()` resolved to into a callable.
+ * Prefers the bare callable function; adapts objects that expose `_call`
+ * (observed interop shape in a production model-missing report); otherwise
+ * fails with the resolved model URL appended for on-device diagnosis.
+ */
+export const adaptRawPipeline = (
+  rawPipeline: unknown,
+  modelPath: string,
+): WhisperPipeline => {
+  if (typeof rawPipeline === 'function') {
+    const callable = rawPipeline as WhisperPipeline
+
+    return async (audio, options) => callable(audio, options)
   }
 
-  const callable = rawPipeline as WhisperPipeline;
+  const callableLike = rawPipeline as CallablePipelineLike | null
 
-  return async (audio, options) => callable(audio, options);
+  if (callableLike && typeof callableLike._call === 'function') {
+    const boundCall = callableLike._call.bind(rawPipeline)
+
+    return async (audio, options) => boundCall(audio, options)
+  }
+
+  // Self-diagnosing failure: log the shape and name the model URL so the
+  // on-device note and console point at the real cause.
+  if (typeof console !== 'undefined') {
+    console.warn('[voice] pipeline construction returned a non-callable', {
+      type: typeof rawPipeline,
+      keys:
+        rawPipeline && typeof rawPipeline === 'object'
+          ? Object.keys(rawPipeline).slice(0, 12)
+          : null,
+    })
+  }
+
+  throw new Error(
+    `Speech pipeline is unavailable (reinstall / repair runtime): ${joinUrl(resolveVoiceSttBaseUrl(), `${VOICE_STT_MODEL_BASE_PATH}${modelPath}/`)}`,
+  )
 };
 
 const pipelineCache = new Map<SttLanguage, Promise<WhisperPipeline>>();

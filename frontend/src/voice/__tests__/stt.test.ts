@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  adaptRawPipeline,
   VOICE_STT_CHUNK_LENGTH_S,
   VOICE_STT_SINGLE_PASS_MAX_SAMPLES,
   VOICE_STT_MODEL_ID,
@@ -212,5 +213,34 @@ describe('transcribeUtterance', () => {
       assert.equal(result.error.code, 'empty-audio');
     }
     assert.equal(calls, 0);
+  });
+});
+
+describe('adaptRawPipeline (interop robustness)', () => {
+  it('passes through a callable pipeline (positive)', async () => {
+    const callable = adaptRawPipeline(async () => ({ text: 'hi' }), 'Xenova/whisper-small');
+    const out = await callable(new Float32Array([0.1]), { task: 'transcribe' });
+    assert.deepEqual(out, { text: 'hi' });
+  });
+
+  it('adapts a pipeline object exposing _call (positive: bundles)', async () => {
+    const adapted = adaptRawPipeline(
+      {
+        _call: async (_audio: unknown, options: { task: string }) => ({ text: `called:${options.task}` }),
+      },
+      'Xenova/whisper-small',
+    );
+    const out = await adapted(new Float32Array([0.1]), { task: 'transcribe' });
+    assert.deepEqual(out, { text: 'called:transcribe' });
+  });
+
+  it('fails closed with the resolved URL when not callable (negative)', () => {
+    assert.throws(
+      () => adaptRawPipeline({ nope: true }, 'Xenova/whisper-small'),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes('whisper-small') &&
+        error.message.includes('reinstall / repair runtime'),
+    );
   });
 });
