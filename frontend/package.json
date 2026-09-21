@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:voice": "tsc -p tsconfig.voice.json && ln -sfn ../frontend/node_modules ../voice-test-dist/node_modules && NODE_PATH=./node_modules node --test ../voice-test-dist/voice/__tests__/audioInput.test.js ../voice-test-dist/voice/__tests__/audioLevel.test.js ../voice-test-dist/voice/__tests__/vocabulary.test.js ../voice-test-dist/voice/__tests__/stt.test.js ../voice-test-dist/voice/__tests__/voiceCapture.test.js ../voice-test-dist/voice/__tests__/voiceCircle.test.js ../voice-test-dist/voice/__tests__/voiceCopy.test.js ../voice-test-dist/voice/__tests__/inputCircle.test.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "highlight.js": "^11.11.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

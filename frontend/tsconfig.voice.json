@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "node16",
+    "moduleResolution": "node16",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "types": ["node"],
+    "outDir": "../voice-test-dist",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/voice/audioInput.ts",
+    "src/voice/audioLevel.ts",
+    "src/voice/stt.ts",
+    "src/voice/voiceCapture.ts",
+    "src/voice/voiceCopy.ts",
+    "src/voice/voiceCircle.ts",
+    "src/voice/useAudioLevel.ts",
+    "src/voice/InputLevelCircle.tsx",
+    "src/voice/vocabulary.ts",
+    "src/i18n/localization.ts",
+    "src/i18n/appText.ts",
+    "src/voice/__tests__/*.ts",
+    "src/voice/__tests__/*.tsx"
+  ]
+}

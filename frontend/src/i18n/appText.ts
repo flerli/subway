@@ -1,4 +1,4 @@
-import { createLocalizedBundle } from './localization'
+import { createLocalizedBundle } from './localization.ts'
 
 export interface AppTextBundle {
   auth: {
@@ -106,6 +106,23 @@ export interface AppTextBundle {
     toolApprovalExpiresLabel: string
     toolApprovalResolvedLabel: string
     toolRedactedValue: string
+  }
+  voice: {
+    micLabel: string
+    stopLabel: string
+    workingLabel: string
+    unsupportedLabel: string
+    errorDenied: string
+    errorNoDevice: string
+    errorModelMissing: string
+    errorTranscribeFailed: string
+    errorSubmitFailed: string
+    errorTooLong: string
+    errorEmpty: string
+    errorBusy: string
+    errorAborted: string
+    errorUnsupported: string
+    errorDecodeFailed: string
   }
   filters: {
     allLabel: string
@@ -422,6 +439,23 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Expires',
       toolApprovalResolvedLabel: 'Resolved',
       toolRedactedValue: '[redacted]',
+    },
+    voice: {
+      micLabel: 'Voice input',
+      stopLabel: 'Stop listening',
+      workingLabel: 'Working...',
+      unsupportedLabel: 'Voice unavailable',
+      errorDenied: 'Microphone is blocked. Allow access to speak.',
+      errorNoDevice: 'No microphone found on this kiosk.',
+      errorModelMissing: 'Speech model is missing. Reinstall or repair the app.',
+      errorTranscribeFailed: 'Could not understand. Please try again.',
+      errorSubmitFailed: 'Could not send the voice message. Please try again.',
+      errorTooLong: 'Recording is too long. Keep it under 5 minutes.',
+      errorEmpty: 'Nothing was heard. Please speak and try again.',
+      errorBusy: 'The assistant is still answering. Please wait.',
+      errorAborted: 'Listening was cancelled.',
+      errorUnsupported: 'Voice input is not supported in this browser.',
+      errorDecodeFailed: 'The recording could not be read. Please try again.',
     },
     filters: {
       allLabel: 'All',
@@ -760,6 +794,23 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Lauft ab',
       toolApprovalResolvedLabel: 'Bearbeitet',
       toolRedactedValue: '[redacted]',
+    },
+    voice: {
+      micLabel: 'Spracheingabe',
+      stopLabel: 'Aufnahme stoppen',
+      workingLabel: 'Wird verarbeitet...',
+      unsupportedLabel: 'Spracheingabe nicht verfugbar',
+      errorDenied: 'Mikrofon ist blockiert. Zugriff erlauben, um zu sprechen.',
+      errorNoDevice: 'Kein Mikrofon an diesem Kiosk gefunden.',
+      errorModelMissing: 'Sprachmodell fehlt. App neu installieren oder reparieren.',
+      errorTranscribeFailed: 'Nicht verstanden. Bitte erneut versuchen.',
+      errorSubmitFailed: 'Sprachnachricht konnte nicht gesendet werden. Bitte erneut versuchen.',
+      errorTooLong: 'Aufnahme ist zu lang. Bitte unter 5 Minuten bleiben.',
+      errorEmpty: 'Nichts gehort. Bitte sprechen und erneut versuchen.',
+      errorBusy: 'Der Assistent antwortet noch. Bitte kurz warten.',
+      errorAborted: 'Aufnahme wurde abgebrochen.',
+      errorUnsupported: 'Spracheingabe wird in diesem Browser nicht unterstutzt.',
+      errorDecodeFailed: 'Die Aufnahme konnte nicht gelesen werden. Bitte erneut versuchen.',
     },
     filters: {
       allLabel: 'Alle',
@@ -1113,6 +1164,23 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalResolvedLabel: 'Traite le',
       toolRedactedValue: '[redacted]',
     },
+    voice: {
+      micLabel: 'Entree vocale',
+      stopLabel: 'Arreter l ecoute',
+      workingLabel: 'Traitement...',
+      unsupportedLabel: 'Entree vocale indisponible',
+      errorDenied: 'Micro bloque. Autorisez l acces pour parler.',
+      errorNoDevice: 'Aucun micro trouve sur cette borne.',
+      errorModelMissing: 'Modele vocal manquant. Reinstallez ou reparez l application.',
+      errorTranscribeFailed: 'Pas compris. Veuillez reessayer.',
+      errorSubmitFailed: 'Message vocal non envoye. Veuillez reessayer.',
+      errorTooLong: 'Enregistrement trop long. Restez sous 5 minutes.',
+      errorEmpty: 'Rien entendu. Parlez puis reessayez.',
+      errorBusy: 'L assistant repond encore. Patientez un moment.',
+      errorAborted: 'Ecoute annulee.',
+      errorUnsupported: 'Entree vocale non prise en charge par ce navigateur.',
+      errorDecodeFailed: 'Enregistrement illisible. Veuillez reessayer.',
+    },
     filters: {
       allLabel: 'Tous',
       householdViewCaption: 'Vue du foyer',
@@ -1465,6 +1533,23 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       toolApprovalExpiresLabel: 'Expira',
       toolApprovalResolvedLabel: 'Resuelto',
       toolRedactedValue: '[redacted]',
+    },
+    voice: {
+      micLabel: 'Entrada de voz',
+      stopLabel: 'Dejar de escuchar',
+      workingLabel: 'Procesando...',
+      unsupportedLabel: 'Entrada de voz no disponible',
+      errorDenied: 'Microfono bloqueado. Permita el acceso para hablar.',
+      errorNoDevice: 'No se encontro microfono en este quiosco.',
+      errorModelMissing: 'Falta el modelo de voz. Reinstale o repare la aplicacion.',
+      errorTranscribeFailed: 'No se entendio. Intentelo de nuevo.',
+      errorSubmitFailed: 'No se pudo enviar el mensaje de voz. Intentelo de nuevo.',
+      errorTooLong: 'Grabacion demasiado larga. Mantengala bajo 5 minutos.',
+      errorEmpty: 'No se escucho nada. Hable e intentelo de nuevo.',
+      errorBusy: 'El asistente aun responde. Espere un momento.',
+      errorAborted: 'Escucha cancelada.',
+      errorUnsupported: 'La entrada de voz no es compatible con este navegador.',
+      errorDecodeFailed: 'No se pudo leer la grabacion. Intentelo de nuevo.',
     },
     filters: {
       allLabel: 'Todos',

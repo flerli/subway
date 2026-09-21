@@ -178,3 +178,21 @@ Issues:
 | 012_MOBILE_DEVICES__ISSUE_DEFINITION__003_SINGLE_COLUMN_BOARD_LAYOUT_AND_ZONE_STACKING.md | Reflow the board into a one-column mobile layout with A1, A2, A3 above B1, B2, B3 while preserving widget visibility and ordering semantics. | planned |
 | 012_MOBILE_DEVICES__ISSUE_DEFINITION__004_FULL_SCREEN_WIDGET_DETAIL_NAVIGATION.md | Replace the desktop lower expanded panel on mobile with a full-screen widget detail flow and explicit back navigation. | planned |
 | 012_MOBILE_DEVICES__ISSUE_DEFINITION__005_MOBILE_DEVICE_VALIDATION_SAFE_AREA_AND_REGRESSION_HARDENING.md | Validate the mobile rollout across iPhone and small-tablet viewports, including safe-area behavior, scroll containment, and interaction regressions. | planned |
+
+## 013 ASSISTANT AUDIO INTERFACE
+
+Description:
+Give the assistant widget a fully local/offline voice interface: an always-visible top-bar push-to-talk mic with Whisper-tiny STT submit, autoplaying Supertonic-3 TTS answers with volume and replay, a pulsating amplitude circle both directions, and per-user voice preferences with sample playback in the assistant settings. See `project_management/epics/EPIC_013_ASSISTANT_AUDIO_INTERFACE.md` (SYS1-013, no-reviews).
+
+Issues:
+
+| Issue | Description | Status |
+| --- | --- | --- |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_A_VOICE_CAPTURE_STT/TC-A-01_SHARED_MIC_PCM_PERMISSION_LEVEL_FOUNDATION.md | Shared mic/permission/16kHz-PCM/level foundation plus repo tooling gate (build+lint clean, unit-test baseline). | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_A_VOICE_CAPTURE_STT/TC-A-02_PUSH_TO_TALK_STT_SUBMIT.md | Top-bar push-to-talk, silence auto-stop, Whisper-tiny singleton, vocabulary correction, transcript submit with thread auto-create. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_A_VOICE_CAPTURE_STT/TC-A-03_INPUT_CIRCLE_ERRORS_KEYBOARD_I18N.md | Pulsating input-level circle, error/permission UX, keyboard suppression, four-language copy, mobile top-bar. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_A_VOICE_CAPTURE_STT/TC-A-04_CAPTURE_CLOSER_INTEGRATION_SMOKE.md | TC-A closer: integration tests, architecture/traceability updates, SYS3 capture-path smoke. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_B_VOICE_SYNTHESIS_PLAYBACK/TC-B-01_TTS_BRIDGE_CACHE_FOUNDATION.md | Supertonic-3 helper/sidecar bridge, status probe, WAV→MP3, disk cache foundation. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_B_VOICE_SYNTHESIS_PLAYBACK/TC-B-02_AUTOPLAY_CHUNKING_PLAYBACK.md | Markdown-to-text plus sentence chunking, autoplay/volume/replay wiring, output-level circle, interrupt behavior. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_B_VOICE_SYNTHESIS_PLAYBACK/TC-B-03_VOICE_PREFS_SETTINGS.md | Per-user voice prefs API plus assistant settings voice section (toggle, presets, samples, volume) with four-language copy. | planned |
+| EPIC_013_ASSISTANT_AUDIO_INTERFACE/TC_B_VOICE_SYNTHESIS_PLAYBACK/TC-B-04_SYNTHESIS_CLOSER_INTEGRATION_SMOKE.md | TC-B closer: integration tests, architecture/traceability updates, SYS3 full voice-loop smoke. | planned |

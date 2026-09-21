@@ -74,6 +74,11 @@ import {
   type SoftwareKeyboardTarget,
 } from './keyboard/softwareKeyboard'
 import { isUiClickSoundTarget, playUiClickSound } from './uiClickSound'
+import { createMicrophoneLevelSource } from './voice/audioLevel'
+import { useVoiceCapture } from './voice/useVoiceCapture'
+import { resolveVoiceErrorCopy } from './voice/voiceCopy'
+import { isVoiceCaptureActiveState } from './voice/voiceCapture'
+import { VoiceMicButton } from './voice/VoiceMicButton'
 import { useViewportLayoutState } from './viewportLayout'
 import { buildBadgeStyle } from './widgets/widgetAppearance'
 import { WidgetBoardHost } from './widgets/WidgetBoardHost'
@@ -694,6 +699,7 @@ function App() {
   const pendingInteractionRef = useRef<PendingInteractionMeasurement | null>(null)
   const pendingBoardWidgetNavigationIdRef = useRef<string | null>(null)
   const assistantTurnRunIdRef = useRef(0)
+  const voiceCaptureActiveRef = useRef(false)
   const appText = getLocalizedBundle(appTextCatalog, selectedLanguageCode)
   const arrivalBoardWidgetText = getArrivalBoardWidgetTranslation(selectedLanguageCode)
   const weatherWidgetText = getWeatherWidgetTranslation(selectedLanguageCode)
@@ -860,6 +866,10 @@ function App() {
 
   useEffect(() => {
     const handleFocusIn = (event: FocusEvent) => {
+      if (voiceCaptureActiveRef.current) {
+        return
+      }
+
       if (isSupportedSoftwareKeyboardTarget(event.target)) {
         setSoftwareKeyboardTarget(event.target)
       }
@@ -1043,6 +1053,29 @@ function App() {
     setViewMode('board')
   }
 
+  const adoptAssistantThread = (createdThread: AssistantThreadDetail) => {
+    setAssistantThreads((currentThreads) => {
+      const nextThreads = currentThreads.filter((thread) => thread.id !== createdThread.id)
+
+      return [
+        {
+          id: createdThread.id,
+          routeId: createdThread.routeId,
+          title: createdThread.title,
+          state: createdThread.state,
+          messageCount: createdThread.messages.length,
+          createdAt: createdThread.createdAt,
+          updatedAt: createdThread.updatedAt,
+        },
+        ...nextThreads,
+      ]
+    })
+    setSelectedAssistantThreadId(createdThread.id)
+    setSelectedAssistantThread(createdThread)
+    setViewMode('board')
+    setExpandedWidgetId('assistant')
+  }
+
   const handleCreateAssistantThread = async () => {
     if (assistantCreatingThread || isAssistantTurnBusy) {
       return
@@ -1054,26 +1087,7 @@ function App() {
     try {
       const createdThread = await createAssistantThread()
 
-      setAssistantThreads((currentThreads) => {
-        const nextThreads = currentThreads.filter((thread) => thread.id !== createdThread.id)
-
-        return [
-          {
-            id: createdThread.id,
-            routeId: createdThread.routeId,
-            title: createdThread.title,
-            state: createdThread.state,
-            messageCount: createdThread.messages.length,
-            createdAt: createdThread.createdAt,
-            updatedAt: createdThread.updatedAt,
-          },
-          ...nextThreads,
-        ]
-      })
-      setSelectedAssistantThreadId(createdThread.id)
-      setSelectedAssistantThread(createdThread)
-      setViewMode('board')
-      setExpandedWidgetId('assistant')
+      adoptAssistantThread(createdThread)
     } catch (error) {
       if (isAuthRequiredError(error)) {
         handleAuthRequired()
@@ -1182,6 +1196,66 @@ function App() {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       event.currentTarget.form?.requestSubmit()
+    }
+  }
+
+  const handleVoiceTranscriptSubmit = async (content: string) => {
+    const transcript = content.trim()
+
+    if (!transcript) {
+      throw new Error('Empty voice transcript.')
+    }
+
+    let threadId = selectedAssistantThreadId
+
+    if (!threadId) {
+      try {
+        const createdThread = await createAssistantThread()
+        adoptAssistantThread(createdThread)
+        threadId = createdThread.id
+      } catch (error) {
+        if (isAuthRequiredError(error)) {
+          handleAuthRequired()
+        }
+
+        throw error
+      }
+    }
+
+    await runAssistantTurn(threadId, transcript)
+  }
+
+  const isVoiceInputSupported =
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === 'function'
+
+  const voiceCapture = useVoiceCapture({
+    submit: (transcript: string) => handleVoiceTranscriptSubmit(transcript),
+    isBusy: () => isAssistantTurnBusy,
+    createStreamLevels: (stream: MediaStream) => createMicrophoneLevelSource(stream),
+  })
+
+  const voiceSnapshot = voiceCapture.snapshot
+  const isVoiceCaptureActive = isVoiceCaptureActiveState(voiceSnapshot.state)
+  const voiceErrorCopy =
+    voiceSnapshot.state === 'error' && voiceSnapshot.error
+      ? resolveVoiceErrorCopy(appText, voiceSnapshot.error.code)
+      : null
+
+  useEffect(() => {
+    voiceCaptureActiveRef.current = isVoiceCaptureActive
+  })
+
+  const handleVoiceMicToggle = () => {
+    const captureState = voiceCapture.snapshot.state
+
+    if (captureState === 'listening') {
+      void voiceCapture.stop()
+    } else if (captureState === 'requesting') {
+      voiceCapture.cancel()
+    } else {
+      void voiceCapture.start(selectedLanguageCode)
     }
   }
 
@@ -1317,20 +1391,7 @@ function App() {
     void refreshAssistantThreadList()
   }
 
-  const handleAssistantSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    if (!selectedAssistantThreadId || isAssistantTurnBusy) {
-      return
-    }
-
-    const promptContent = assistantDraft.trim()
-
-    if (!promptContent) {
-      return
-    }
-
-    const currentThreadId = selectedAssistantThreadId
+  const runAssistantTurn = async (currentThreadId: string, promptContent: string) => {
     const runId = assistantTurnRunIdRef.current + 1
     assistantTurnRunIdRef.current = runId
     const timestamp = new Date().toISOString()
@@ -1489,6 +1550,22 @@ function App() {
         error instanceof Error ? error.message : appText.messages.assistantSendFailed,
       )
     }
+  }
+
+  const handleAssistantSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!selectedAssistantThreadId || isAssistantTurnBusy) {
+      return
+    }
+
+    const promptContent = assistantDraft.trim()
+
+    if (!promptContent) {
+      return
+    }
+
+    await runAssistantTurn(selectedAssistantThreadId, promptContent)
   }
 
   const handleExpandedWidgetChange = (widgetId: string | null) => {
@@ -2752,6 +2829,7 @@ function App() {
   }
 
   const handleLogout = () => {
+    voiceCapture.cancel()
     setAuthPending(true)
     setAuthErrorKey(null)
 
@@ -3684,6 +3762,26 @@ function App() {
             </div>
           </div>
 
+          <div className="terminal-cell terminal-cell--voice">
+            <VoiceMicButton
+              captureState={voiceSnapshot.state}
+              turnBusy={isAssistantTurnBusy}
+              supported={isVoiceInputSupported}
+              onToggle={handleVoiceMicToggle}
+              micLabel={appText.voice.micLabel}
+              stopLabel={appText.voice.stopLabel}
+              workingLabel={appText.voice.workingLabel}
+              unsupportedLabel={appText.voice.unsupportedLabel}
+              readLevel={voiceCapture.readLevel}
+              circleLabel={appText.voice.micLabel}
+            />
+            {voiceErrorCopy ? (
+              <p className="terminal-voice-note" role="status">
+                {voiceErrorCopy}
+              </p>
+            ) : null}
+          </div>
+
           {!isMobileLayout ? (
             <div className="terminal-cell terminal-cell--clock">
               <div className="clock-stack">
@@ -3866,6 +3964,7 @@ function App() {
                 streamingEvents: assistantStreamingEvents,
                 resolvingApprovalRequestId: assistantResolvingApprovalRequestId,
                 isTurnBusy: isAssistantTurnBusy,
+                voiceNote: voiceErrorCopy,
               }}
               assistantActions={{
                 onCreateThread: () => {

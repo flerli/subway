@@ -155,6 +155,7 @@ interface WidgetBoardHostProps {
     streamingEvents: AssistantMessageEventRecord[]
     resolvingApprovalRequestId: string | null
     isTurnBusy: boolean
+    voiceNote: string | null
   }
   assistantActions: {
     onCreateThread: () => void
@@ -1229,6 +1230,7 @@ export function WidgetBoardHost({
                     streamingEvents: assistantState.streamingEvents,
                     resolvingApprovalRequestId: assistantState.resolvingApprovalRequestId,
                     isTurnBusy: assistantState.isTurnBusy,
+                    voiceNote: assistantState.voiceNote,
                     onCreateThread: assistantActions.onCreateThread,
                     onDeleteThread: assistantActions.onDeleteThread,
                     onSelectThread: assistantActions.onSelectThread,

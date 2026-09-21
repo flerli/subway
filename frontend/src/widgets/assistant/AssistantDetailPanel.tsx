@@ -39,6 +39,8 @@ export interface AssistantDetailViewData {
     approvalRequestId: string,
     action: AssistantToolApprovalAction,
   ) => void
+  /** Voice-capture error note (SW-REQ-013-04); rendered under the transcript head when set. */
+  voiceNote?: string | null
 }
 
 interface AssistantDetailPanelProps {
@@ -150,6 +152,7 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
     onSubmit,
     onComposerKeyDown,
     onResolveToolApproval,
+    voiceNote = null,
   } = data
 
   const displayedMessages = selectedThread
@@ -257,6 +260,7 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
           </div>
 
           {error ? <p className="settings-note settings-note--warning">{error}</p> : null}
+          {voiceNote ? <p className="settings-note settings-note--warning">{voiceNote}</p> : null}
 
           {!selectedThreadId ? (
             <div className="empty-state assistant-empty-state">
