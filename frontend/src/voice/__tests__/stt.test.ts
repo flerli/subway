@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   adaptRawPipeline,
   loadPipelineWithFallback,
+  getLastSttFallbackInfo,
+  resetLastSttFallbackInfoForTests,
   VOICE_STT_CHUNK_LENGTH_S,
   VOICE_STT_SINGLE_PASS_MAX_SAMPLES,
   VOICE_STT_MODEL_ID,
@@ -410,5 +412,41 @@ describe('external STT endpoint (transcribeViaEndpoint + fallback)', () => {
 
     assert.deepEqual(result, { ok: true, text: 'local' });
     assert.equal(fetchCalls, 0);
+  });
+
+  it('records the primary failure reason when the fallback serves (positive)', async () => {
+    resetLastSttFallbackInfoForTests();
+    const loaded = await loadPipelineWithFallback(
+      async (model) => {
+        if (model.includes('small')) throw new Error('out of memory boom');
+        return 'tiny-pipeline';
+      },
+      'Xenova/whisper-small',
+      'Xenova/whisper-tiny',
+    );
+
+    assert.equal(loaded, 'tiny-pipeline');
+    assert.equal(getLastSttFallbackInfo()?.model, 'Xenova/whisper-tiny');
+    assert.ok(getLastSttFallbackInfo()?.reason.includes('out of memory'));
+  });
+
+  it('clears the fallback reason once the primary succeeds (positive)', async () => {
+    resetLastSttFallbackInfoForTests();
+    await loadPipelineWithFallback(
+      async (model) => {
+        if (model.includes('small')) throw new Error('first failure');
+        return 'tiny-pipeline';
+      },
+      'Xenova/whisper-small',
+      'Xenova/whisper-tiny',
+    );
+    assert.ok(getLastSttFallbackInfo());
+
+    await loadPipelineWithFallback(
+      async () => 'small-pipeline',
+      'Xenova/whisper-small',
+      'Xenova/whisper-tiny',
+    );
+    assert.equal(getLastSttFallbackInfo(), null);
   });
 });

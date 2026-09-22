@@ -263,6 +263,25 @@ export const preloadSttModel = (language: SttLanguage): Promise<void> =>
     },
   );
 /**
+ * Why the primary model was abandoned, when the fallback is serving.
+ * Surfaced in the telemetry line so the kiosk UI itself names the cause
+ * (OOM vs. fetch vs. init) without needing the browser console.
+ */
+interface SttFallbackInfo {
+  readonly model: string;
+  readonly reason: string;
+}
+
+let lastSttFallbackInfo: SttFallbackInfo | null = null;
+
+export const getLastSttFallbackInfo = (): SttFallbackInfo | null =>
+  lastSttFallbackInfo;
+
+export const resetLastSttFallbackInfoForTests = (): void => {
+  lastSttFallbackInfo = null;
+};
+
+/**
  * Which local model actually loaded, per language. `null` means the local
  * path was never reached (endpoint served) or load not yet attempted. Used
  * by per-utterance telemetry so the kiosk console shows whether STT ran on
@@ -293,8 +312,15 @@ export const loadPipelineWithFallback = async (
   try {
     const loaded = await attempt(primaryModelPath)
     hooks.onLoaded?.(primaryModelPath)
+    lastSttFallbackInfo = null
     return loaded
   } catch (primaryError) {
+    const reason = (
+      primaryError instanceof Error ? primaryError.message : String(primaryError)
+    )
+      .replace(/\s+/g, ' ')
+      .slice(0, 160)
+
     if (typeof console !== 'undefined') {
       console.warn(
         `[voice] primary model failed (${primaryModelPath}); retrying fallback ${fallbackModelPath}`,
@@ -305,6 +331,7 @@ export const loadPipelineWithFallback = async (
     try {
       const loaded = await attempt(fallbackModelPath)
       hooks.onLoaded?.(fallbackModelPath)
+      lastSttFallbackInfo = { model: fallbackModelPath, reason }
       return loaded
     } catch (fallbackError) {
       const url = joinUrl(
@@ -522,6 +549,21 @@ export interface TranscribeOptions {
   readonly fetchImpl?: SttFetch;
 }
 
+/**
+ * Local-model telemetry label, including the primary failure reason when the
+ * fallback is serving — so the UI line alone diagnoses the load problem.
+ */
+const describeLocalModel = (language: SttLanguage): string => {
+  const loaded = getLoadedSttModel(language) ?? 'unknown';
+  const fallback = getLastSttFallbackInfo();
+
+  if (fallback && loaded === fallback.model) {
+    return `local:${loaded} (small failed: ${fallback.reason})`;
+  }
+
+  return `local:${loaded}`;
+};
+
 export const transcribeUtterance = async (
   samples: PcmData,
   language: SttLanguage,
@@ -607,7 +649,7 @@ export const transcribeUtterance = async (
         : {}),
     });
   } catch {
-    logTelemetry(`local:${getLoadedSttModel(language) ?? 'unknown'}`, false);
+    logTelemetry(describeLocalModel(language), false);
     return {
       ok: false,
       error: {
@@ -617,6 +659,6 @@ export const transcribeUtterance = async (
     };
   }
 
-  logTelemetry(`local:${getLoadedSttModel(language) ?? 'unknown'}`, true);
+  logTelemetry(describeLocalModel(language), true);
   return { ok: true, text: readTranscriptText(output) };
 };
