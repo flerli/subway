@@ -109,6 +109,33 @@ class ServiceHelperTests(unittest.TestCase):
         finally:
             server._model = None
 
+    def test_kiosk_browser_access_headers(self):
+        """Positive: PNA preflight passes and real responses carry the
+        loopback-access headers. Negative: /health carries them too (no
+        unguarded route for kiosk fetches)."""
+        try:
+            from fastapi.testclient import TestClient
+        except Exception as exc:
+            self.skipTest(f"fastapi test client unavailable: {exc}")
+            return
+
+        import server
+
+        client = TestClient(server.app)
+
+        preflight = client.options("/transcribe")
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(
+            preflight.headers.get("access-control-allow-private-network"), "true"
+        )
+        self.assertEqual(preflight.headers.get("access-control-allow-origin"), "*")
+
+        health = client.get("/health")
+        self.assertEqual(
+            health.headers.get("access-control-allow-private-network"), "true"
+        )
+        self.assertEqual(health.headers.get("access-control-allow-origin"), "*")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

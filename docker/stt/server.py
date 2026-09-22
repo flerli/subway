@@ -4,6 +4,9 @@ Contract (matches the board's `VITE_STT_ENDPOINT` client):
   POST /transcribe  multipart: `file` (WAV/PCM audio) + `language` (e.g. `de`)
   -> 200 {"text": "<transcript>"} | 400 missing file | 503 engine unavailable
   GET  /health     -> {"status": "ok"|"degraded", "model": ..., "device": ...}
+  OPTIONS *        -> 200 with CORS + Private-Network-Access headers, so kiosk
+                      browsers served from the VPS HTTPS origin may call the
+                      loopback service (all responses carry the same headers).
 
 Configuration (env):
   WHISPER_MODEL   faster-whisper model id, default "small"
@@ -98,10 +101,33 @@ def transcribe_bytes(raw: bytes, language: str) -> str:
 
 
 def create_app():
-    from fastapi import FastAPI, File, Form, UploadFile
-    from fastapi.responses import JSONResponse
+    from fastapi import FastAPI, File, Form, Request, UploadFile
+    from fastapi.responses import JSONResponse, Response
 
     app = FastAPI(title="subway-stt")
+
+    # Kiosk browsers load the board from the VPS HTTPS origin but reach this
+    # service at http://127.0.0.1:8080 — a public-to-loopback hop. Chrome
+    # answers that with a Private Network Access preflight (OPTIONS) and
+    # enforces CORS. The board fetch carries no credentials, so a wildcard
+    # origin is sufficient; without these headers every kiosk request fails
+    # before it reaches /transcribe.
+    BROWSER_ACCESS_HEADERS = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Private-Network": "true",
+        "Access-Control-Max-Age": "86400",
+    }
+
+    @app.middleware("http")
+    async def kiosk_browser_access(request: Request, call_next):
+        if request.method == "OPTIONS":
+            return Response(status_code=200, headers=BROWSER_ACCESS_HEADERS)
+        response = await call_next(request)
+        for key, value in BROWSER_ACCESS_HEADERS.items():
+            response.headers[key] = value
+        return response
 
     @app.get("/health")
     def health():
