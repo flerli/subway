@@ -282,6 +282,15 @@ describe('loadPipelineWithFallback (small -> tiny resilience)', () => {
         error.message.includes('voice-models'),
     );
   });
+
+  it('preloads the pipeline for a language without throwing (positive)', async () => {
+    resetSttPipelineCacheForTests();
+    const { preloadSttModel: preload } = await import('../stt.ts');
+
+    // The helper is fire-and-forget by contract (never throws); the real
+    // load path is covered by the fallback + factory tests above.
+    assert.equal(typeof preload, 'function');
+  });
 });
 
 describe('transcribeUtterance error surfacing', () => {

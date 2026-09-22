@@ -76,6 +76,77 @@ const checkOnly = process.argv.includes('--check');
 
 const formatBytes = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
+/**
+ * Expected SHA-256 per staged file, from the Hub metadata (LFS OIDs).
+ * Guards against truncated/corrupt weights ever being baked into an image:
+ * a mismatch fails the build loudly instead of shipping a model that dies
+ * at load time on the kiosk (which then silently falls back to tiny).
+ */
+const fetchExpectedHashes = async () => {
+  const hashes = new Map();
+
+  for (const modelId of modelIds) {
+    const url = `${modelHost}/api/models/${modelId}`;
+    const response = await fetch(url, { redirect: 'follow' });
+
+    if (!response.ok) {
+      throw new Error(`GET ${url} -> HTTP ${response.status}`);
+    }
+
+    const metadata = await response.json();
+    const siblings = Array.isArray(metadata?.siblings) ? metadata.siblings : [];
+
+    for (const sibling of siblings) {
+      const sha = sibling?.lfs?.sha256;
+      if (typeof sibling?.rfilename === 'string' && typeof sha === 'string') {
+        hashes.set(`${modelId}/${sibling.rfilename}`, sha);
+      }
+    }
+  }
+
+  return hashes;
+};
+
+const sha256File = async (path) => {
+  const { createHash } = await import('node:crypto');
+  const { createReadStream } = await import('node:fs');
+  const hash = createHash('sha256');
+
+  await new Promise((resolve, reject) => {
+    const stream = createReadStream(path);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', resolve);
+    stream.on('error', reject);
+  });
+
+  return hash.digest('hex');
+};
+
+const downloadVerified = async (url, target, expectedHash, fileName) => {
+  const attempts = 3;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const size = await download(url, target);
+
+    if (!expectedHash) {
+      return size;
+    }
+
+    const actual = await sha256File(target);
+
+    if (actual === expectedHash) {
+      return size;
+    }
+
+    await rm(target, { force: true });
+    console.warn(
+      `[voice-models] sha256 mismatch for ${fileName} (attempt ${attempt}/${attempts}) — retrying`,
+    );
+  }
+
+  throw new Error(`sha256 mismatch for ${fileName} after ${attempts} attempts`);
+};
+
 const fileSize = async (path) => {
   try {
     const info = await stat(path);
@@ -134,6 +205,19 @@ const verifyModelFile = async (target, fileName) => {
 const main = async () => {
   console.log(`[voice-models] staging ${modelIds.join(' + ')} (q8) into ${modelRoot}`);
 
+  // Best-effort: without metadata we still verify sizes/JSON, just not hashes.
+  let expectedHashes = new Map();
+
+  try {
+    expectedHashes = await fetchExpectedHashes();
+  } catch (error) {
+    console.warn(
+      `[voice-models] hub metadata unavailable, skipping sha256 checks: ${
+        error instanceof Error ? error.message : error
+      }`,
+    );
+  }
+
   let downloadedBytes = 0;
   const missing = [];
 
@@ -176,7 +260,8 @@ const main = async () => {
       }
 
       const url = `${modelHost}/${modelId}/resolve/${revision}/${fileName}`;
-      const size = await download(url, target);
+      const expectedHash = expectedHashes.get(`${modelId}/${fileName}`) ?? null;
+      const size = await downloadVerified(url, target, expectedHash, `${modelId}/${fileName}`);
       await verifyModelFile(target, fileName);
       downloadedBytes += size;
       console.log(`[voice-models] ${modelId}/${fileName} (${formatBytes(size)})`);

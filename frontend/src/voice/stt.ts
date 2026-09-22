@@ -232,6 +232,24 @@ export const resetLastSttTelemetryForTests = (): void => {
 };
 
 /**
+ * Warm the STT pipeline in the background (call once the app is
+ * authenticated). The 237 MB model + ORT init then happen during idle time
+ * instead of on the first mic tap, and any load failure surfaces in the
+ * console immediately rather than at first use. Never throws.
+ */
+export const preloadSttModel = (language: SttLanguage): Promise<void> =>
+  getPipeline(language, defaultWhisperPipelineFactory).then(
+    () => undefined,
+    (error: unknown) => {
+      if (typeof console !== 'undefined') {
+        console.warn(
+          '[voice] STT preload failed; first tap will retry',
+          error instanceof Error ? error.message : undefined,
+        );
+      }
+    },
+  );
+/**
  * Which local model actually loaded, per language. `null` means the local
  * path was never reached (endpoint served) or load not yet attempted. Used
  * by per-utterance telemetry so the kiosk console shows whether STT ran on

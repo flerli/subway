@@ -82,6 +82,8 @@ import {
 } from './voice/voicePrefsStore'
 import { createMicrophoneLevelSource } from './voice/audioLevel'
 import { createPlaybackLevelSource } from './voice/playbackLevel'
+import { normalizeSttLanguage } from './voice/vocabulary'
+import { preloadSttModel } from './voice/stt'
 import { useVoiceCapture } from './voice/useVoiceCapture'
 import { useVoicePlayback } from './voice/useVoicePlayback'
 import type { PlayableAudio } from './voice/voicePlayback'
@@ -1841,6 +1843,16 @@ function App() {
     setExpandedWidgetId(localAppShellState.expandedWidgetId)
     setAppShellStateHydrated(true)
   }, [authStatus, authenticatedUser, appShellStateHydrated])
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !authenticatedUser) {
+      return
+    }
+
+    // Warm the STT pipeline in the background once authenticated, so the
+    // first mic tap transcribes immediately and load failures surface early.
+    void preloadSttModel(normalizeSttLanguage(selectedLanguageCode))
+  }, [authStatus, authenticatedUser, selectedLanguageCode])
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !authenticatedUser || !appShellStateHydrated) {
