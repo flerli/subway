@@ -15,7 +15,8 @@ assistant prompts without a keyboard.
 1. The app SHALL expose a microphone button in the top bar whenever the user
    is authenticated (desktop board and mobile shell).
 2. The microphone SHALL activate only on explicit user tap (push-to-talk);
-   tapping again (manual stop) or a silence timeout ends capture.
+   tapping again (manual stop) ends capture — capture is purely manual,
+   there is no automatic stop of any kind.
 3. Capture SHALL normalize audio to 16 kHz mono `Float32Array` PCM
    (`getUserMedia` with echo cancellation/noise suppression/AGC →
    `decodeAudioData` → `OfflineAudioContext` resample/downmix → silence-edge

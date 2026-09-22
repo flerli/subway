@@ -63,6 +63,18 @@ export interface VoiceSttWasmPaths {
 }
 
 /**
+ * Memory-lean ONNX session options so the 237 MB small model fits
+ * memory-constrained kiosk browsers. Disabling the CPU arena and the memory
+ * pattern avoids large upfront reservations (at a small speed cost); the
+ * single-threaded asyncify build ignores thread counts. Verified forwarded
+ * into `InferenceSession.create` by the v4.3.0 web runtime.
+ */
+export const VOICE_STT_SESSION_OPTIONS = {
+  enableCpuMemArena: false,
+  enableMemPattern: false,
+} as const;
+
+/**
  * Structural slice of the transformers.js runtime config this module owns.
  * Declared structurally so unit tests configure a fake env without importing
  * the (large) library.
@@ -200,7 +212,8 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
       // WebGPU the pipeline construction throws and surfaces as
       // "model missing". The wasm device uses the staged asyncify ORT pair
       // and runs everywhere, offline, CPU-only (verified in headless Chrome).
-      { dtype: 'q8', device: 'wasm' },
+      // session_options keeps peak memory low for weak kiosk browsers.
+      { dtype: 'q8', device: 'wasm', session_options: { ...VOICE_STT_SESSION_OPTIONS } },
     )
 
   const rawPipeline = await loadPipelineWithFallback(

@@ -7,7 +7,7 @@ flowchart TD
     A[Tap top-bar mic<br/>terminal-cell--voice] --> B[Permission check<br/>requestMicPermission]
     B -->|denied/unavailable| E1[Header note role=status + transcript voiceNote]
     B -->|granted| C[Listening + input circle<br/>live analyser RMS ~20Hz]
-    C -->|manual stop / silence 2.5s / 120s cap| D[16kHz PCM + Whisper-tiny STT<br/>singleton, local_files_only]
+    C -->|manual stop only| D[16kHz PCM + Whisper-tiny STT<br/>singleton, local_files_only]
     D -->|model missing| E1
     D --> V[Vocabulary correction<br/>postCorrectTranscript]
     V --> S[Submit as prompt; auto-create thread if none<br/>runAssistantTurn]

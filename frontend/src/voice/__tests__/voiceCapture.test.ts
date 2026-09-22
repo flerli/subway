@@ -94,10 +94,6 @@ const makeHarness = (
     isBusy: () => false,
     sampleInputLevel: sampler,
     timers: timers.timers,
-    silenceThreshold: 0.02,
-    silenceTimeoutMs: 400,
-    pollIntervalMs: 200,
-    maxListeningMs: 60000,
     ...overrides,
   };
   return {
@@ -123,26 +119,35 @@ describe('VoiceCaptureController', () => {
     assert.equal(harness.transcribeCalls[0]?.language, 'en');
   });
 
-  it('auto-stops after sustained silence (positive)', async () => {
+  it('never auto-stops on sustained silence — manual stop only (positive)', async () => {
     const harness = makeHarness({}, () => 0);
     await harness.controller.start('de');
     harness.timers.fireInterval();
-    assert.equal(harness.controller.getSnapshot().state, 'listening');
     harness.timers.fireInterval();
-    await flushMicrotasks();
+    harness.timers.fireInterval();
+    assert.equal(harness.controller.getSnapshot().state, 'listening');
+    assert.equal(harness.submitted.length, 0);
+    await harness.controller.stop();
     assert.equal(harness.controller.getSnapshot().state, 'idle');
     assert.equal(harness.submitted.length, 1);
   });
 
-  it('voice activity resets the silence streak (positive)', async () => {
-    let loud = true;
-    const harness = makeHarness({}, () => (loud ? 0.5 : 0));
+  it('tracks peak input level for telemetry (positive)', async () => {
+    let level = 0.1;
+    const harness = makeHarness(
+      { readTelemetry: () => '[voice] stt servedBy=test' },
+      () => level,
+    );
     await harness.controller.start('en');
     harness.timers.fireInterval();
-    loud = false;
+    level = 0.4;
     harness.timers.fireInterval();
-    assert.equal(harness.controller.getSnapshot().state, 'listening');
-    assert.equal(harness.submitted.length, 0);
+    level = 0.05;
+    harness.timers.fireInterval();
+    assert.equal(harness.controller.readPeakInputLevel(), 0.4);
+    await harness.controller.stop();
+    const telemetry = harness.controller.getSnapshot().telemetry ?? '';
+    assert.ok(telemetry.includes('peak=0.400'), telemetry);
   });
 
   it('fails closed when busy at start (negative)', async () => {
@@ -243,7 +248,7 @@ describe('VoiceCaptureController', () => {
     assert.equal(permissionCalls, 1);
   });
 
-  it('prefers live stream levels and disposes them on release (positive)', async () => {
+  it('keeps listening through silence; manual stop submits and disposes (positive)', async () => {
     let disposed = 0;
     const harness = makeHarness({
       sampleInputLevel: () => 0.9,
@@ -258,7 +263,9 @@ describe('VoiceCaptureController', () => {
     assert.equal(harness.controller.readInputLevel(), 0);
     harness.timers.fireInterval();
     harness.timers.fireInterval();
-    await flushMicrotasks();
+    assert.equal(harness.controller.getSnapshot().state, 'listening');
+    assert.equal(harness.submitted.length, 0);
+    await harness.controller.stop();
     assert.equal(harness.submitted.length, 1);
     assert.equal(disposed, 1);
     assert.equal(harness.controller.readInputLevel(), 0);
@@ -300,10 +307,12 @@ describe('VoiceCaptureController', () => {
     });
     await harness.controller.start('en');
     await harness.controller.stop();
-    assert.equal(
-      harness.controller.getSnapshot().telemetry,
-      '[voice] stt servedBy=endpoint de samples=100 ok=true',
+    const telemetry = harness.controller.getSnapshot().telemetry ?? '';
+    assert.ok(
+      telemetry.includes('[voice] stt servedBy=endpoint de samples=100 ok=true'),
+      telemetry,
     );
+    assert.ok(telemetry.includes('peak='), telemetry);
   });
 
   it('never logs transcripts or audio (negative: PII)', async () => {

@@ -97,7 +97,7 @@ export interface VoiceCaptureDeps {
   ) => Promise<TranscribeResult>;
   readonly submit?: (transcript: string) => Promise<void>;
   readonly isBusy?: () => boolean;
-  /** Live input RMS in [0, 1]; `null` disables silence auto-stop. */
+  /** Live input RMS in [0, 1] for the level meter (display only). */
   readonly sampleInputLevel?: (() => number) | null;
   /** Telemetry source for the UI (defaults to the STT module's last line). */
   readonly readTelemetry?: () => string | null;
@@ -109,10 +109,11 @@ export interface VoiceCaptureDeps {
     stream: MediaStream,
   ) => StreamLevelSource | null;
   readonly timers?: VoiceCaptureTimers;
-  readonly silenceThreshold?: number;
-  readonly silenceTimeoutMs?: number;
-  readonly pollIntervalMs?: number;
-  readonly maxListeningMs?: number;
+  /**
+   * Level-meter refresh in ms (display only, default 200). Capture is purely
+   * manual: tap to start, tap to stop — no automatic stop exists.
+   */
+  readonly levelIntervalMs?: number;
 }
 
 const captureError = (
@@ -216,11 +217,11 @@ export class VoiceCaptureController {
   private stream: MediaStream | null = null;
   private streamLevels: StreamLevelSource | null = null;
   private lastInputLevel = 0;
+  /** Peak RMS observed during the current capture (0 when idle). */
+  private peakInputLevel = 0;
   private recorder: UtteranceRecorder | null = null;
   private language: SttLanguage = 'auto';
   private pollHandle: unknown = null;
-  private timeoutHandle: unknown = null;
-  private silentStreakMs = 0;
   private runId = 0;
 
   constructor(deps: VoiceCaptureDeps = {}) {
@@ -239,6 +240,11 @@ export class VoiceCaptureController {
   /** Last sampled input RMS in [0, 1] — drives the level circle (scalar only). */
   readInputLevel(): number {
     return this.lastInputLevel;
+  }
+
+  /** Peak input RMS of the current capture (0 when idle) — diagnostic only. */
+  readPeakInputLevel(): number {
+    return this.peakInputLevel;
   }
 
   subscribe(listener: (snapshot: VoiceCaptureSnapshot) => void): () => void {
@@ -280,6 +286,21 @@ export class VoiceCaptureController {
     }
   }
 
+  /**
+   * Telemetry for the UI: the STT line plus the peak input RMS observed
+   * during this capture. A peak near 0 with a trimmed-to-one-frame result
+   * means the mic captured silence (muted/disconnected/wrong device).
+   */
+  private composeTelemetry(): string | null {
+    const base = this.readTelemetryLine();
+
+    if (!base) {
+      return null;
+    }
+
+    return `${base} peak=${this.peakInputLevel.toFixed(3)}`;
+  }
+
   private fail(code: VoiceCaptureErrorCode, message: string, telemetry: string | null = null): void {
     this.releaseMic();
     this.setSnapshot({ state: 'error', error: captureError(code, message), transcript: this.snapshot.transcript, telemetry });
@@ -297,6 +318,9 @@ export class VoiceCaptureController {
 
     this.streamLevels = null;
     this.lastInputLevel = 0;
+    // NOTE: peakInputLevel is intentionally NOT reset here — finalize()
+    // releases the mic before composing telemetry, and the peak belongs to
+    // the finished utterance. It resets when the next capture starts.
 
     if (this.stream) {
       for (const track of this.stream.getTracks()) {
@@ -316,13 +340,6 @@ export class VoiceCaptureController {
       timers.clearInterval(this.pollHandle);
       this.pollHandle = null;
     }
-
-    if (this.timeoutHandle !== null) {
-      timers.clearTimeout(this.timeoutHandle);
-      this.timeoutHandle = null;
-    }
-
-    this.silentStreakMs = 0;
   }
 
   /** Begin push-to-talk capture. No-op unless idle; fails closed when busy. */
@@ -390,21 +407,13 @@ export class VoiceCaptureController {
     }
 
     this.setSnapshot({ state: 'listening', error: null, transcript: null, telemetry: null });
-    this.startPolling(run);
+    this.peakInputLevel = 0;
+    this.startLevelTracking(run);
   }
 
-  private startPolling(run: number): void {
+  private startLevelTracking(run: number): void {
     const timers = this.timers();
-    const pollMs = this.deps.pollIntervalMs ?? 200;
-    const silenceThreshold = this.deps.silenceThreshold ?? 0.02;
-    const silenceTimeoutMs = this.deps.silenceTimeoutMs ?? 2500;
-    const maxListeningMs = this.deps.maxListeningMs ?? 120000;
-
-    this.timeoutHandle = timers.setTimeout(() => {
-      if (run === this.runId && this.snapshot.state === 'listening') {
-        void this.finalize(run);
-      }
-    }, maxListeningMs);
+    const intervalMs = this.deps.levelIntervalMs ?? 200;
 
     const sampler =
       this.streamLevels?.sampler.sample.bind(this.streamLevels.sampler) ??
@@ -415,6 +424,8 @@ export class VoiceCaptureController {
       return;
     }
 
+    // Display-only meter: tracks current + peak input level for the circle
+    // and the telemetry line. It never ends capture — stopping is manual.
     this.pollHandle = timers.setInterval(() => {
       if (run !== this.runId || this.snapshot.state !== 'listening') {
         return;
@@ -428,22 +439,10 @@ export class VoiceCaptureController {
         level = 0;
       }
 
-      this.lastInputLevel = Number.isFinite(level)
-        ? Math.min(1, Math.max(0, level))
-        : 0;
-
-      if (level >= silenceThreshold) {
-        this.silentStreakMs = 0;
-
-        return;
-      }
-
-      this.silentStreakMs += pollMs;
-
-      if (this.silentStreakMs >= silenceTimeoutMs) {
-        void this.finalize(run);
-      }
-    }, pollMs);
+      const clamped = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
+      this.lastInputLevel = clamped;
+      this.peakInputLevel = Math.max(this.peakInputLevel, clamped);
+    }, intervalMs);
   }
 
   /** Manual stop: finalize the utterance and submit. No-op unless listening. */
@@ -516,7 +515,7 @@ export class VoiceCaptureController {
     const transcribe =
       this.deps.transcribe ?? ((samples, language) => transcribeUtterance(samples, language));
     const transcribed = await transcribe(decoded.samples, this.language);
-    const telemetry = this.readTelemetryLine();
+    const telemetry = this.composeTelemetry();
 
     if (run !== this.runId) {
       return;
@@ -549,7 +548,7 @@ export class VoiceCaptureController {
         state: 'error',
         error: captureError('submit-failed', 'Could not send the voice message.'),
         transcript: corrected,
-        telemetry: this.readTelemetryLine(),
+        telemetry: this.composeTelemetry(),
       });
 
       return;
@@ -559,6 +558,6 @@ export class VoiceCaptureController {
       return;
     }
 
-    this.setSnapshot({ state: 'idle', error: null, transcript: corrected, telemetry: this.readTelemetryLine() });
+    this.setSnapshot({ state: 'idle', error: null, transcript: corrected, telemetry: this.composeTelemetry() });
   }
 }

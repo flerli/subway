@@ -406,7 +406,7 @@ export const browserVoiceAudioDecoder: VoiceAudioDecoder = {
 
 /**
  * Root-mean-square amplitude in [0, 1]. Pure scalar math shared by the level
- * hook and the silence auto-stop (TC-A-02). Never returns audio data.
+ * hook and the input level circle. Never returns audio data.
  */
 export const computeRmsLevel = (samples: PcmData | readonly number[]): number => {
   if (samples.length === 0) {

@@ -283,6 +283,13 @@ describe('loadPipelineWithFallback (small -> tiny resilience)', () => {
     );
   });
 
+  it('keeps memory-lean session options for weak kiosk browsers (positive)', async () => {
+    const { VOICE_STT_SESSION_OPTIONS } = await import('../stt.ts');
+
+    assert.equal(VOICE_STT_SESSION_OPTIONS.enableCpuMemArena, false);
+    assert.equal(VOICE_STT_SESSION_OPTIONS.enableMemPattern, false);
+  });
+
   it('preloads the pipeline for a language without throwing (positive)', async () => {
     resetSttPipelineCacheForTests();
     const { preloadSttModel: preload } = await import('../stt.ts');

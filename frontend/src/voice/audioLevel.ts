@@ -1,6 +1,6 @@
 /**
  * Framework-free audio-level monitor. The level circle (TC-A-03) and the
- * silence auto-stop (TC-A-02) consume scalar levels from here — audio buffers
+ * level circle consume scalar levels from here — audio buffers
  * never cross this boundary, so nothing downstream can persist or log audio.
  *
  * Why a factory + thin React hook (SW-REQ-013-04 input half): the monitor
@@ -93,7 +93,7 @@ export interface StreamLevelSource {
  * timer-only behavior. The analyser node (not audio) is all that escapes.
  *
  * Why (SW-REQ-013-04 input half): drives both the input circle and the
- * controller's silence auto-stop from one live source.
+ * controller's live level source from one live source.
  */
 export const createMicrophoneLevelSource = (
   stream: MediaStream,
