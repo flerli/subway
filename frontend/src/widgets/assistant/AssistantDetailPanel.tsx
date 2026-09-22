@@ -4,6 +4,8 @@ import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/loca
 import { AssistantMarkdown } from '../../assistant/AssistantMarkdown'
 import { OutputLevelCircle } from '../../voice/OutputLevelCircle'
 import { VoiceTelemetryField } from '../../voice/VoiceTelemetryField'
+import { VoiceTraceLog } from '../../voice/VoiceTraceLog'
+import type { VoiceTraceEvent } from '../../voice/voiceTrace'
 import type {
   AssistantAvailabilityRecord,
   AssistantMessageEventRecord,
@@ -44,6 +46,8 @@ export interface AssistantDetailViewData {
   /** Voice-capture error note (SW-REQ-013-04); rendered under the transcript head when set. */
   voiceNote?: string | null
   voiceTelemetry?: string | null
+  /** Per-utterance pipeline trace (record → … → TTS play); rendered in the log column. */
+  voiceTrace?: readonly VoiceTraceEvent[] | null
   /** Speech playback (SW-REQ-013-02): per-message replay + volume/output circle controls. */
   playback?: {
     playing: boolean
@@ -168,6 +172,7 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
     onResolveToolApproval,
     voiceNote = null,
     voiceTelemetry = null,
+    voiceTrace = null,
     playback = null,
   } = data
 
@@ -545,6 +550,18 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
           </form>
         </div>
       </section>
+
+      <aside className="assistant-column assistant-column--log">
+        <article className="settings-card assistant-card assistant-trace-card">
+          <VoiceTraceLog
+            events={voiceTrace ?? []}
+            title={appText.voice.traceTitle}
+            emptyCopy={appText.voice.traceEmpty}
+            copyLabel={appText.voice.traceCopyAction}
+            copiedLabel={appText.voice.traceCopiedState}
+          />
+        </article>
+      </aside>
     </div>
   )
 }

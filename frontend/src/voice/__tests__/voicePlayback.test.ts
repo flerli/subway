@@ -6,6 +6,11 @@ import {
   type PlayableAudio,
   type VoicePlaybackDeps,
 } from '../voicePlayback.ts';
+import {
+  formatVoiceTrace,
+  getVoiceTraceSnapshot,
+  resetVoiceTraceForTests,
+} from '../voiceTrace.ts';
 
 const makePlayer = (): PlayableAudio & EventEmitter => {
   const emitter = Object.assign(
@@ -205,5 +210,28 @@ describe('VoicePlaybackController', () => {
     await harness.controller.enqueueMessage('msg-1', 'One. Two. Three.');
     await flush();
     assert.ok(harness.submitted.every((chunk) => chunk.voice === 'M3'));
+  });
+
+  it('traces tts-triggered → tts-received → tts-play-start per chunk (positive)', async () => {
+    resetVoiceTraceForTests();
+    const harness = makeHarness();
+    await harness.controller.enqueueMessage('msg-1', 'Only one sentence.');
+    await flush();
+
+    const stages = getVoiceTraceSnapshot().map((event) => event.stage);
+    assert.deepEqual(stages, ['tts-triggered', 'tts-received', 'tts-play-start']);
+    const trace = formatVoiceTrace(getVoiceTraceSnapshot());
+    assert.ok(trace.includes('tts-triggered chars='));
+    assert.ok(trace.includes('tts-received ms='));
+  });
+
+  it('never puts spoken text into the trace (negative: PII)', async () => {
+    resetVoiceTraceForTests();
+    const harness = makeHarness();
+    await harness.controller.enqueueMessage('msg-9', 'Secret answer words here.');
+    await flush();
+
+    const trace = formatVoiceTrace(getVoiceTraceSnapshot());
+    assert.ok(!trace.includes('Secret answer words here'), trace);
   });
 });

@@ -89,6 +89,11 @@ import { useVoicePlayback } from './voice/useVoicePlayback'
 import type { PlayableAudio } from './voice/voicePlayback'
 import { resolveVoiceErrorCopy } from './voice/voiceCopy'
 import { isVoiceCaptureActiveState } from './voice/voiceCapture'
+import {
+  getVoiceTraceSnapshot,
+  subscribeVoiceTrace,
+  traceVoiceEvent,
+} from './voice/voiceTrace'
 import { synthesizeVoice } from './voice/tts'
 import { VoiceMicButton } from './voice/VoiceMicButton'
 import { useViewportLayoutState } from './viewportLayout'
@@ -1263,7 +1268,17 @@ function App() {
       }
     }
 
-    await runAssistantTurn(threadId, transcript)
+    // Pipeline trace: transcript length only, never its content.
+    traceVoiceEvent('llm-send', `chars=${transcript.length} thread=${threadId}`)
+
+    try {
+      await runAssistantTurn(threadId, transcript)
+    } catch (error) {
+      traceVoiceEvent('llm-received', 'error')
+      throw error
+    }
+
+    traceVoiceEvent('llm-received', `thread=${threadId}`)
   }
 
   const isVoiceInputSupported =
@@ -1280,6 +1295,12 @@ function App() {
   const voicePrefsLive = useSyncExternalStore(
     subscribeVoicePrefsState,
     getVoicePrefsState,
+  )
+
+  // Pipeline trace for the assistant log column (re-renders the panel live).
+  const voiceTraceLive = useSyncExternalStore(
+    subscribeVoiceTrace,
+    getVoiceTraceSnapshot,
   )
 
   const [voicePlaybackError, setVoicePlaybackError] = useState<string | null>(null)
@@ -4095,6 +4116,7 @@ function App() {
                 isTurnBusy: isAssistantTurnBusy,
                 voiceNote: voiceErrorCopy,
                 voiceTelemetry: voiceCapture.snapshot.telemetry,
+                voiceTrace: voiceTraceLive,
                 playback: {
                   playing: voicePlayback.snapshot.playing,
                   speakingMessageId: voicePlayback.snapshot.speakingMessageId,

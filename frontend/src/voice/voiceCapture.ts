@@ -22,6 +22,7 @@ import {
   postCorrectTranscript,
   type SttLanguage,
 } from './vocabulary.ts'
+import { startVoiceTrace, traceVoiceEvent } from './voiceTrace.ts'
 
 /**
  * Push-to-talk capture state machine (SW-REQ-013-01).
@@ -362,6 +363,9 @@ export class VoiceCaptureController {
     const run = this.runId + 1;
     this.runId = run;
     this.language = normalizeSttLanguage(language);
+    // A new mic press opens a fresh pipeline trace (record → … → TTS play).
+    startVoiceTrace();
+    traceVoiceEvent('record-pressed', `lang=${this.language}`);
     this.setSnapshot({ state: 'requesting', error: null, transcript: null, telemetry: null });
 
     const requestPermission = this.deps.requestPermission ?? requestMicPermission;
@@ -451,6 +455,7 @@ export class VoiceCaptureController {
       return;
     }
 
+    traceVoiceEvent('stop-pressed');
     await this.finalize(this.runId);
   }
 
@@ -512,9 +517,22 @@ export class VoiceCaptureController {
       return;
     }
 
+    // "Saving": the finished recording is persisted as 16 kHz mono PCM.
+    // Blob bytes + sample count only — never audio content.
+    traceVoiceEvent('saving', `bytes=${recording.size} samples=${decoded.samples.length}`);
+
     const transcribe =
       this.deps.transcribe ?? ((samples, language) => transcribeUtterance(samples, language));
+    // The real transcriber publishes its telemetry line as a side effect;
+    // adopt it into the trace only when this call produced it (a fake
+    // `transcribe` dep in tests leaves it untouched — never adopt stale
+    // lines from an earlier utterance).
+    const telemetryBefore = this.readTelemetryLine();
+    traceVoiceEvent('stt-send', `samples=${decoded.samples.length} lang=${this.language}`);
     const transcribed = await transcribe(decoded.samples, this.language);
+    const telemetryAfter = this.readTelemetryLine();
+    const servedBy =
+      telemetryAfter && telemetryAfter !== telemetryBefore ? ` ${telemetryAfter}` : '';
     const telemetry = this.composeTelemetry();
 
     if (run !== this.runId) {
@@ -522,10 +540,16 @@ export class VoiceCaptureController {
     }
 
     if (!transcribed.ok) {
+      traceVoiceEvent(
+        'stt-received',
+        `error=${sttErrorToCaptureError(transcribed.error).code}${servedBy}`,
+      );
       this.fail(sttErrorToCaptureError(transcribed.error).code, sttErrorToCaptureError(transcribed.error).message, telemetry);
 
       return;
     }
+
+    traceVoiceEvent('stt-received', `chars=${transcribed.text.length}${servedBy}`);
 
     const corrected = postCorrectTranscript(transcribed.text);
 

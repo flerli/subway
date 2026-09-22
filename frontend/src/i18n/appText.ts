@@ -129,6 +129,10 @@ export interface AppTextBundle {
     telemetryLabel: string
     telemetryCopyAction: string
     telemetryCopiedState: string
+    traceTitle: string
+    traceEmpty: string
+    traceCopyAction: string
+    traceCopiedState: string
     errorTtsUnavailable: string
   }
   filters: {
@@ -469,6 +473,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       telemetryLabel: 'Speech info',
       telemetryCopyAction: 'Copy',
       telemetryCopiedState: 'Copied',
+      traceTitle: 'Voice trace',
+      traceEmpty: 'Press the microphone to start a trace.',
+      traceCopyAction: 'Copy',
+      traceCopiedState: 'Copied',
       errorTtsUnavailable: 'Speech playback is unavailable right now. Please try again.',
     },
     filters: {
@@ -831,6 +839,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       telemetryLabel: 'Sprachinfo',
       telemetryCopyAction: 'Kopieren',
       telemetryCopiedState: 'Kopiert',
+      traceTitle: 'Sprachablauf',
+      traceEmpty: 'Mikrofon drücken, um einen Ablauf zu starten.',
+      traceCopyAction: 'Kopieren',
+      traceCopiedState: 'Kopiert',
       errorTtsUnavailable: 'Sprachausgabe ist gerade nicht verfügbar. Bitte erneut versuchen.',
     },
     filters: {
@@ -1207,6 +1219,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       telemetryLabel: 'Infos vocales',
       telemetryCopyAction: 'Copier',
       telemetryCopiedState: 'Copie',
+      traceTitle: 'Trace vocale',
+      traceEmpty: 'Appuyez sur le micro pour démarrer une trace.',
+      traceCopyAction: 'Copier',
+      traceCopiedState: 'Copié',
       errorTtsUnavailable: 'Lecture vocale indisponible pour le moment. Reessayez plus tard.',
     },
     filters: {
@@ -1584,6 +1600,10 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       telemetryLabel: 'Info de voz',
       telemetryCopyAction: 'Copiar',
       telemetryCopiedState: 'Copiado',
+      traceTitle: 'Traza de voz',
+      traceEmpty: 'Pulse el micrófono para iniciar una traza.',
+      traceCopyAction: 'Copiar',
+      traceCopiedState: 'Copiado',
       errorTtsUnavailable: 'La lectura por voz no esta disponible. Intentelo de nuevo.',
     },
     filters: {

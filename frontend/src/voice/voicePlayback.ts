@@ -1,5 +1,6 @@
 import { chunkForSpeech, stripMarkdownToSpeech } from './speechText.ts'
 import type { VoiceSynthesisResult } from './tts.ts'
+import { traceVoiceEvent } from './voiceTrace.ts'
 
 /**
  * Autoplay/volume/replay playback controller (SW-REQ-013-02, SW-REQ-013-04
@@ -221,11 +222,17 @@ export class VoicePlaybackController {
       }
     }
 
+    // Pipeline trace: character count only, never the spoken text.
+    traceVoiceEvent(
+      'tts-triggered',
+      `chars=${chunk.text.length} voice=${chunk.voice} lang=${chunk.lang}`,
+    )
     void this.synthesize()(chunk)
       .then((result) => {
         if (player !== this.player) {
           return
         }
+        traceVoiceEvent('tts-received', `ms=${result.durationMs} cache=${result.cacheHit}`)
         player.src = result.audioDataUrl
         // play() rejects when the browser blocks it (autoplay policy on a
         // kiosk profile without accumulated engagement, muted tab, no audio
@@ -233,6 +240,7 @@ export class VoicePlaybackController {
         // synthesis failure (SW-REQ-013-04: never die quietly) so the
         // console names the cause (`[voice] playback blocked:`) instead.
         const playback = player.play()
+        traceVoiceEvent('tts-play-start')
         if (playback && typeof playback.catch === 'function') {
           playback.catch((reason: unknown) => {
             if (player !== this.player) {

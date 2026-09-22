@@ -7,6 +7,11 @@ import {
   type VoiceCaptureDeps,
   type VoiceCaptureTimers,
 } from '../voiceCapture.ts';
+import {
+  formatVoiceTrace,
+  getVoiceTraceSnapshot,
+  resetVoiceTraceForTests,
+} from '../voiceTrace.ts';
 
 const makeTimers = () => {
   let timeoutCallback: (() => void) | null = null;
@@ -504,4 +509,54 @@ describe('createMediaRecorder (production factory)', () => {
 afterEach(() => {
   // Guards the PII test above: console must be intact for the runner.
   assert.equal(typeof console.log, 'function');
+});
+
+describe('VoiceCaptureController pipeline trace', () => {
+  it('traces record → stop → saving → stt-send → stt-received in order (positive)', async () => {
+    resetVoiceTraceForTests();
+    const harness = makeHarness();
+    await harness.controller.start('de');
+    await harness.controller.stop();
+
+    const stages = getVoiceTraceSnapshot().map((event) => event.stage);
+    assert.deepEqual(stages, [
+      'record-pressed',
+      'stop-pressed',
+      'saving',
+      'stt-send',
+      'stt-received',
+    ]);
+    const trace = formatVoiceTrace(getVoiceTraceSnapshot());
+    assert.ok(trace.includes('record-pressed lang=de'));
+    assert.ok(trace.includes('stt-send samples=2 lang=de'));
+    assert.ok(trace.includes('stt-received chars='));
+  });
+
+  it('never puts transcript text into the trace (negative: PII)', async () => {
+    resetVoiceTraceForTests();
+    const harness = makeHarness();
+    await harness.controller.start('en');
+    await harness.controller.stop();
+
+    const trace = formatVoiceTrace(getVoiceTraceSnapshot());
+    assert.ok(!trace.includes('ask swabian about sky-co'), trace);
+    assert.ok(!trace.includes('ask Swaibian about scaiCo'), trace);
+  });
+
+  it('traces stt failures with the error code (negative)', async () => {
+    resetVoiceTraceForTests();
+    const harness = makeHarness({
+      transcribe: async () => ({
+        ok: false as const,
+        error: { code: 'transcribe-failed' as const, message: 'boom' },
+      }),
+    });
+    await harness.controller.start('en');
+    await harness.controller.stop();
+
+    const stages = getVoiceTraceSnapshot().map((event) => event.stage);
+    assert.ok(stages.includes('stt-received'));
+    const trace = formatVoiceTrace(getVoiceTraceSnapshot());
+    assert.ok(trace.includes('stt-received error=transcribe-failed'));
+  });
 });

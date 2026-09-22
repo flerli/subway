@@ -2616,7 +2616,7 @@ select {
 
 .assistant-layout {
   display: grid;
-  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1.58fr);
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1.2fr) minmax(200px, 0.55fr);
   gap: 16px;
   height: 100%;
   min-height: 0;
@@ -2638,6 +2638,32 @@ select {
   display: grid;
   height: 100%;
   min-height: 0;
+}
+
+.assistant-trace-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.assistant-trace-log__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assistant-trace-list {
+  margin: 0;
+  padding: 8px 8px 8px 26px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+  max-height: 420px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
 }
 
 .assistant-card {

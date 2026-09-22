@@ -19,6 +19,7 @@ import {
   type SupportedLanguageCode,
 } from '../i18n/localization'
 import type { ViewportLayoutState } from '../viewportLayout'
+import type { VoiceTraceEvent } from '../voice/voiceTrace'
 import { buildBadgeStyle } from './widgetAppearance'
 import { AudioVisualWidget } from './audio-visual/AudioVisualWidget'
 import type { AudioVisualWidgetTranslation } from './audio-visual/translations'
@@ -157,6 +158,7 @@ interface WidgetBoardHostProps {
     isTurnBusy: boolean
     voiceNote: string | null
     voiceTelemetry: string | null
+    voiceTrace: readonly VoiceTraceEvent[]
     playback: {
       playing: boolean
       speakingMessageId: string | null
@@ -1242,6 +1244,7 @@ export function WidgetBoardHost({
                     isTurnBusy: assistantState.isTurnBusy,
                     voiceNote: assistantState.voiceNote,
                     voiceTelemetry: assistantState.voiceTelemetry,
+                    voiceTrace: assistantState.voiceTrace,
                     playback: assistantState.playback,
                     onCreateThread: assistantActions.onCreateThread,
                     onDeleteThread: assistantActions.onDeleteThread,
