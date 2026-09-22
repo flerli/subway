@@ -218,6 +218,20 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
 }
 
 /**
+ * Last per-utterance telemetry line (set on every local or endpoint
+ * transcription, success or failure; never contains transcript content).
+ * Exposed for the capture controller so the UI can show what served each
+ * utterance; the kiosk console shows the same line via console.info.
+ */
+let lastSttTelemetryLine: string | null = null;
+
+export const getLastSttTelemetry = (): string | null => lastSttTelemetryLine;
+
+export const resetLastSttTelemetryForTests = (): void => {
+  lastSttTelemetryLine = null;
+};
+
+/**
  * Which local model actually loaded, per language. `null` means the local
  * path was never reached (endpoint served) or load not yet attempted. Used
  * by per-utterance telemetry so the kiosk console shows whether STT ran on
@@ -497,14 +511,17 @@ export const transcribeUtterance = async (
       ? performance.now()
       : null;
   const logTelemetry = (servedBy: string, ok: boolean): void => {
+    const line =
+      `[voice] stt servedBy=${servedBy} lang=${language} samples=${samples.length} ` +
+      `ms=${startedAt === null ? -1 : Math.round(performance.now() - startedAt)} ok=${ok}`;
+
+    lastSttTelemetryLine = line;
+
     if (typeof console === 'undefined' || startedAt === null) {
       return;
     }
 
-    console.info(
-      `[voice] stt servedBy=${servedBy} lang=${language} samples=${samples.length} ` +
-        `ms=${Math.round(performance.now() - startedAt)} ok=${ok}`,
-    );
+    console.info(line);
   };
 
   const endpoint = options.endpoint === undefined ? resolveExternalSttEndpoint() : options.endpoint;

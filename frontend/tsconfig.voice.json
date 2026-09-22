@@ -31,6 +31,8 @@
     "src/voice/useAudioLevel.ts",
     "src/voice/InputLevelCircle.tsx",
     "src/voice/voicePrefsStore.ts",
+    "src/voice/voiceClipboard.ts",
+    "src/voice/VoiceTelemetryField.tsx",
     "src/voice/vocabulary.ts",
     "src/i18n/localization.ts",
     "src/i18n/appText.ts",

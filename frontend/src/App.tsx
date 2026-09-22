@@ -4082,6 +4082,7 @@ function App() {
                 resolvingApprovalRequestId: assistantResolvingApprovalRequestId,
                 isTurnBusy: isAssistantTurnBusy,
                 voiceNote: voiceErrorCopy,
+                voiceTelemetry: voiceCapture.snapshot.telemetry,
                 playback: {
                   playing: voicePlayback.snapshot.playing,
                   speakingMessageId: voicePlayback.snapshot.speakingMessageId,

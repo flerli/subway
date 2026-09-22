@@ -294,6 +294,18 @@ describe('VoiceCaptureController', () => {
     assert.deepEqual(released, ['track']);
   });
 
+  it('carries the STT telemetry line into the snapshot (positive: UI field)', async () => {
+    const harness = makeHarness({
+      readTelemetry: () => '[voice] stt servedBy=endpoint de samples=100 ok=true',
+    });
+    await harness.controller.start('en');
+    await harness.controller.stop();
+    assert.equal(
+      harness.controller.getSnapshot().telemetry,
+      '[voice] stt servedBy=endpoint de samples=100 ok=true',
+    );
+  });
+
   it('never logs transcripts or audio (negative: PII)', async () => {
     const calls: unknown[][] = [];
     const originalLog = console.log;

@@ -156,6 +156,7 @@ interface WidgetBoardHostProps {
     resolvingApprovalRequestId: string | null
     isTurnBusy: boolean
     voiceNote: string | null
+    voiceTelemetry: string | null
     playback: {
       playing: boolean
       speakingMessageId: string | null
@@ -1240,6 +1241,7 @@ export function WidgetBoardHost({
                     resolvingApprovalRequestId: assistantState.resolvingApprovalRequestId,
                     isTurnBusy: assistantState.isTurnBusy,
                     voiceNote: assistantState.voiceNote,
+                    voiceTelemetry: assistantState.voiceTelemetry,
                     playback: assistantState.playback,
                     onCreateThread: assistantActions.onCreateThread,
                     onDeleteThread: assistantActions.onDeleteThread,

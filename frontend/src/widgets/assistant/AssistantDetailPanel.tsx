@@ -3,6 +3,7 @@ import type { AppTextBundle } from '../../i18n/appText'
 import { formatLocalizedText, type SupportedLanguageCode } from '../../i18n/localization'
 import { AssistantMarkdown } from '../../assistant/AssistantMarkdown'
 import { OutputLevelCircle } from '../../voice/OutputLevelCircle'
+import { VoiceTelemetryField } from '../../voice/VoiceTelemetryField'
 import type {
   AssistantAvailabilityRecord,
   AssistantMessageEventRecord,
@@ -42,6 +43,7 @@ export interface AssistantDetailViewData {
   ) => void
   /** Voice-capture error note (SW-REQ-013-04); rendered under the transcript head when set. */
   voiceNote?: string | null
+  voiceTelemetry?: string | null
   /** Speech playback (SW-REQ-013-02): per-message replay + volume/output circle controls. */
   playback?: {
     playing: boolean
@@ -165,6 +167,7 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
     onComposerKeyDown,
     onResolveToolApproval,
     voiceNote = null,
+    voiceTelemetry = null,
     playback = null,
   } = data
 
@@ -279,6 +282,14 @@ export function AssistantDetailPanel({ data, languageCode }: AssistantDetailPane
 
           {error ? <p className="settings-note settings-note--warning">{error}</p> : null}
           {voiceNote ? <p className="settings-note settings-note--warning">{voiceNote}</p> : null}
+          {voiceTelemetry ? (
+            <VoiceTelemetryField
+              telemetry={voiceTelemetry}
+              label={appText.voice.telemetryLabel}
+              copyLabel={appText.voice.telemetryCopyAction}
+              copiedLabel={appText.voice.telemetryCopiedState}
+            />
+          ) : null}
 
           {!selectedThreadId ? (
             <div className="empty-state assistant-empty-state">

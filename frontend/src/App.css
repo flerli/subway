@@ -331,6 +331,32 @@ select {
   word-break: break-all;
 }
 
+.assistant-telemetry-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.assistant-telemetry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-soft);
+}
+
+.assistant-telemetry-input {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .terminal-copy {
   display: grid;
   gap: 0;

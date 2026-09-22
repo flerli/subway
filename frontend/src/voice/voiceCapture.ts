@@ -14,6 +14,7 @@ import {
 import type { StreamLevelSource } from './audioLevel.ts'
 import {
   transcribeUtterance,
+  getLastSttTelemetry,
   type TranscribeResult,
 } from './stt.ts'
 import {
@@ -67,6 +68,8 @@ export interface VoiceCaptureSnapshot {
   readonly error: VoiceCaptureError | null;
   /** Last successfully submitted transcript (preserved on submit failure). */
   readonly transcript: string | null;
+  /** Last STT telemetry line (servedBy/lang/samples, never transcript text). */
+  readonly telemetry: string | null;
 }
 
 /** Produces the recorded utterance; `cancel` discards it. */
@@ -96,6 +99,8 @@ export interface VoiceCaptureDeps {
   readonly isBusy?: () => boolean;
   /** Live input RMS in [0, 1]; `null` disables silence auto-stop. */
   readonly sampleInputLevel?: (() => number) | null;
+  /** Telemetry source for the UI (defaults to the STT module's last line). */
+  readonly readTelemetry?: () => string | null;
   /**
    * Live analyser source bound to the granted stream (preferred over
    * `sampleInputLevel` when both are set). Disposed on mic release.
@@ -205,6 +210,7 @@ export class VoiceCaptureController {
     state: 'idle',
     error: null,
     transcript: null,
+    telemetry: null,
   };
   private listeners = new Set<(snapshot: VoiceCaptureSnapshot) => void>();
   private stream: MediaStream | null = null;
@@ -266,9 +272,17 @@ export class VoiceCaptureController {
     }
   }
 
-  private fail(code: VoiceCaptureErrorCode, message: string): void {
+  private readTelemetryLine(): string | null {
+    try {
+      return this.deps.readTelemetry?.() ?? getLastSttTelemetry();
+    } catch {
+      return null;
+    }
+  }
+
+  private fail(code: VoiceCaptureErrorCode, message: string, telemetry: string | null = null): void {
     this.releaseMic();
-    this.setSnapshot({ state: 'error', error: captureError(code, message), transcript: this.snapshot.transcript });
+    this.setSnapshot({ state: 'error', error: captureError(code, message), transcript: this.snapshot.transcript, telemetry });
   }
 
   private releaseMic(): void {
@@ -322,6 +336,7 @@ export class VoiceCaptureController {
         state: 'error',
         error: captureError('busy', 'The assistant is still answering.'),
         transcript: null,
+        telemetry: null,
       });
 
       return;
@@ -330,7 +345,7 @@ export class VoiceCaptureController {
     const run = this.runId + 1;
     this.runId = run;
     this.language = normalizeSttLanguage(language);
-    this.setSnapshot({ state: 'requesting', error: null, transcript: null });
+    this.setSnapshot({ state: 'requesting', error: null, transcript: null, telemetry: null });
 
     const requestPermission = this.deps.requestPermission ?? requestMicPermission;
     const permission: MicPermissionResult = await requestPermission();
@@ -374,7 +389,7 @@ export class VoiceCaptureController {
       return;
     }
 
-    this.setSnapshot({ state: 'listening', error: null, transcript: null });
+    this.setSnapshot({ state: 'listening', error: null, transcript: null, telemetry: null });
     this.startPolling(run);
   }
 
@@ -444,7 +459,7 @@ export class VoiceCaptureController {
   cancel(): void {
     this.runId += 1;
     this.releaseMic();
-    this.setSnapshot({ state: 'idle', error: null, transcript: null });
+    this.setSnapshot({ state: 'idle', error: null, transcript: null, telemetry: null });
   }
 
   private async finalize(run: number): Promise<void> {
@@ -457,13 +472,14 @@ export class VoiceCaptureController {
         state: 'error',
         error: captureError('busy', 'The assistant is still answering.'),
         transcript: null,
+        telemetry: null,
       });
       this.releaseMic();
 
       return;
     }
 
-    this.setSnapshot({ state: 'transcribing', error: null, transcript: null });
+    this.setSnapshot({ state: 'transcribing', error: null, transcript: null, telemetry: null });
 
     const recorder = this.recorder;
     this.recorder = null;
@@ -500,13 +516,14 @@ export class VoiceCaptureController {
     const transcribe =
       this.deps.transcribe ?? ((samples, language) => transcribeUtterance(samples, language));
     const transcribed = await transcribe(decoded.samples, this.language);
+    const telemetry = this.readTelemetryLine();
 
     if (run !== this.runId) {
       return;
     }
 
     if (!transcribed.ok) {
-      this.fail(sttErrorToCaptureError(transcribed.error).code, sttErrorToCaptureError(transcribed.error).message);
+      this.fail(sttErrorToCaptureError(transcribed.error).code, sttErrorToCaptureError(transcribed.error).message, telemetry);
 
       return;
     }
@@ -514,12 +531,12 @@ export class VoiceCaptureController {
     const corrected = postCorrectTranscript(transcribed.text);
 
     if (corrected.trim().length === 0) {
-      this.fail('empty', 'Nothing intelligible was heard.');
+      this.fail('empty', 'Nothing intelligible was heard.', telemetry);
 
       return;
     }
 
-    this.setSnapshot({ state: 'submitting', error: null, transcript: corrected });
+    this.setSnapshot({ state: 'submitting', error: null, transcript: corrected, telemetry });
 
     try {
       await this.deps.submit?.(corrected);
@@ -532,6 +549,7 @@ export class VoiceCaptureController {
         state: 'error',
         error: captureError('submit-failed', 'Could not send the voice message.'),
         transcript: corrected,
+        telemetry: this.readTelemetryLine(),
       });
 
       return;
@@ -541,6 +559,6 @@ export class VoiceCaptureController {
       return;
     }
 
-    this.setSnapshot({ state: 'idle', error: null, transcript: corrected });
+    this.setSnapshot({ state: 'idle', error: null, transcript: corrected, telemetry: this.readTelemetryLine() });
   }
 }

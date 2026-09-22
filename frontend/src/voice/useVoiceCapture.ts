@@ -9,6 +9,7 @@ const idleSnapshot: VoiceCaptureSnapshot = {
   state: 'idle',
   error: null,
   transcript: null,
+  telemetry: null,
 };
 
 /**

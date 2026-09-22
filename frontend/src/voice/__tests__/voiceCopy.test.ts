@@ -28,6 +28,9 @@ const EXPECTED_VOICE_KEYS = [
   'errorAborted',
   'errorUnsupported',
   'errorDecodeFailed',
+  'telemetryLabel',
+  'telemetryCopyAction',
+  'telemetryCopiedState',
 ] as const;
 
 const ERROR_CODES: VoiceCaptureErrorCode[] = [

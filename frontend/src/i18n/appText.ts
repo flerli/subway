@@ -126,6 +126,9 @@ export interface AppTextBundle {
     errorAborted: string
     errorUnsupported: string
     errorDecodeFailed: string
+    telemetryLabel: string
+    telemetryCopyAction: string
+    telemetryCopiedState: string
     errorTtsUnavailable: string
   }
   filters: {
@@ -463,6 +466,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       errorAborted: 'Listening was cancelled.',
       errorUnsupported: 'Voice input is not supported in this browser.',
       errorDecodeFailed: 'The recording could not be read. Please try again.',
+      telemetryLabel: 'Speech info',
+      telemetryCopyAction: 'Copy',
+      telemetryCopiedState: 'Copied',
       errorTtsUnavailable: 'Speech playback is unavailable right now. Please try again.',
     },
     filters: {
@@ -822,6 +828,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       errorAborted: 'Aufnahme wurde abgebrochen.',
       errorUnsupported: 'Spracheingabe wird in diesem Browser nicht unterstutzt.',
       errorDecodeFailed: 'Die Aufnahme konnte nicht gelesen werden. Bitte erneut versuchen.',
+      telemetryLabel: 'Sprachinfo',
+      telemetryCopyAction: 'Kopieren',
+      telemetryCopiedState: 'Kopiert',
       errorTtsUnavailable: 'Sprachausgabe ist gerade nicht verfügbar. Bitte erneut versuchen.',
     },
     filters: {
@@ -1195,6 +1204,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       errorAborted: 'Ecoute annulee.',
       errorUnsupported: 'Entree vocale non prise en charge par ce navigateur.',
       errorDecodeFailed: 'Enregistrement illisible. Veuillez reessayer.',
+      telemetryLabel: 'Infos vocales',
+      telemetryCopyAction: 'Copier',
+      telemetryCopiedState: 'Copie',
       errorTtsUnavailable: 'Lecture vocale indisponible pour le moment. Reessayez plus tard.',
     },
     filters: {
@@ -1569,6 +1581,9 @@ export const appTextCatalog = createLocalizedBundle<AppTextBundle>({
       errorAborted: 'Escucha cancelada.',
       errorUnsupported: 'La entrada de voz no es compatible con este navegador.',
       errorDecodeFailed: 'No se pudo leer la grabacion. Intentelo de nuevo.',
+      telemetryLabel: 'Info de voz',
+      telemetryCopyAction: 'Copiar',
+      telemetryCopiedState: 'Copiado',
       errorTtsUnavailable: 'La lectura por voz no esta disponible. Intentelo de nuevo.',
     },
     filters: {
