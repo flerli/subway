@@ -21,9 +21,11 @@ import { DatabaseSync } from 'node:sqlite'
 import { handleSubwayMcpRequest } from './mcp/subwayMcpServer.mjs'
 import {
   attachSubwayToolsToTeam,
+  fetchScaicoMeetingMessages,
   initScaicoTeamWithSubwayMcp,
   isScaicoInjectionConfigured,
   readScaicoConfig,
+  sendScaicoMeetingMessage,
 } from './mcp/scaicoClient.mjs'
 import {
   VOICE_DEFAULT_SPEED,
@@ -1424,6 +1426,7 @@ const createAssistantThreadsTableSql = `
     route_id TEXT REFERENCES assistant_backend_routes(id),
     title TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'active',
+    scaico_meeting_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (owner_user_id, id)
@@ -1649,6 +1652,24 @@ try {
   }
 } catch (error) {
   console.warn('[voice] speed migration check failed; continuing.', {
+    reason: error instanceof Error ? error.message : String(error),
+  })
+}
+
+// Migration: threads created before the SCAICO meeting transport have no
+// meeting id yet (they fall back to the OpenAI-compatible path until a
+// meeting is created lazily on the next turn).
+try {
+  const threadColumns = db
+    .prepare('PRAGMA table_info(assistant_threads)')
+    .all()
+    .map((column) => column.name)
+
+  if (!threadColumns.includes('scaico_meeting_id')) {
+    db.exec('ALTER TABLE assistant_threads ADD COLUMN scaico_meeting_id TEXT')
+  }
+} catch (error) {
+  console.warn('[mcp] thread meeting-column migration failed; continuing.', {
     reason: error instanceof Error ? error.message : String(error),
   })
 }
@@ -4944,6 +4965,195 @@ const updateAssistantRouteHealthFromResult = (routeId, error = null) => {
   }
 }
 
+/**
+ * SCAICO meeting transport (public API) — replaces the OpenAI-compatible
+ * chat path when configured:
+ *   1. ensure the thread has a meeting (init_team with the MCP session key)
+ *   2. send the user turn via /api/send_task
+ *   3. poll /api/messages/{meeting_id} until the agent replies
+ * The agents run with the injected Subway MCP, so widget tool calls happen
+ * server-side in the user's context; the final reply lands in the thread as a
+ * regular assistant message (streaming is simulated from the final content).
+ */
+const ASSISTANT_MEETING_TIMEOUT_MS = Number.parseInt(
+  process.env.ASSISTANT_MEETING_TIMEOUT_MS ?? '180000',
+  10,
+)
+const ASSISTANT_MEETING_POLL_MS = Number.parseInt(
+  process.env.ASSISTANT_MEETING_POLL_MS ?? '1500',
+  10,
+)
+const ASSISTANT_TRANSPORT = (process.env.ASSISTANT_TRANSPORT ?? '').trim().toLowerCase()
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const selectAssistantThreadMeetingId = (ownerUserId, threadId) =>
+  db
+    .prepare(`
+      SELECT scaico_meeting_id AS meetingId
+      FROM assistant_threads
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .get(ownerUserId, threadId)?.meetingId ?? null
+
+const updateAssistantThreadMeetingId = (ownerUserId, threadId, meetingId) =>
+  db
+    .prepare(`
+      UPDATE assistant_threads
+      SET scaico_meeting_id = ?, updated_at = ?
+      WHERE owner_user_id = ? AND id = ?
+    `)
+    .run(meetingId, new Date().toISOString(), ownerUserId, threadId)
+
+/**
+ * Meeting for the thread: existing id, or created via the injection flow.
+ * `createUserMcpSessionRecord`, `attachSubwayToolsToTeam` and `init_team` run
+ * exactly once per thread (stored meeting id), mirroring the HOWTO ordering.
+ */
+const ensureAssistantThreadScaicoMeeting = async (ownerUserId, threadId, { title }) => {
+  const existingMeetingId = selectAssistantThreadMeetingId(ownerUserId, threadId)
+
+  if (existingMeetingId) {
+    return existingMeetingId
+  }
+
+  const summary = await ensureSubwayMcpInjectionForUser({ ownerUserId, title })
+
+  if (summary.configured && summary.meetingId) {
+    const meetingId = String(summary.meetingId)
+    updateAssistantThreadMeetingId(ownerUserId, threadId, meetingId)
+    return meetingId
+  }
+
+  return null
+}
+
+/**
+ * Run one assistant turn through the SCAICO meeting. Returns the turn payload
+ * on success, or null when the transport is not applicable (not configured,
+ * disabled, or a meeting failure that should fall back to the legacy path).
+ */
+const executeScaicoMeetingTurn = async ({
+  ownerUserId,
+  threadId,
+  thread,
+  route,
+  threadTitle,
+  userMessage,
+  options,
+}) => {
+  if (ASSISTANT_TRANSPORT === 'openai') {
+    return null
+  }
+
+  const scaicoConfig = readScaicoConfig()
+
+  if (!isScaicoInjectionConfigured(scaicoConfig)) {
+    return null
+  }
+
+  try {
+    const meetingId = await ensureAssistantThreadScaicoMeeting(ownerUserId, threadId, {
+      title: threadTitle || thread.title,
+    })
+
+    if (!meetingId) {
+      return null
+    }
+
+    const baselineMessages = await fetchScaicoMeetingMessages(scaicoConfig, { meetingId })
+    const baselineIds = baselineMessages
+      .map((message) => message.id)
+      .filter((id) => typeof id === 'number')
+    const lastKnownMessageId = baselineIds.length > 0 ? Math.max(...baselineIds) : undefined
+
+    await sendScaicoMeetingMessage(scaicoConfig, {
+      meetingId,
+      text: userMessage.content,
+    })
+
+    const deadline = Date.now() + ASSISTANT_MEETING_TIMEOUT_MS
+    let agentReply = null
+
+    while (Date.now() < deadline) {
+      await sleep(ASSISTANT_MEETING_POLL_MS)
+
+      const newMessages = await fetchScaicoMeetingMessages(scaicoConfig, {
+        meetingId,
+        sinceId: lastKnownMessageId,
+      })
+      const candidate = newMessages
+        .filter((message) => message.role === 'agent' && message.content.trim().length > 0)
+        .pop()
+
+      if (candidate) {
+        agentReply = candidate
+        break
+      }
+    }
+
+    if (!agentReply) {
+      console.warn('[mcp] scaico meeting reply timed out; falling back to the chat route.', {
+        userId: ownerUserId,
+        threadId,
+        meetingId,
+      })
+      return null
+    }
+
+    const assistantMessageTimestamp = new Date().toISOString()
+    const assistantMessage = {
+      id: `assistant-message-${randomUUID()}`,
+      threadId,
+      role: 'assistant',
+      content: agentReply.content,
+      sequenceIndex: selectNextAssistantMessageSequenceIndex(ownerUserId, threadId),
+      createdAt: assistantMessageTimestamp,
+      updatedAt: assistantMessageTimestamp,
+    }
+
+    insertAssistantMessage(
+      ownerUserId,
+      assistantMessage,
+      assistantMessageTimestamp,
+      assistantMessageTimestamp,
+    )
+    updateAssistantThreadRuntimeState(
+      ownerUserId,
+      threadId,
+      route.id,
+      threadTitle,
+      assistantMessageTimestamp,
+    )
+    updateAssistantRouteHealthFromResult(route.id)
+
+    return {
+      thread: buildAssistantThreadPayload(selectAssistantThreadById(ownerUserId, threadId)),
+      userMessage: buildAssistantMessagePayload(userMessage),
+      assistantMessage: buildAssistantMessagePayload(assistantMessage),
+      events: [],
+      runtime: {
+        route: buildAssistantRoutePayload(route),
+        providerMessageId: agentReply.id !== null ? String(agentReply.id) : null,
+        finishReason: 'stop',
+        usage: null,
+        streaming: {
+          requested: options.streamRequested === true,
+          supported: true,
+          delivered: false,
+        },
+      },
+    }
+  } catch (error) {
+    console.warn('[mcp] scaico meeting turn failed; falling back to the chat route.', {
+      userId: ownerUserId,
+      threadId,
+      reason: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
 const executeAssistantTurn = async (
   ownerUserId,
   threadId,
@@ -4992,6 +5202,22 @@ const executeAssistantTurn = async (
     threadTitle,
     userMessageTimestamp,
   )
+
+  // SCAICO meeting transport (preferred when configured): the team's agents
+  // call the injected Subway MCP themselves; the reply is persisted here.
+  const meetingTurn = await executeScaicoMeetingTurn({
+    ownerUserId,
+    threadId,
+    thread,
+    route,
+    threadTitle,
+    userMessage,
+    options,
+  })
+
+  if (meetingTurn) {
+    return meetingTurn
+  }
 
   try {
     const widgetTools = normalizeAssistantWidgetTools(options.widgetTools)

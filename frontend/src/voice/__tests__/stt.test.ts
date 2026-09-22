@@ -301,3 +301,98 @@ describe('transcribeUtterance error surfacing', () => {
     }
   });
 });
+
+describe('external STT endpoint (transcribeViaEndpoint + fallback)', () => {
+  const samples = new Float32Array([0.1, -0.2, 0.3]);
+
+  const okFetch = async () =>
+    new Response(JSON.stringify({ text: 'Hallo Welt' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  it('uses the endpoint result and never loads the local model (positive)', async () => {
+    let factoryCalls = 0;
+    const result = await transcribeUtterance(
+      samples,
+      'de',
+      async () => {
+        factoryCalls += 1;
+        return async () => ({ text: 'local' });
+      },
+      { endpoint: 'http://127.0.0.1:8080/v1/audio/transcriptions', fetchImpl: okFetch },
+    );
+
+    assert.deepEqual(result, { ok: true, text: 'Hallo Welt' });
+    assert.equal(factoryCalls, 0);
+  });
+
+  it('falls back to the local model when the endpoint fails (negative)', async () => {
+    let factoryCalls = 0;
+    const failingFetch = async () => {
+      throw new Error('connection refused');
+    };
+    const result = await transcribeUtterance(
+      samples,
+      'de',
+      async () => {
+        factoryCalls += 1;
+        return async () => ({ text: 'local fallback' });
+      },
+      { endpoint: 'http://127.0.0.1:8080/v1/audio/transcriptions', fetchImpl: failingFetch },
+    );
+
+    assert.deepEqual(result, { ok: true, text: 'local fallback' });
+    assert.equal(factoryCalls, 1);
+  });
+
+  it('logs per-utterance telemetry (servedBy/lang/samples, no transcript)', async () => {
+    resetSttPipelineCacheForTests();
+    const lines: string[] = [];
+    const originalInfo = console.info;
+    console.info = (...args: unknown[]): void => {
+      lines.push(args.map((part) => String(part)).join(' '));
+    };
+
+    try {
+      await transcribeUtterance(
+        samples,
+        'de',
+        async () => {
+          throw new Error('must not load local model');
+        },
+        { endpoint: 'http://127.0.0.1:8080/v1/audio/transcriptions', fetchImpl: okFetch },
+      );
+    } finally {
+      console.info = originalInfo;
+    }
+
+    const telemetry = lines.find((line) => line.includes('[voice] stt servedBy='));
+    assert.ok(telemetry, `expected telemetry line, got: ${JSON.stringify(lines)}`);
+    assert.ok(telemetry.includes('servedBy=endpoint:http://127.0.0.1:8080/v1/audio/transcriptions'));
+    assert.ok(telemetry.includes('lang=de'));
+    assert.ok(telemetry.includes('samples=3'));
+    assert.ok(telemetry.includes('ok=true'));
+    assert.ok(!telemetry.includes('Hallo Welt'), 'transcript content must never be logged');
+  });
+
+  it('skips the network entirely when forced local (negative)', async () => {
+    resetSttPipelineCacheForTests();
+    let fetchCalls = 0;
+    const result = await transcribeUtterance(
+      samples,
+      'fr',
+      async () => async () => ({ text: 'local' }),
+      {
+        endpoint: null,
+        fetchImpl: async () => {
+          fetchCalls += 1;
+          return new Response('{}', { status: 200 });
+        },
+      },
+    );
+
+    assert.deepEqual(result, { ok: true, text: 'local' });
+    assert.equal(fetchCalls, 0);
+  });
+});

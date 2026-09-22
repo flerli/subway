@@ -433,6 +433,46 @@ export const isSilent = (rmsLevel: number, threshold: number = 0.02): boolean =>
   !(rmsLevel >= threshold);
 
 /**
+ * Encode 16 kHz mono PCM as a 16-bit WAV Blob for upload to an external STT
+ * endpoint (SW-REQ-013-01 endpoint option). Pure function — byte-exact and
+ * fully unit-tested.
+ */
+export const encodeWavBlob = (
+  samples: PcmData,
+  sampleRate: number = VOICE_TARGET_SAMPLE_RATE,
+): Blob => {
+  const dataLength = samples.length * 2;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+  const writeAscii = (offset: number, text: string): void => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  writeAscii(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const clamped = Math.min(1, Math.max(-1, samples[index] ?? 0));
+    view.setInt16(44 + index * 2, Math.round(clamped * 32767), true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+};
+
+/**
  * Trim near-silent frames from both edges of a recording (pure).
  *
  * Whisper is robust to silence, but leading/trailing dead air measurably

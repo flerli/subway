@@ -1,4 +1,5 @@
 import type { PcmData } from './audioInput.ts'
+import { encodeWavBlob } from './audioInput.ts'
 import type { SttLanguage } from './vocabulary.ts'
 
 /**
@@ -173,6 +174,7 @@ export interface WhisperPipelineFactory {
  */
 export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
   modelPath,
+  language,
 ) => {
   let transformers: typeof import('@huggingface/transformers');
 
@@ -205,9 +207,29 @@ export const defaultWhisperPipelineFactory: WhisperPipelineFactory = async (
     loadPipeline,
     modelPath,
     VOICE_STT_FALLBACK_MODEL_ID,
+    {
+      onLoaded: (loadedModelPath) => {
+        loadedSttModelByLanguage.set(language, loadedModelPath)
+      },
+    },
   )
 
   return adaptRawPipeline(rawPipeline, modelPath)
+}
+
+/**
+ * Which local model actually loaded, per language. `null` means the local
+ * path was never reached (endpoint served) or load not yet attempted. Used
+ * by per-utterance telemetry so the kiosk console shows whether STT ran on
+ * the primary model, the tiny fallback, or not at all.
+ */
+const loadedSttModelByLanguage = new Map<SttLanguage, string>()
+
+export const getLoadedSttModel = (language: SttLanguage): string | null =>
+  loadedSttModelByLanguage.get(language) ?? null
+
+export const resetLoadedSttModelForTests = (): void => {
+  loadedSttModelByLanguage.clear()
 }
 
 /**
@@ -221,9 +243,12 @@ export const loadPipelineWithFallback = async (
   attempt: (modelPath: string) => Promise<unknown>,
   primaryModelPath: string,
   fallbackModelPath: string,
+  hooks: { onLoaded?: (modelPath: string) => void } = {},
 ): Promise<unknown> => {
   try {
-    return await attempt(primaryModelPath)
+    const loaded = await attempt(primaryModelPath)
+    hooks.onLoaded?.(primaryModelPath)
+    return loaded
   } catch (primaryError) {
     if (typeof console !== 'undefined') {
       console.warn(
@@ -233,7 +258,9 @@ export const loadPipelineWithFallback = async (
     }
 
     try {
-      return await attempt(fallbackModelPath)
+      const loaded = await attempt(fallbackModelPath)
+      hooks.onLoaded?.(fallbackModelPath)
+      return loaded
     } catch (fallbackError) {
       const url = joinUrl(
         resolveVoiceSttBaseUrl(),
@@ -342,6 +369,91 @@ const readTranscriptText = (output: SttRawOutput): string => {
 };
 
 /**
+ * Optional external STT service (e.g. a localhost whisper.cpp server on the
+ * kiosk, serving bigger models than the browser can). Configured at build
+ * time via `VITE_STT_ENDPOINT`; empty = in-browser Whisper only.
+ */
+export const resolveExternalSttEndpoint = (): string => {
+  const raw =
+    (import.meta as { env?: { VITE_STT_ENDPOINT?: string } }).env
+      ?.VITE_STT_ENDPOINT ?? '';
+
+  return raw.trim().replace(/\/+$/, '');
+};
+
+/** Network timeout for one external transcription request. */
+export const STT_ENDPOINT_TIMEOUT_MS = 30000;
+
+export type SttFetch = (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+/**
+ * Transcribe through the external endpoint (whisper.cpp-compatible contract:
+ * multipart `file` (WAV) + `language`, JSON `{ text }` back). Returns a
+ * failure result on any transport/parse/empty problem — the caller falls
+ * back to the local model.
+ */
+export const transcribeViaEndpoint = async (
+  samples: PcmData,
+  language: SttLanguage,
+  endpoint: string,
+  fetchFn: SttFetch = fetch,
+): Promise<TranscribeResult> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), STT_ENDPOINT_TIMEOUT_MS);
+
+  try {
+    const form = new FormData();
+    form.append('file', encodeWavBlob(samples, 16000), 'utterance.wav');
+
+    if (language !== 'auto') {
+      form.append('language', language);
+    }
+
+    const response = await fetchFn(endpoint, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: {
+          code: 'transcribe-failed',
+          message: `External STT service returned status ${response.status}.`,
+        },
+      };
+    }
+
+    const payload = (await response.json()) as { text?: unknown };
+    const text = typeof payload?.text === 'string' ? payload.text.trim() : '';
+
+    if (!text) {
+      return {
+        ok: false,
+        error: { code: 'empty-audio', message: 'External STT returned no text.' },
+      };
+    }
+
+    return { ok: true, text };
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'transcribe-failed',
+        message:
+          error instanceof Error ? error.message : 'External STT request failed.',
+      },
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+/**
  * Long-form threshold: utterances shorter than one 30 s chunk transcribe in a
  * single pass (tech doc §1.2 — "short mic clips go through in one pass").
  * Passing chunk/stride for short clips is measurable-by-probe unnecessary and
@@ -359,10 +471,17 @@ export const VOICE_STT_SINGLE_PASS_MAX_SAMPLES =
  * language MUST be forced (SW-REQ-013-01 #5); `auto` is a last-resort
  * fallback only and is treated as English-by-default by the runtime.
  */
+export interface TranscribeOptions {
+  /** Explicit external endpoint (overrides VITE_STT_ENDPOINT). `null` forces local. */
+  readonly endpoint?: string | null;
+  readonly fetchImpl?: SttFetch;
+}
+
 export const transcribeUtterance = async (
   samples: PcmData,
   language: SttLanguage,
   factory: WhisperPipelineFactory = defaultWhisperPipelineFactory,
+  options: TranscribeOptions = {},
 ): Promise<TranscribeResult> => {
   if (samples.length === 0) {
     return {
@@ -371,11 +490,44 @@ export const transcribeUtterance = async (
     };
   }
 
+  // External kiosk/VPS STT service first (e.g. whisper.cpp on the Pi);
+  // any failure falls back to the in-browser Whisper below.
+  const startedAt =
+    typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : null;
+  const logTelemetry = (servedBy: string, ok: boolean): void => {
+    if (typeof console === 'undefined' || startedAt === null) {
+      return;
+    }
+
+    console.info(
+      `[voice] stt servedBy=${servedBy} lang=${language} samples=${samples.length} ` +
+        `ms=${Math.round(performance.now() - startedAt)} ok=${ok}`,
+    );
+  };
+
+  const endpoint = options.endpoint === undefined ? resolveExternalSttEndpoint() : options.endpoint;
+
+  if (endpoint) {
+    const remote = await transcribeViaEndpoint(samples, language, endpoint, options.fetchImpl);
+
+    if (remote.ok) {
+      logTelemetry(`endpoint:${endpoint}`, true);
+      return remote;
+    }
+
+    if (typeof console !== 'undefined') {
+      console.warn('[voice] external STT failed; using local model', remote.error.message);
+    }
+  }
+
   let pipeline: WhisperPipeline;
 
   try {
     pipeline = await getPipeline(language, factory);
   } catch (error) {
+    logTelemetry('local:load-failed', false);
     // Surface the concrete reason (model URL + underlying cause) so the
     // on-device note and console point at the real failure instead of a
     // generic "reinstall" message.
@@ -407,6 +559,7 @@ export const transcribeUtterance = async (
         : {}),
     });
   } catch {
+    logTelemetry(`local:${getLoadedSttModel(language) ?? 'unknown'}`, false);
     return {
       ok: false,
       error: {
@@ -416,5 +569,6 @@ export const transcribeUtterance = async (
     };
   }
 
+  logTelemetry(`local:${getLoadedSttModel(language) ?? 'unknown'}`, true);
   return { ok: true, text: readTranscriptText(output) };
 };

@@ -159,6 +159,83 @@ export const attachSubwayToolsToTeam = async (config, teamId, { tools }, options
 }
 
 /**
+ * Send a user message into the meeting (SCAICO auto-resumes the session).
+ * `POST /api/send_task` with `{meeting_id, text, sender_id}`.
+ */
+export const sendScaicoMeetingMessage = async (
+  config,
+  { meetingId, text, senderId = 'user' },
+  options = {},
+) =>
+  scaicoRequest(config, {
+    method: 'POST',
+    path: '/api/send_task',
+    body: {
+      meeting_id: meetingId,
+      text,
+      ...(senderId ? { sender_id: senderId } : {}),
+    },
+  }, options.fetchFn)
+
+/** Normalize one meeting chat message (SCAICO returns camelCase fields). */
+export const normalizeScaicoMeetingMessage = (value) => {
+  const candidate = value && typeof value === 'object' ? value : {}
+
+  return {
+    id: typeof candidate.id === 'number' ? candidate.id : null,
+    role: typeof candidate.role === 'string' ? candidate.role : '',
+    senderId: typeof candidate.senderId === 'string' ? candidate.senderId : '',
+    content: typeof candidate.content === 'string' ? candidate.content : '',
+    createdAt:
+      typeof candidate.createdAt === 'string'
+        ? candidate.createdAt
+        : typeof candidate.created_at === 'string'
+          ? candidate.created_at
+          : typeof candidate.timestamp === 'string'
+            ? candidate.timestamp
+            : null,
+  }
+}
+
+/** List meeting chat messages (optionally only newer than `sinceId`). */
+export const fetchScaicoMeetingMessages = async (
+  config,
+  { meetingId, sinceId = undefined, limit = 200 },
+  options = {},
+) => {
+  const params = new URLSearchParams()
+
+  if (sinceId !== undefined && sinceId !== null) {
+    params.set('since_id', String(sinceId))
+  }
+
+  if (limit) {
+    params.set('limit', String(limit))
+  }
+
+  const query = params.size > 0 ? `?${params.toString()}` : ''
+  const payload = await scaicoRequest(config, {
+    method: 'GET',
+    path: `/api/messages/${meetingId}${query}`,
+  }, options.fetchFn)
+  const rawMessages = Array.isArray(payload?.messages)
+    ? payload.messages
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : []
+
+  return rawMessages.map(normalizeScaicoMeetingMessage)
+}
+
+/** Gracefully close the meeting session. */
+export const shutdownScaicoMeeting = async (config, { meetingId }, options = {}) =>
+  scaicoRequest(config, {
+    method: 'POST',
+    path: '/api/shutdown',
+    body: { meeting_id: meetingId },
+  }, options.fetchFn)
+
+/**
  * Create the meeting with the MCP session token wired in. Subway scopes the
  * token compound-style (`<token>:<userId>`), mirroring the documented
  * `session_token:project_id` pattern: the MCP server validates the token part

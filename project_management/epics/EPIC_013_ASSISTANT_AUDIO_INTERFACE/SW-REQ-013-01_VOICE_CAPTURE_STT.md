@@ -37,6 +37,10 @@ assistant prompts without a keyboard.
    other languages.
 5. Short mic clips (≤ 30 s) transcribe in a single pass; chunk 30 s /
    stride 5 s applies only to longer recordings (tech doc §1.2).
+6. When `VITE_STT_ENDPOINT` is configured, transcription MAY run through an
+   external service (multipart WAV + language → JSON `{ text }`), e.g. a
+   whisper.cpp server on the kiosk; any endpoint failure SHALL fall back to
+   the local model (SW-REQ never depends on the service).
 
 ## Submit Semantics (refined SWE3-A-02)
 

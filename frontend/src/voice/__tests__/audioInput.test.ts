@@ -6,6 +6,7 @@ import {
   computeRmsLevel,
   decodeToMono16k,
   downmixAndResample,
+  encodeWavBlob,
   isSilent,
   normalizeSpeechLevel,
   pickSupportedMimeType,
@@ -152,6 +153,35 @@ describe('normalizeSpeechLevel', () => {
     const loud = new Float32Array([0.5, 0.6, 0.4]);
     assert.deepEqual(normalizeSpeechLevel(loud), loud);
     assert.equal(normalizeSpeechLevel(new Float32Array(0)).length, 0);
+  });
+});
+
+describe('encodeWavBlob', () => {
+  it('writes a valid RIFF header with round-tripped samples (positive)', async () => {
+    const samples = new Float32Array([0.5, -0.5, 0.0, 1.0, -1.0]);
+    const blob = encodeWavBlob(samples, 16000);
+
+    assert.equal(blob.type, 'audio/wav');
+    assert.equal(blob.size, 44 + samples.length * 2);
+
+    const view = new DataView(await blob.arrayBuffer());
+    const ascii = (offset: number, length: number): string => {
+      let text = '';
+      for (let index = 0; index < length; index += 1) {
+        text += String.fromCharCode(view.getUint8(offset + index));
+      }
+      return text;
+    };
+
+    assert.equal(ascii(0, 4), 'RIFF');
+    assert.equal(ascii(8, 4), 'WAVE');
+    assert.equal(ascii(12, 4), 'fmt ');
+    assert.equal(view.getUint32(24, true), 16000);
+    assert.equal(ascii(36, 4), 'data');
+    assert.ok(Math.abs(view.getInt16(44, true) / 32767 - 0.5) < 0.001);
+    assert.ok(Math.abs(view.getInt16(46, true) / 32768 + 0.5) < 0.001);
+    assert.equal(view.getInt16(50, true), 32767);
+    assert.equal(view.getInt16(52, true), -32767);
   });
 });
 

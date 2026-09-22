@@ -235,6 +235,46 @@ call them directly (no client round-trip), scoped to the logged-in user.
 - Retired widgets are pruned on backend startup when their source location and widget id are no longer supported by the seed list.
 - For local development, Vite proxies `/api` to `http://127.0.0.1:8787`.
 
+## Kiosk speech-to-text (optional local service)
+
+By default the board transcribes voice in the browser (offline Whisper-small,
+~250 MB one-time download). On weak devices or for better accuracy, point the
+board at a local STT service instead:
+
+```bash
+VITE_STT_ENDPOINT=http://127.0.0.1:8080/inference npm --prefix frontend run build
+```
+
+Contract: `POST {endpoint}` multipart `file` (16 kHz mono WAV) + `language`
+(e.g. `de`) → JSON `{ text }`. Any request failure falls back to the
+in-browser model automatically (nothing breaks if the service is down).
+
+Raspberry Pi 5 recommendation: run **this repo's faster-whisper service**
+(`docker/stt/`) on the Pi itself — full-precision server-side weights beat
+the quantized browser build by a wide margin (this is how the HF demo you
+compared against runs: FP32 weights, proper server-side audio pipeline):
+
+```bash
+# on the Pi 5 (or any host with Docker): full-precision small, CPU int8
+docker build -t subway-stt -f docker/stt/Dockerfile docker/stt
+docker run -d --name subway-stt --restart unless-stopped -p 127.0.0.1:8080:8080 \
+  -e WHISPER_MODEL=small -e WHISPER_DEVICE=cpu -e WHISPER_COMPUTE=int8 \
+  -v subway-stt-models:/root/.cache/huggingface \
+  subway-stt
+# then build the board against it:
+VITE_STT_ENDPOINT=http://127.0.0.1:8080/transcribe npm --prefix frontend run build
+```
+
+Contract: `POST /transcribe` multipart `file` (WAV) + `language` (e.g. `de`)
+→ `{"text": "…"}`; `GET /health` reports model/device (`WHISPER_MODEL`,
+`WHISPER_DEVICE`, `WHISPER_COMPUTE` env; `WHISPER_PRELOAD=0` defers the first
+download to the first request). Tests: `python3 docker/stt/test_server.py`.
+
+Model guidance for Pi 5 CPU (short utterances): `base` (~1–2 s),
+`small` (~3–6 s, best accuracy/latency balance — the default), `medium`
+(~10–20 s — too slow for interactive use). For multilingual households, use
+the plain (non-`.en`) model ids.
+
 ## Display notes
 
 - Target resolution: `2160 x 3840 px`
