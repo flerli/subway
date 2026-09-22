@@ -174,6 +174,22 @@ describe('VoicePlaybackController', () => {
     assert.deepEqual(harness.errors, ['tts-unavailable']);
   });
 
+  it('reports a blocked play() through onError instead of dying silently (negative: autoplay/policy)', async () => {
+    const harness = makeHarness({
+      createPlayer: () => {
+        const player = makePlayer();
+        player.play = async () => {
+          throw new Error('play() failed because the user didn\'t interact with the document first');
+        };
+        return player;
+      },
+    });
+    await harness.controller.enqueueMessage('msg-1', 'One. Two.');
+    await flush();
+    assert.equal(harness.controller.getSnapshot().playing, false);
+    assert.deepEqual(harness.errors, ['tts-unavailable']);
+  });
+
   it('does not report onError on successful playback (positive)', async () => {
     const harness = makeHarness();
     await harness.controller.enqueueMessage('msg-1', 'One. Two.');

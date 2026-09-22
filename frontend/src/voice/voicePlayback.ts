@@ -227,7 +227,27 @@ export class VoicePlaybackController {
           return
         }
         player.src = result.audioDataUrl
-        void player.play()
+        // play() rejects when the browser blocks it (autoplay policy on a
+        // kiosk profile without accumulated engagement, muted tab, no audio
+        // path). A floating rejection dies silently — handle it like a
+        // synthesis failure (SW-REQ-013-04: never die quietly) so the
+        // console names the cause (`[voice] playback blocked:`) instead.
+        const playback = player.play()
+        if (playback && typeof playback.catch === 'function') {
+          playback.catch((reason: unknown) => {
+            if (player !== this.player) {
+              return
+            }
+            if (typeof console !== 'undefined') {
+              console.warn('[voice] playback blocked:', reason)
+            }
+            this.deps.onError?.('tts-unavailable')
+            this.outputLevels?.dispose()
+            this.outputLevels = null
+            this.player = null
+            onEnd()
+          })
+        }
       })
       .catch((reason: unknown) => {
         if (player !== this.player) {
